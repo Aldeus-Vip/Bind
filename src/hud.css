@@ -34,3 +34,9 @@
 /* 設定で従来のパネルを隠す(3D表示中のみ) */
 body.b3-hide-panels #app .left-column .players-panel{ display:none; }
 .b3-gauge.pop-below .g-pop{ bottom:auto; top:calc(100% + 6px); }
+/* 精神波の枠(5/10/Q/♠/JOKER の対象): ゲージが術の色で光る */
+.b3-gauge[data-mind]:not([data-mind=""]){ box-shadow:0 0 14px 3px var(--mind, #6aff9a); border-color:var(--mind, #6aff9a); }
+.b3-gauge[data-mind="redpurple"]{ --mind:#d040ff; }
+.b3-gauge[data-mind="bluepurple"]{ --mind:#a35cff; }
+.b3-gauge[data-mind="blackred"]{ --mind:#ff3a2a; }
+.b3-gauge[data-mind="black"]{ --mind:#ff2a14; }

@@ -242,6 +242,10 @@ function autoRig(model, box){
 /* ---- 群れ: 軽量版モデルの小さな複製を、本体の周りに浮かべて飛び回らせる ----
    swarm: { count: 12, size: 0.16(本体に対する大きさ), radius: 0.55, height: 0.5 } */
 const miniOf = {};
+const gltfOf = {}; // 読み込んだ glTF(fx3d.js が手札演出などで使う)
+B.gltfOf = gltfOf; B.miniOf = miniOf;
+B.cloneModel = (key, mini) => { const g = (mini ? miniOf : gltfOf)[key]; if(!g) return null; return (THREE.SkeletonUtils && THREE.SkeletonUtils.clone) ? THREE.SkeletonUtils.clone(g.scene) : g.scene.clone(true); };
+B.toToon = m => toToon(m); B.applyTint = (root, sk, k) => applyTint(root, sk, k); B.suitTint = SUIT_TINT;
 function makeSwarm(parent, gltf, opt, bodyScale){
   const group = new THREE.Group(); parent.add(group);
   const n = opt.count || 12, R = opt.radius || 0.55, H = opt.height || 0.5;
@@ -287,7 +291,7 @@ const urlOf = file => (EMB && EMB.files[file]) || BASE + file;
     Object.entries(manifest).forEach(([key, spec]) => {
       if(key.startsWith('_') || !spec || !spec.file) return;
       const loadMain = () => loader.load(urlOf(spec.file),
-        gltf => { register(key, makeGltfAvatar(key, spec, gltf)); console.info(`[Bind3D] モデルを読み込みました: ${key} (${spec.file})`); },
+        gltf => { gltfOf[key] = gltf; register(key, makeGltfAvatar(key, spec, gltf)); console.info(`[Bind3D] モデルを読み込みました: ${key} (${spec.file})`); },
         undefined,
         e => console.warn(`[Bind3D] モデルを読み込めませんでした: ${key} (${spec.file})`, e));
       // 群れ用の軽量版(ビルド時に <名前>.mini.glb を作る)を先に読む

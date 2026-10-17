@@ -1446,6 +1446,7 @@ const chars = [buildVessel(0), buildVessel(1)];
 
 const driving = [false, false];
 const holdBack = new Set(); // ♥演出中は裏向きの見た目を保つ
+const frozen = new Set(); // 専用演出の間、sync がマスの見た目に触れない
 const parks = [null, null];
 
 /* ---------------- tween / particles ---------------- */
@@ -1713,6 +1714,7 @@ function sync(dt){
   const t = performance.now()/1000;
 
   for(let i=0;i<NCELLS;i++){
+    if(frozen.has(i) && !reset) continue; // 専用演出がこのマスを操作中(fx3d.js)
     const T = tiles[i], slot = st.floor[i];
     const exists = !!(slot && slot.card!==null);
     const want = exists && !wh.has(i);
@@ -1879,9 +1881,10 @@ function loop(){
     if(!ch.shown) return;
     if(!ch.busy){
       ch.av.idle(t, ch.phase);
-      // 待機中はカメラの方を向く
-      let dy = -ch.root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-      ch.root.rotation.y += dy*0.06;
+      // 待機中はカメラの方を向く。効果の対象があるときはしばらくそちらを向く(faceTo)
+      const want = (ch.faceYaw!=null && performance.now() < ch.faceUntil) ? ch.faceYaw : 0;
+      let dy = want - ch.root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      ch.root.rotation.y += dy*(want ? 0.12 : 0.06);
       // ウィンドマスでは軽く浮遊する(以前は += で毎フレーム足し込んでいたため高さがずれて残っていた)
       const st = curState();
       const floatY = (st && st.windCells && ch.idx!=null && st.windCells.has(ch.idx)) ? Math.sin(t*2.2 + ch.phase)*0.025 : 0;
@@ -1912,6 +1915,7 @@ function override(name, make){
   if(typeof orig !== 'function') return;
   const repl = make(orig);
   window[name] = function(){ return active() ? repl.apply(this, arguments) : orig.apply(this, arguments); };
+  window[name].__b3 = true;
 }
 const fxLayer = () => document.getElementById('effect-flash-layer');
 // trackAnimation の完了通知は必ず1回だけ呼ぶ(2回呼ぶとアニメ中カウンタが狂う / 0回だとCPUが止まる)
@@ -2830,7 +2834,8 @@ function uiFx(run){
     run().catch(e => console.error('[Bind3D] 手札演出', e)).finally(() => { uiEnd(); resolve(); });
   });
 }
-const parallel = (orig, fx) => function(){ const a = arguments; return Promise.all([orig.apply(this, a), fx.apply(this, a)]).then(v => v[0]); };
+// 3D表示中は元の2D演出を呼ばず、3Dの演出だけを流す(2D表示に戻すと override が元の演出に切り替える)
+const parallel = (orig, fx) => function(){ return fx.apply(this, arguments); };
 
 /* ---------- 3: 夢を食う怪物バク ---------- */
 function bubbleMesh(r){ return new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshBasicMaterial({ color:0xb89cff, transparent:true, opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false })); }
@@ -2978,7 +2983,9 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
   ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
-  conceptArtFor, cardBackURL, toon, fxLayer, AVATARS, hopTo };
+  conceptArtFor, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
+  summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
+  faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
 window.B3 = { ui, chars, tiles, layout, sync, K, get enabled(){ return enabled; },
   // models.js(glTF モデルの差し替え)から使う
   AVATARS, makeCreature, toon, glowMat, setAvatar, scene, renderer };
