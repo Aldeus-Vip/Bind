@@ -147,17 +147,37 @@ function register(key, factory){
 }
 
 const loader = new THREE.GLTFLoader();
-fetch(BASE + 'manifest.json', { cache:'no-cache' })
-  .then(r => r.ok ? r.json() : null)
+// 1ファイル版はモデルが埋め込まれている(BIND_EMBEDDED_MODELS)。Web 版は models/ から読む。
+const EMB = window.BIND_EMBEDDED_MODELS;
+const urlOf = file => (EMB && EMB.files[file]) || BASE + file;
+(EMB ? Promise.resolve(EMB.manifest) : fetch(BASE + 'manifest.json', { cache:'no-cache' }).then(r => r.ok ? r.json() : null))
   .then(manifest => {
     if(!manifest) return;
     Object.entries(manifest).forEach(([key, spec]) => {
       if(key.startsWith('_') || !spec || !spec.file) return;
-      loader.load(BASE + spec.file,
+      loader.load(urlOf(spec.file),
         gltf => { register(key, makeGltfAvatar(key, spec, gltf)); console.info(`[Bind3D] モデルを読み込みました: ${key} (${spec.file})`); },
         undefined,
         e => console.warn(`[Bind3D] モデルを読み込めませんでした: ${key} (${spec.file})`, e));
     });
   })
   .catch(() => { /* manifest が無い = 図形モデルのまま */ });
+})();
+
+/* ---- 見た目の確認用: URL の末尾に #preview=1 (A) / #preview=13 (K) / #preview=JOKER を付けて開くと、
+   CPU 対戦を始めて両者のパーソナルをそのカードにする(先攻=♥ / 後攻=♠)。確認専用で、ルール上は正しい対局ではない。 ---- */
+(function(){
+  const m = /preview=(\w+)/.exec(location.hash);
+  if(!m || typeof initGame!=='function') return;
+  setTimeout(() => {
+    initGame(true, 'easy', false);
+    const isJ = /^JOKER$/i.test(m[1]), r = Number(m[1]);
+    const cards = isJ ? [{ suit:'JOKER', rank:null, id:'JOKER1' }, { suit:'JOKER', rank:null, id:'JOKER2' }]
+                      : [{ suit:'H', rank:r, id:'H' + r }, { suit:'S', rank:r, id:'S' + r }];
+    [[0, 17], [1, 2]].forEach(([pi, cell]) => {
+      const p = state.players[pi]; p.personalCard = cards[pi]; p.personalIndex = cell; state.floor[cell].owner = pi;
+    });
+    state.phase = 'draw';
+    render();
+  }, 500);
 })();

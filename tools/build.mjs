@@ -46,7 +46,21 @@ const i = s.indexOf('</head>'), j = s.lastIndexOf('</style>', i);
 s = s.slice(0, j) + css + s.slice(j);
 
 const src = single ? CDN : LOCAL;
-const tags =
+// 1ファイル版: 軽量化した 3D モデルを data URI で埋め込む(file:// では models/ を読めないため)
+let embedded = '';
+const modelsSrc = path.join(root, 'assets', 'models');
+if(single && fs.existsSync(path.join(modelsSrc, 'manifest.json'))){
+  const { optimizeModels } = await import('./optimize_models.mjs');
+  const tmp = path.join(root, '.cache', 'single-models');
+  fs.rmSync(tmp, { recursive: true, force: true });
+  (await optimizeModels(modelsSrc, tmp, path.join(root, '.cache', 'models'))).forEach(r => console.log('model ' + r));
+  const manifest = JSON.parse(fs.readFileSync(path.join(tmp, 'manifest.json'), 'utf8'));
+  const files = {};
+  for(const spec of Object.values(manifest)) if(spec && spec.file && fs.existsSync(path.join(tmp, spec.file)))
+    files[spec.file] = 'data:model/gltf-binary;base64,' + fs.readFileSync(path.join(tmp, spec.file)).toString('base64');
+  embedded = `<script>window.BIND_EMBEDDED_MODELS = ${JSON.stringify({ manifest, files })};</script>\n`;
+}
+const tags = embedded +
   `<script src="${src.three}"></script>\n` +
   `<script src="${src.gltf}"></script>\n` +
   `<script src="${src.skel}"></script>\n` +
@@ -61,7 +75,7 @@ if(single){
   fs.writeFileSync(out, s);
   const size = Buffer.byteLength(s);
   console.log(`built ${path.relative(root, out)}  ${(size/1e6).toFixed(1)} MB`);
-  if(size > 16_000_000) console.warn('WARNING: 16MB を超えています(claude.ai のアーティファクト上限)');
+  if(size > 16_000_000) console.warn('注意: 16MB を超えています(claude.ai のアーティファクトには載せられない。ダウンロードして開く分には問題なし)');
   process.exit(0);
 }
 
