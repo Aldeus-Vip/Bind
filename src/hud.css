@@ -1,0 +1,36 @@
+/* ===== 頭上ゲージ(hud.js) ===== */
+#b3-hud{ position:fixed; left:0; top:0; width:0; height:0; z-index:150; pointer-events:none; }
+.b3-gauge{
+  position:absolute; left:0; top:0; pointer-events:auto;
+  padding:3px 6px 4px; border-radius:7px; min-width:74px;
+  background:rgba(14,10,8,.78); border:1px solid rgba(201,162,75,.55);
+  box-shadow:0 2px 8px rgba(0,0,0,.5); font:700 11px/1.25 system-ui, sans-serif; color:#f3e6c4;
+}
+.b3-gauge .g-row{ display:flex; align-items:center; gap:4px; padding:1px 0; cursor:default; border-radius:4px; }
+.b3-gauge .g-ic{ font-size:10px; opacity:.8; width:12px; text-align:center; }
+.b3-gauge .g-num{ width:16px; text-align:right; font-variant-numeric:tabular-nums; }
+.b3-gauge .g-bar{ flex:1; height:6px; min-width:38px; border-radius:3px; background:rgba(255,255,255,.12); overflow:hidden; }
+.b3-gauge .g-bar i{ display:block; height:100%; border-radius:3px; transition:width .25s; }
+.b3-gauge .g-hand .g-bar i{ background:#45d16a; box-shadow:0 0 6px #45d16a; }
+.b3-gauge .g-hand .g-num{ color:#7dff9a; }
+.b3-gauge .g-hand.low .g-bar i{ background:#ff3b3b; box-shadow:0 0 6px #ff3b3b; }
+.b3-gauge .g-hand.low .g-num{ color:#ff6b6b; }
+.b3-gauge .g-disc .g-bar i{ background:#ff6fcf; box-shadow:0 0 6px #ff6fcf; }
+.b3-gauge .g-disc .g-num{ color:#ff9be0; }
+/* 効果の対象: 点滅 */
+.b3-gauge .g-row.target{ animation:b3-gauge-blink .6s ease-in-out infinite alternate; cursor:pointer; }
+@keyframes b3-gauge-blink{ from{ background:rgba(255,255,255,0); box-shadow:none; } to{ background:rgba(255,230,140,.35); box-shadow:0 0 10px rgba(255,220,120,.9); } }
+/* 中身・選択欄 */
+.b3-gauge .g-pop{
+  position:absolute; left:50%; bottom:calc(100% + 6px); transform:translateX(-50%);
+  max-width:min(420px, 90vw); padding:6px 8px; border-radius:8px;
+  background:rgba(14,10,8,.93); border:1px solid rgba(201,162,75,.7); box-shadow:0 6px 18px rgba(0,0,0,.6);
+}
+.b3-gauge .g-pop:empty{ display:none !important; }
+.b3-gauge .g-title{ font-size:11px; margin-bottom:4px; white-space:nowrap; color:#e9cf8a; }
+.b3-gauge .g-cards{ display:flex; flex-wrap:wrap; gap:4px; }
+.b3-gauge .g-empty{ opacity:.7; }
+.b3-gauge.picking{ z-index:2; border-color:#ffd27a; }
+/* 設定で従来のパネルを隠す(3D表示中のみ) */
+body.b3-hide-panels #app .left-column .players-panel{ display:none; }
+.b3-gauge.pop-below .g-pop{ bottom:auto; top:calc(100% + 6px); }

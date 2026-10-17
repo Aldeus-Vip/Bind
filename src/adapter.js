@@ -1723,7 +1723,8 @@ function sync(dt){
         T.destroyed = false;
       } else if(!want && T.shown){
         T.shown = false;
-        if(!exists && !reset){ T.destroyed = true; dropTile(T); }
+        if(!exists && !reset && T.gone){ T.destroyed = true; T.g.visible = false; T.gone = false; } // 専用演出で既に消えている
+        else if(!exists && !reset){ T.destroyed = true; (T.dropFx ? T.dropFx(T) : dropTile(T)); T.dropFx = null; }
         else { T.g.visible = false; T.destroyed = !exists; }
       }
     }
@@ -2793,6 +2794,8 @@ function casterPx(p){
 }
 function rectCenter(el){ const r = el.getBoundingClientRect(); return { x:r.left + r.width/2, y:r.top + r.height/2, w:r.width, h:r.height }; }
 function panelPx(p, part){
+  // 頭上ゲージ(hud.js)が出ているときは、手札・捨て札の演出はパーソナルの頭上へ向かう
+  if(window.B3 && window.B3.gaugePx){ const g = window.B3.gaugePx(p, part); if(g) return g; }
   const panel = (typeof getPlayerPanelEl==='function') ? getPlayerPanelEl(p) : null;
   if(!panel) return { x: innerWidth*0.15, y: innerHeight*0.3 };
   const sub = part==='discard' ? panel.querySelector('.discard-row') : panel.querySelector('.hand-mini-row');
@@ -2969,7 +2972,14 @@ override('triggerHandWipeNebula', orig => parallel(orig, (target) => uiFx(async 
   uiSpark(b.x, b.y, 0xffd76a, 24, 180);
 })));
 
-window.B3 = { ui, chars, tiles, layout, sync, get enabled(){ return enabled; },
+// 追加モジュール(src/hud.js, src/fx3d.js など)から使う内部の部品
+const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, burst, dust, parts, partGeo, puffGeo,
+  tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
+  ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
+  circleTex, starTex, pillarTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
+  ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  conceptArtFor, cardBackURL, toon, fxLayer, AVATARS, hopTo };
+window.B3 = { ui, chars, tiles, layout, sync, K, get enabled(){ return enabled; },
   // models.js(glTF モデルの差し替え)から使う
   AVATARS, makeCreature, toon, glowMat, setAvatar, scene, renderer };
 })();

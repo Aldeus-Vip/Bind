@@ -35,8 +35,8 @@ const VENDOR_SRC = {
 };
 
 let s = read('src/original/bind_prototype.html');
-const css = read('src/adapter.css') + '\n' + read('src/online.css');
-const js = [read('src/adapter.js'), read('src/models.js'), read('src/online.js')];
+const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css');
+const js = [read('src/adapter.js'), read('src/models.js'), read('src/hud.js'), read('src/online.js')];
 
 s = s.replace('<title>Bind — プロトタイプ</title>', '<title>Bind 3D</title>');
 s = s.replace('</head>',
