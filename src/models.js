@@ -28,10 +28,12 @@ function toToon(mat){
     map: mat.map || null,
     emissive: mat.emissive ? mat.emissive.getHex() : 0x000000,
     emissiveMap: mat.emissiveMap || null,
+    normalMap: mat.normalMap || null,
     emissiveIntensity: mat.emissiveIntensity != null ? mat.emissiveIntensity : 1,
     transparent: !!mat.transparent, opacity: mat.opacity != null ? mat.opacity : 1,
     alphaTest: mat.alphaTest || 0, side: mat.side,
   });
+  if(mat.normalMap) m.normalScale = mat.normalScale.clone();
   m.skinning = !!mat.skinning; m.morphTargets = !!mat.morphTargets;
   return m;
 }
