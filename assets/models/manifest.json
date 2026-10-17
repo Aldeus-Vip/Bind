@@ -1,14 +1,107 @@
 {
   "beast-A": {
-    "file": "beast-A.glb", "height": 1.25, "rotY": 0, "toon": true,
+    "file": "beast-A.glb",
+    "height": 1.25,
+    "rotY": 0,
+    "toon": true,
     "head": "Bone_043",
     "rig": {
-      "spine": ["Bone_016", "Bone_015", "Bone_014"],
-      "neck": ["Bone_047", "Bone_046", "Bone_045"],
+      "spine": [
+        "Bone_016",
+        "Bone_015",
+        "Bone_014"
+      ],
+      "neck": [
+        "Bone_047",
+        "Bone_046",
+        "Bone_045"
+      ],
       "head": "Bone_043",
       "jaw": "Bone_059",
-      "tail": ["Bone_009", "Bone_008", "Bone_007", "Bone_006", "Bone_005"],
-      "ears": ["Bone_061", "Bone_063"]
+      "tail": [
+        "Bone_009",
+        "Bone_008",
+        "Bone_007",
+        "Bone_006",
+        "Bone_005"
+      ],
+      "ears": [
+        "Bone_061",
+        "Bone_063"
+      ]
     }
+  },
+  "c2": {
+    "file": "c2.glb",
+    "toon": true,
+    "height": 1.0
+  },
+  "c3": {
+    "file": "c3.glb",
+    "toon": true,
+    "height": 1.0
+  },
+  "c4": {
+    "file": "c4.glb",
+    "toon": true,
+    "height": 0.85,
+    "rotY": 0.7
+  },
+  "c5": {
+    "file": "c5.glb",
+    "toon": true,
+    "height": 0.95
+  },
+  "c6": {
+    "file": "c6.glb",
+    "toon": true,
+    "height": 1.0,
+    "maxFoot": 1.5,
+    "rotY": 1.3
+  },
+  "c7": {
+    "file": "c7.glb",
+    "toon": true,
+    "height": 1.15
+  },
+  "c8": {
+    "file": "c8.glb",
+    "toon": true,
+    "height": 1.2
+  },
+  "c9": {
+    "file": "c9.glb",
+    "toon": true,
+    "height": 1.25
+  },
+  "c10": {
+    "file": "c10.glb",
+    "toon": true,
+    "height": 0.95
+  },
+  "c11": {
+    "file": "c11.glb",
+    "toon": true,
+    "height": 1.2
+  },
+  "c12": {
+    "file": "c12.glb",
+    "toon": true,
+    "height": 1.0
+  },
+  "c13": {
+    "file": "c13.glb",
+    "toon": true,
+    "height": 1.25
+  },
+  "jb": {
+    "file": "jb.glb",
+    "toon": true,
+    "height": 1.25
+  },
+  "jw": {
+    "file": "jw.glb",
+    "toon": true,
+    "height": 1.25
   }
 }

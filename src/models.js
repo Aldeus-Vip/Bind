@@ -49,7 +49,8 @@ function makeGltfAvatar(key, spec, gltf){
     // 足元を原点、高さを spec.height に合わせる
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
-    const s = (spec.height || 1) / Math.max(size.y, 1e-6);
+    // 高さを spec.height に。ただし横に長い生物(シャチ・蛇など)は足元の広さ maxFoot(既定 1.3マス)に収める
+    const s = Math.min((spec.height || 1) / Math.max(size.y, 1e-6), (spec.maxFoot || 1.3) / Math.max(size.x, size.z, 1e-6));
     const holder = new THREE.Group();
     holder.add(model);
     model.position.set(-(box.min.x + box.max.x)/2, -box.min.y, -(box.min.z + box.max.z)/2);
@@ -89,7 +90,10 @@ function makeGltfAvatar(key, spec, gltf){
       cur = name;
     }
     // アニメーションが無く、manifest に rig(骨の対応表)があるときは、骨をコードで動かす
-    const proc = !mixer && spec.rig ? proceduralRig(model, spec.rig) : null;
+    // rig を書かなければ骨の配置から自動で推定する("rig": false で無効)
+    const rig = spec.rig === false ? null : (spec.rig && spec.rig !== 'auto') ? spec.rig : autoRig(model, box);
+    const proc = !mixer && rig ? proceduralRig(model, rig) : null;
+    if(rig && !spec.rig) model.userData.autoRig = rig; // 確認用
     let raiseK = 0, jumpK = 0;
     return {
       pose(raise, jump){
@@ -110,14 +114,15 @@ function makeGltfAvatar(key, spec, gltf){
 function proceduralRig(model, rig){
   model.updateMatrixWorld(true);
   const rootInv = model.getWorldQuaternion(new THREE.Quaternion()).invert();
-  const get = n => n ? model.getObjectByName(n) : null;
+  const get = n => !n ? null : (typeof n === 'string' ? model.getObjectByName(n) : n);
   const prep = b => {
     if(!b) return null;
     const P = rootInv.clone().multiply(b.parent.getWorldQuaternion(new THREE.Quaternion())); // 親の向き(モデル空間)
     return { b, rest: b.quaternion.clone(), P, Pinv: P.clone().invert() };
   };
   const list = a => (Array.isArray(a) ? a : a ? [a] : []).map(get).filter(Boolean).map(prep);
-  const J = { spine:list(rig.spine), neck:list(rig.neck), head:list(rig.head), jaw:list(rig.jaw), tail:list(rig.tail), ears:list(rig.ears) };
+  const J = { spine:list(rig.spine), neck:list(rig.neck), head:list(rig.head), jaw:list(rig.jaw), tail:list(rig.tail), ears:list(rig.ears),
+    wingsL:list(rig.wingsL), wingsR:list(rig.wingsR) };
   const q = new THREE.Quaternion(), e = new THREE.Euler();
   // モデル空間で (x, y, z) 回転させた向きを、骨のローカルに直して設定
   function turn(j, x, y, z){
@@ -131,10 +136,72 @@ function proceduralRig(model, rig){
     J.neck.forEach(j => turn(j, -raise*0.08 + jump*0.05, look*0.5, 0));
     J.head.forEach(j => turn(j, Math.sin(t*0.9)*0.04 - raise*0.18, look*0.5, Math.sin(t*0.6)*0.04));
     J.jaw.forEach(j => turn(j, raise*0.35 + Math.max(0, Math.sin(t*0.7))*0.03, 0, 0));
-    J.tail.forEach((j, i) => turn(j, -raise*0.12 + jump*0.15, Math.sin(t*1.8 - i*0.6)*(0.10 + i*0.04)*(1 + raise*1.5), 0));
+    const tk = Math.min(1, 5 / Math.max(1, J.tail.length)); // 長い尻尾は1本あたりを控えめに
+    J.tail.forEach((j, i) => turn(j, (-raise*0.12 + jump*0.15)*tk, Math.sin(t*1.8 - i*0.6)*(0.10 + Math.min(i, 5)*0.04)*(1 + raise*1.5)*tk, 0));
+    // 翼: 付け根から羽ばたく(構えると大きく広げる)
+    const flap = Math.sin(t*2.2)*0.12 + raise*0.35 - jump*0.2;
+    J.wingsL.forEach((j, i) => turn(j, 0, 0, (i ? 0.4 : 1)*flap));
+    J.wingsR.forEach((j, i) => turn(j, 0, 0, -(i ? 0.4 : 1)*flap));
     const flick = Math.max(0, Math.sin(t*0.37)*8 - 7); // ときどき耳を動かす
     J.ears.forEach((j, i) => turn(j, -flick*0.25, 0, (i ? 1 : -1)*flick*0.15));
   };
+}
+
+/* ---- 骨の役割を配置から推定する(骨の名前が Bone_000… でも動くように) ----
+   モデルは正面 +Z・足元 y=0 の前提。高さで正規化した位置で判定する。
+   - 頭: 高く・前寄り・中央寄りの骨。そこまでの経路を 背骨→首→頭 とする
+   - 尻尾: 経路から分かれ、後ろ(−Z)へ長く伸びる鎖
+   - 翼: 経路から分かれ、高い位置で左右に大きく張り出す鎖(付け根と次の骨)
+   - 脚(足先が地面近く)は動かさない */
+function autoRig(model, box){
+  model.updateWorldMatrix(true, true); // 親(縮尺をかけた holder)ごと更新しないと、骨の位置と逆行列がずれる
+  const H = Math.max(box.max.y - box.min.y, 1e-6), cx = (box.min.x + box.max.x)/2, cz = (box.min.z + box.max.z)/2;
+  const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+  const bones = []; model.traverse(o => { if(o.isBone) bones.push(o); });
+  if(bones.length < 3) return null;
+  const pos = new Map();
+  bones.forEach(b => { const p = b.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv); pos.set(b, { x:(p.x - cx)/H, y:(p.y - box.min.y)/H, z:(p.z - cz)/H }); });
+  const isBone = o => o && o.isBone;
+  const root = bones.find(b => !isBone(b.parent));
+  const kids = b => b.children.filter(isBone);
+  const leaves = bones.filter(b => kids(b).length === 0);
+  const pathTo = b => { const p = []; for(let o = b; isBone(o); o = o.parent) p.unshift(o); return p; };
+  const desc = b => { const out = []; b.traverse(o => { if(o.isBone && o !== b) out.push(o); }); return out; };
+
+  // 頭の先(候補): 高さ + 前 − 横ずれ
+  let tip = null, best = -1e9;
+  bones.forEach(b => { const p = pos.get(b); const sc = p.y + 0.3*p.z - 1.0*Math.abs(p.x); if(sc > best){ best = sc; tip = b; } });
+  const P = pathTo(tip);
+  const onP = new Set(P);
+  // 頭 = 経路上で、先端に近い分岐点(耳・角・あごが生える所)。なければ先端の1つ手前
+  // Meshy のリグは 腰→背骨→胸(腕の分岐)→首→頭→頭頂 の並び。先端(頭頂)の1つ手前を頭、その手前を首とする
+  const hi = Math.max(1, P.length - 2);
+  const head = P[hi];
+  const neck = P.slice(Math.max(1, hi - 1), hi);
+  const spine = P.slice(1, Math.max(1, hi - 1)).filter(b => pos.get(b).y > 0.2);
+
+  // 葉(骨の先端)から根元へたどり、経路 P に合流するまでの鎖を作る
+  const chainOf = leaf => { const c = []; for(let o = leaf; isBone(o) && !onP.has(o); o = o.parent) c.unshift(o); return c; };
+  const headSet = new Set([head, ...desc(head)]);
+  // 尻尾: 地面から浮いた先端が、付け根より後ろへ伸びる鎖(3本以上)。いちばん後ろまで伸びるもの
+  let tail = [], bestZ = 1e9;
+  leaves.forEach(lf => {
+    const tp = pos.get(lf); if(tp.y < 0.1 || headSet.has(lf) || (tp.y > 0.5 && Math.abs(tp.x) > 0.2)) return; // 翼のような先端は除く
+    const c = chainOf(lf); if(c.length < 3) return;
+    if(c.some(b => pos.get(b).y < 0.06)) return;
+    if(tp.z < pos.get(c[0]).z - 0.15 && tp.z < bestZ){ bestZ = tp.z; tail = c; }
+  });
+  // 翼: 高い位置で左右に張り出す先端から、横にずれている間だけ根元へたどる。その根元と次の骨を羽ばたかせる
+  const wingsL = [], wingsR = [], used = new Set();
+  leaves.forEach(lf => {
+    const tp = pos.get(lf); if(tp.y < 0.55 || Math.abs(tp.x) < 0.22 || headSet.has(lf)) return;
+    const c = chainOf(lf); if(c.length < 2) return;
+    let i = c.length - 1; while(i > 0 && Math.abs(pos.get(c[i-1]).x) > 0.1) i--;
+    const root2 = c[i]; if(used.has(root2) || tail.includes(root2)) return; used.add(root2);
+    const side = tp.x >= 0 ? wingsL : wingsR; // wingsL = +X 側(+回転で上がる)
+    side.push(root2); if(c[i+1]) side.push(c[i+1]);
+  });
+  return { spine, neck, head:[head], tail: tail.slice(0, 8), wingsL, wingsR };
 }
 
 function register(key, factory){
