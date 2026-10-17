@@ -129,6 +129,9 @@ function makeGltfAvatar(key, spec, gltf){
     let raiseK = 0, jumpK = 0;
     // 周囲を舞う小さな分身(10 の虫の群れなど)。manifest の swarm で指定し、軽量版モデルを使う
     const swarm = spec.swarm && miniOf[key] ? makeSwarm(ctx.inner || ctx.body, miniOf[key], spec.swarm, s) : null;
+    // まとうエフェクト(idle.js)。manifest の "idleFx" で種類の上書き、false で無効
+    const foot = Math.max(size.x, size.z)*s;
+    const idleFx = spec.idleFx !== false && B.makeIdleFx ? B.makeIdleFx(key, ctx.inner || ctx.body, { h: spec.height || 1, r: Math.min(0.7, Math.max(0.4, foot*0.45)) }, model, typeof spec.idleFx === 'string' ? spec.idleFx : null) : null;
     return {
       setSuit(th){ const sk = suitKeyOf(th); applyTint(model, sk); if(swarm) applyTint(swarm.group, sk); },
       pose(raise, jump){
@@ -137,7 +140,7 @@ function makeGltfAvatar(key, spec, gltf){
         else if(!proc){ holder.position.y = 0.05*raise; holder.rotation.x = -0.15*raise; }
       },
       idle(t, ph){ if(!mixer && !proc) holder.position.y = Math.sin(t*1.6 + ph)*0.02; },
-      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(swarm) swarm.tick(t + (ph || 0), raiseK); },
+      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(swarm) swarm.tick(t + (ph || 0), raiseK); if(idleFx) idleFx.tick(t + (ph || 0), dt, raiseK); },
     };
   });
 }
