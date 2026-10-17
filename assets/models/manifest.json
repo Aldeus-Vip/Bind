@@ -1,3 +1,14 @@
 {
-  "beast-A": { "file": "beast-A.glb", "height": 1.25, "rotY": 0, "toon": true }
+  "beast-A": {
+    "file": "beast-A.glb", "height": 1.25, "rotY": 0, "toon": true,
+    "head": "Bone_043",
+    "rig": {
+      "spine": ["Bone_016", "Bone_015", "Bone_014"],
+      "neck": ["Bone_047", "Bone_046", "Bone_045"],
+      "head": "Bone_043",
+      "jaw": "Bone_059",
+      "tail": ["Bone_009", "Bone_008", "Bone_007", "Bone_006", "Bone_005"],
+      "ears": ["Bone_061", "Bone_063"]
+    }
+  }
 }

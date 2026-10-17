@@ -88,15 +88,53 @@ function makeGltfAvatar(key, spec, gltf){
       if(from) from.crossFadeTo(to, 0.2, false);
       cur = name;
     }
+    // アニメーションが無く、manifest に rig(骨の対応表)があるときは、骨をコードで動かす
+    const proc = !mixer && spec.rig ? proceduralRig(model, spec.rig) : null;
+    let raiseK = 0, jumpK = 0;
     return {
       pose(raise, jump){
-        if(jump > 0) play('jump'); else if(raise > 0.3) play('raise'); else play('idle');
-        if(!mixer){ holder.position.y = 0.05*raise; holder.rotation.x = -0.15*raise; }
+        raiseK = raise; jumpK = jump;
+        if(mixer){ if(jump > 0) play('jump'); else if(raise > 0.3) play('raise'); else play('idle'); }
+        else if(!proc){ holder.position.y = 0.05*raise; holder.rotation.x = -0.15*raise; }
       },
-      idle(t, ph){ if(!mixer) holder.position.y = Math.sin(t*1.6 + ph)*0.02; },
-      tick(t, dt){ if(mixer) mixer.update(dt); },
+      idle(t, ph){ if(!mixer && !proc) holder.position.y = Math.sin(t*1.6 + ph)*0.02; },
+      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); },
     };
   });
+}
+
+/* ---- 骨をコードで動かす(リグはあるがアニメーションが無いモデル用) ----
+   rig: { hips, spine:[…], neck:[…], head, jaw, tail:[…], ears:[…] }(骨の名前)
+   回転はモデル空間の軸で指定する(X=縦に首を振る / Y=左右を向く / Z=傾ける)。
+   各骨の向きがバラバラでも、親の向きで変換してから掛けるので同じ意味になる。 */
+function proceduralRig(model, rig){
+  model.updateMatrixWorld(true);
+  const rootInv = model.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const get = n => n ? model.getObjectByName(n) : null;
+  const prep = b => {
+    if(!b) return null;
+    const P = rootInv.clone().multiply(b.parent.getWorldQuaternion(new THREE.Quaternion())); // 親の向き(モデル空間)
+    return { b, rest: b.quaternion.clone(), P, Pinv: P.clone().invert() };
+  };
+  const list = a => (Array.isArray(a) ? a : a ? [a] : []).map(get).filter(Boolean).map(prep);
+  const J = { spine:list(rig.spine), neck:list(rig.neck), head:list(rig.head), jaw:list(rig.jaw), tail:list(rig.tail), ears:list(rig.ears) };
+  const q = new THREE.Quaternion(), e = new THREE.Euler();
+  // モデル空間で (x, y, z) 回転させた向きを、骨のローカルに直して設定
+  function turn(j, x, y, z){
+    q.setFromEuler(e.set(x, y, z, 'YXZ'));
+    j.b.quaternion.copy(j.Pinv).multiply(q).multiply(j.P).multiply(j.rest);
+  }
+  return (t, dt, raise, jump) => {
+    const breath = Math.sin(t*1.6);
+    J.spine.forEach((j, i) => turn(j, breath*0.015 - raise*0.07 + jump*0.08, 0, 0));
+    const look = Math.sin(t*0.45)*0.22*(1 - raise);
+    J.neck.forEach(j => turn(j, -raise*0.08 + jump*0.05, look*0.5, 0));
+    J.head.forEach(j => turn(j, Math.sin(t*0.9)*0.04 - raise*0.18, look*0.5, Math.sin(t*0.6)*0.04));
+    J.jaw.forEach(j => turn(j, raise*0.35 + Math.max(0, Math.sin(t*0.7))*0.03, 0, 0));
+    J.tail.forEach((j, i) => turn(j, -raise*0.12 + jump*0.15, Math.sin(t*1.8 - i*0.6)*(0.10 + i*0.04)*(1 + raise*1.5), 0));
+    const flick = Math.max(0, Math.sin(t*0.37)*8 - 7); // ときどき耳を動かす
+    J.ears.forEach((j, i) => turn(j, -flick*0.25, 0, (i ? 1 : -1)*flick*0.15));
+  };
 }
 
 function register(key, factory){
