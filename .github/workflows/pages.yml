@@ -1,10 +1,10 @@
-# main に push すると、Web 版をビルドして GitHub Pages に公開する。
+# main(または今の作業ブランチ)に push すると、Web 版をビルドして GitHub Pages に公開する。
 # 初回だけ: リポジトリの Settings → Pages → Source を「GitHub Actions」にする。
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/fervent-wozniak-jajbx5]
   workflow_dispatch:
 
 permissions:
