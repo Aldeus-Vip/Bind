@@ -907,7 +907,7 @@ function makeCreature(key, opt, build){
   const inner = new THREE.Group(); inner.scale.setScalar(opt.scale || 1); outer.add(inner);
   const body = new THREE.Group(); inner.add(body);
   const foot = new THREE.Mesh(new THREE.PlaneGeometry(opt.footR || 0.95, opt.footR || 0.95), new THREE.MeshBasicMaterial({ transparent:true, depthWrite:false, blending:ADDB, opacity:0.8 }));
-  foot.rotation.x = -Math.PI/2; foot.position.y = 0.012; foot.userData.noFrame = true; inner.add(foot);
+  foot.rotation.x = -Math.PI/2; foot.position.y = 0.012; foot.userData.noFrame = true; foot.userData.foot = true; inner.add(foot);
   const aura = makeSuitAura(inner, opt.auraR || 0.5, opt.auraH || 0.9);
   const ctx = { body, inner, eyes:[], glowMats:[], suit:null };
   const spec = build(ctx) || {};
@@ -2613,7 +2613,8 @@ function disposeAvatar(av){
 }
 // glTF モデルが読み込まれている生物は、モデルをスートの色で撮影してカードの絵にする(#9)
 const hasModel = card => !!(window.B3 && window.B3.gltfOf && window.B3.gltfOf[creatureKeyFor(card)]);
-function renderPortrait(card){
+const NEUTRAL_THEME = { glow:'#c9a24b', core:'#fff3d6', dark:'#14100c', motif:'none' }; // スート色なし(図鑑用)
+function renderPortrait(card, neutral){
   const ca = conceptArtFor(card);
   if(ca && !hasModel(card)) return ca;
   if(card.suit==='JOKER' && !hasModel(card)) return A.jokerScythe || null;
@@ -2623,7 +2624,8 @@ function renderPortrait(card){
   }
   const key = creatureKeyFor(card);
   const av = (AVATARS[key] || AVATARS.caster)(0);
-  av.setSuit(SUIT_THEME[suitKeyOf(card)] || SUIT_THEME.H);
+  av.setSuit(neutral ? NEUTRAL_THEME : (SUIT_THEME[suitKeyOf(card)] || SUIT_THEME.H));
+  if(neutral) av.root.traverse(o => { if(o.userData.foot) o.visible = false; }); // 図鑑はスートの陣を出さない
   av.pose('raise', 0.35); av.idle(1.3, 0); av.tick(1.3, 0, 0);
   pScene.add(av.root); av.root.updateMatrixWorld(true);
   const bb = new THREE.Box3();
@@ -2659,6 +2661,7 @@ function pumpPortraits(){
 }
 // モデルの読み込みが終わったら、その生物のカードの絵を撮り直す(models.js から呼ぶ)
 function refreshPortraits(key){
+  try{ refreshBeast(key); }catch(e){ console.warn(e); }
   [...portraitCache.keys()].forEach(k => {
     const [sk, rk] = k.split(':');
     const card = sk==='JB' || sk==='JW' ? { suit:'JOKER', rank:null, id: sk==='JW' ? 'JOKER2' : 'JOKER1' } : { suit:sk, rank:Number(rk) };
@@ -2733,13 +2736,30 @@ if(typeof window.cardBackDiv === 'function'){
 })();
 // スタート画面: 封印の紋章と、封印された生物たちの一覧
 const BESTIARY = [['1','A 封印の聖獣'],['2','2 精霊'],['3','3 バク'],['4','4 サソリ'],['5','5 大蛇'],['6','6 シャチ'],['7','7 鳳凰'],['8','8 龍'],['9','9 悪魔'],['10','10 虫の群れ'],['11','J ゴーレム'],['12','Q 公正の山羊'],['13','K ミノタウロス'],['JB','JOKER 黒'],['JW','JOKER 白']];
+// 図鑑(スタート画面の「大地に封じられし者たち」): モデルがあれば、モデル本来の色で撮影した絵にする
+const beastCard = k => k==='JB' ? { suit:'JOKER', rank:null, id:'JOKER1' } : k==='JW' ? { suit:'JOKER', rank:null, id:'JOKER2' } : { suit:'H', rank:Number(k) };
+const beastCache = new Map();
+function beastArt(k){
+  const card = beastCard(k);
+  if(!hasModel(card)) return `url(${CONCEPT_ART[k]})`;
+  if(!beastCache.has(k)){ try{ beastCache.set(k, renderPortrait(card, true)); }catch(e){ console.warn('[Bind3D] 図鑑の絵', e); beastCache.set(k, null); } }
+  const u = beastCache.get(k);
+  return u ? `url(${u}), radial-gradient(circle at 50% 62%, #6a5226 0%, #14100c 74%)` : `url(${CONCEPT_ART[k]})`;
+}
+function refreshBeast(key){
+  BESTIARY.forEach(([k]) => {
+    if(creatureKeyFor(beastCard(k)) !== key) return;
+    beastCache.delete(k);
+    document.querySelectorAll(`.b3-beast[data-beast="${k}"]`).forEach(d => { d.style.backgroundImage = beastArt(k); });
+  });
+}
 function decorateStart(){
   const ss = document.querySelector('.start-screen');
   if(!ss || ss.querySelector('.b3-bestiary') || typeof CONCEPT_ART==='undefined') return;
   try{ document.documentElement.style.setProperty('--b3-seal', `url(${cardBackURL()})`); }catch(e){}
   const wrap = document.createElement('div'); wrap.className = 'b3-bestiary';
   const t = document.createElement('div'); t.className = 'b3-bestiary-title'; t.textContent = '大地に封じられし者たち'; wrap.appendChild(t);
-  BESTIARY.forEach(([k, name]) => { const d = document.createElement('div'); d.className = 'b3-beast'; d.style.backgroundImage = `url(${CONCEPT_ART[k]})`; const sp = document.createElement('span'); sp.textContent = name; d.appendChild(sp); wrap.appendChild(d); });
+  BESTIARY.forEach(([k, name]) => { const d = document.createElement('div'); d.className = 'b3-beast'; d.dataset.beast = k; d.style.backgroundImage = beastArt(k); const sp = document.createElement('span'); sp.textContent = name; d.appendChild(sp); wrap.appendChild(d); });
   ss.appendChild(wrap);
 }
 // 上部ボタンの絵文字を外し、刻印風の記号にする(CSS の ::before)
