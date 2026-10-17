@@ -56,8 +56,8 @@ if(single && fs.existsSync(path.join(modelsSrc, 'manifest.json'))){
   (await optimizeModels(modelsSrc, tmp, path.join(root, '.cache', 'models'))).forEach(r => console.log('model ' + r));
   const manifest = JSON.parse(fs.readFileSync(path.join(tmp, 'manifest.json'), 'utf8'));
   const files = {};
-  for(const spec of Object.values(manifest)) if(spec && spec.file && fs.existsSync(path.join(tmp, spec.file)))
-    files[spec.file] = 'data:model/gltf-binary;base64,' + fs.readFileSync(path.join(tmp, spec.file)).toString('base64');
+  for(const f of fs.readdirSync(tmp)) if(f.endsWith('.glb'))
+    files[f] = 'data:model/gltf-binary;base64,' + fs.readFileSync(path.join(tmp, f)).toString('base64');
   embedded = `<script>window.BIND_EMBEDDED_MODELS = ${JSON.stringify({ manifest, files })};</script>\n`;
 }
 const tags = embedded +

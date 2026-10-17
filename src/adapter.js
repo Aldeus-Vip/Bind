@@ -1505,7 +1505,7 @@ function charPos(i){
   const slot = st && st.floor ? st.floor[i] : null;
   const floating = !!(st && st.windCells && st.windCells.has(i));
   const base = (slot && slot.card!==null) ? topY(i) : TOP_Y;
-  return new THREE.Vector3(tileX(i), base + (floating ? 0.35 : 0), tileZ(i));
+  return new THREE.Vector3(tileX(i), base + (floating ? 0.22 : 0), tileZ(i));
 }
 function placeChar(ch, i){
   ch.idx = i;
@@ -1881,8 +1881,12 @@ function loop(){
       // 待機中はカメラの方を向く
       let dy = -ch.root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       ch.root.rotation.y += dy*0.06;
+      // ウィンドマスでは軽く浮遊する(以前は += で毎フレーム足し込んでいたため高さがずれて残っていた)
       const st = curState();
-      if(st && st.windCells && ch.idx!=null && st.windCells.has(ch.idx)) ch.body.position.y += Math.sin(t*2.5)*0.06;
+      const floatY = (st && st.windCells && ch.idx!=null && st.windCells.has(ch.idx)) ? Math.sin(t*2.2 + ch.phase)*0.025 : 0;
+      ch.body.position.y += (floatY - ch.body.position.y)*0.2;
+    } else {
+      ch.body.position.y *= 0.8; // 移動中は浮遊の上下を戻す
     }
     ch.blinkAt -= dt;
     const blinking = ch.blinkAt < 0.12 && ch.blinkAt > 0;

@@ -35,7 +35,39 @@ function toToon(mat){
   });
   if(mat.normalMap) m.normalScale = mat.normalScale.clone();
   m.skinning = !!mat.skinning; m.morphTargets = !!mat.morphTargets;
+  addTint(m);
   return m;
+}
+
+/* ---- スートの色調: テクスチャの明暗を保ったまま、色味をスートの色へ寄せる ----
+   m.userData.tint(色)と m.userData.tintK(0〜1、0 で元の色)をシェーダーに渡す。 */
+const SUIT_TINT = { H:0xff3a48, S:0xa060ff, D:0xffb030, C:0x4aa0ff };
+const TINT_K = 0.55;
+function addTint(m){
+  m.userData.tint = { value: new THREE.Color(1, 1, 1) };
+  m.userData.tintK = { value: 0 };
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uTint = m.userData.tint; sh.uniforms.uTintK = m.userData.tintK;
+    sh.fragmentShader = 'uniform vec3 uTint;\nuniform float uTintK;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      {
+        float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+        vec3 tinted = uTint * (0.18 + 1.45*l) + vec3(0.9*l*l);
+        diffuseColor.rgb = mix(diffuseColor.rgb, tinted, uTintK);
+      }`);
+  };
+  m.customProgramCacheKey = () => 'bind-tint';
+}
+function suitKeyOf(th){ return th.motif==='chains' ? 'H' : th.motif==='blades' ? 'S' : th.motif==='crystals' ? 'D' : th.motif==='stars' ? 'C' : null; }
+function applyTint(root, suitKey, k){
+  const c = SUIT_TINT[suitKey];
+  root.traverse(o => {
+    if(!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+      if(!m || !m.userData.tint) return;
+      if(c != null){ m.userData.tint.value.setHex(c); m.userData.tintK.value = k == null ? TINT_K : k; }
+      else m.userData.tintK.value = 0; // JOKER は元の色のまま
+    });
+  });
 }
 
 // gltf を、makeCreature が期待する見た目(av)に包む
@@ -95,14 +127,17 @@ function makeGltfAvatar(key, spec, gltf){
     const proc = !mixer && rig ? proceduralRig(model, rig) : null;
     if(rig && !spec.rig) model.userData.autoRig = rig; // 確認用
     let raiseK = 0, jumpK = 0;
+    // 周囲を舞う小さな分身(10 の虫の群れなど)。manifest の swarm で指定し、軽量版モデルを使う
+    const swarm = spec.swarm && miniOf[key] ? makeSwarm(ctx.inner || ctx.body, miniOf[key], spec.swarm, s) : null;
     return {
+      setSuit(th){ const sk = suitKeyOf(th); applyTint(model, sk); if(swarm) applyTint(swarm.group, sk); },
       pose(raise, jump){
         raiseK = raise; jumpK = jump;
         if(mixer){ if(jump > 0) play('jump'); else if(raise > 0.3) play('raise'); else play('idle'); }
         else if(!proc){ holder.position.y = 0.05*raise; holder.rotation.x = -0.15*raise; }
       },
       idle(t, ph){ if(!mixer && !proc) holder.position.y = Math.sin(t*1.6 + ph)*0.02; },
-      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); },
+      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(swarm) swarm.tick(t + (ph || 0), raiseK); },
     };
   });
 }
@@ -204,6 +239,35 @@ function autoRig(model, box){
   return { spine, neck, head:[head], tail: tail.slice(0, 8), wingsL, wingsR };
 }
 
+/* ---- 群れ: 軽量版モデルの小さな複製を、本体の周りに浮かべて飛び回らせる ----
+   swarm: { count: 12, size: 0.16(本体に対する大きさ), radius: 0.55, height: 0.5 } */
+const miniOf = {};
+function makeSwarm(parent, gltf, opt, bodyScale){
+  const group = new THREE.Group(); parent.add(group);
+  const n = opt.count || 12, R = opt.radius || 0.55, H = opt.height || 0.5;
+  const box = new THREE.Box3().setFromObject(gltf.scene), size = box.getSize(new THREE.Vector3());
+  const sc = (opt.size || 0.16) / Math.max(size.y, 1e-6);
+  const items = [];
+  for(let k=0;k<n;k++){
+    const m = (THREE.SkeletonUtils && THREE.SkeletonUtils.clone) ? THREE.SkeletonUtils.clone(gltf.scene) : gltf.scene.clone(true);
+    m.traverse(o => { if(o.isMesh){ o.material = Array.isArray(o.material) ? o.material.map(toToon) : toToon(o.material); o.castShadow = false; } });
+    const h = new THREE.Group(); h.add(m); m.position.set(-(box.min.x+box.max.x)/2, -(box.min.y+box.max.y)/2, -(box.min.z+box.max.z)/2);
+    h.scale.setScalar(sc * (0.75 + Math.random()*0.5));
+    group.add(h);
+    items.push({ h, a: k/n*Math.PI*2, r: R*(0.8 + Math.random()*0.5), y: H*(0.4 + Math.random()*1.0), sp: (0.6 + Math.random()*0.6)*(k%2 ? 1 : -1), ph: Math.random()*6 });
+  }
+  return {
+    group,
+    tick(t, raise){
+      items.forEach(it => {
+        const a = it.a + t*it.sp*(1 + raise*1.5), r = it.r*(1 + raise*0.35);
+        it.h.position.set(Math.cos(a)*r, it.y + Math.sin(t*3 + it.ph)*0.06, Math.sin(a)*r*0.85);
+        it.h.rotation.set(Math.sin(t*5 + it.ph)*0.2, -a + (it.sp > 0 ? Math.PI : 0), 0); // 進行方向を向く
+      });
+    },
+  };
+}
+
 function register(key, factory){
   B.AVATARS[key] = factory;
   // 既に図形モデルで作られているものを作り直す
@@ -222,10 +286,15 @@ const urlOf = file => (EMB && EMB.files[file]) || BASE + file;
     if(!manifest) return;
     Object.entries(manifest).forEach(([key, spec]) => {
       if(key.startsWith('_') || !spec || !spec.file) return;
-      loader.load(urlOf(spec.file),
+      const loadMain = () => loader.load(urlOf(spec.file),
         gltf => { register(key, makeGltfAvatar(key, spec, gltf)); console.info(`[Bind3D] モデルを読み込みました: ${key} (${spec.file})`); },
         undefined,
         e => console.warn(`[Bind3D] モデルを読み込めませんでした: ${key} (${spec.file})`, e));
+      // 群れ用の軽量版(ビルド時に <名前>.mini.glb を作る)を先に読む
+      if(spec.swarm){
+        const mini = spec.file.replace(/\.glb$/, '.mini.glb');
+        loader.load(urlOf(mini), g => { miniOf[key] = g; loadMain(); }, undefined, () => loadMain());
+      } else loadMain();
     });
   })
   .catch(() => { /* manifest が無い = 図形モデルのまま */ });
