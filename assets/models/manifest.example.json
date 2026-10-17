@@ -1,0 +1,10 @@
+{
+  "_comment": "manifest.json にリネームして使う。キー: beast-A, c2〜c13, jb, jw",
+  "c8": {
+    "file": "c8_thunder_dragon.glb",
+    "height": 1.2,
+    "rotY": 0,
+    "toon": true,
+    "anims": { "idle": "Idle", "raise": "Attack", "jump": "Jump" }
+  }
+}

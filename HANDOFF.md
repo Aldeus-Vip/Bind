@@ -1,0 +1,241 @@
+# Bind 3D 引き継ぎ資料
+
+claude.ai のチャット(2026-10-16〜17)で進めた作業を、Claude Code へ引き継ぐための資料。
+
+---
+
+## 1. 概要
+
+| 項目 | 内容 |
+|---|---|
+| 元 | `src/original/bind_prototype.html`(2D の HTML プロトタイプ、約13.7MB。画像44枚を data URI で内蔵) |
+| やったこと | 盤面を斜め上視点の 3D にし、パーソナルを 3D キャラ(カードの生物)にした。演出・手札・UI も世界観に合わせた |
+| 方式 | **元のロジックに手を入れない「アダプタ方式」**。`src/adapter.js` / `src/adapter.css` を注入するだけ |
+| 技術 | three.js r128(CDN の UMD 版、グローバル `THREE`)、トゥーンシェーディング、Canvas で描くテクスチャ |
+| 成果物 | `dist/bind_3d_game.html`(約14.5MB、1ファイルで動く) |
+| 引き継ぐ理由 | 1ファイルのサイズが claude.ai アーティファクトの上限(16MB)に近づいたため |
+
+---
+
+## 2. 現状(完成していること)
+
+### 盤面(A-1)
+- 4×5 のフロアを浮遊する石の足場として表示。
+- **裏向き = 封印された大地**:180度点対称の石畳。中央の窪みに封印陣と鎖の輪、縁の上下に「BIND」ロゴ(鎖が巻き付き、亀裂から光)。
+- **表向き = 解放された大地**:亀裂と中央からスートの術式の色の光が漏れる。数字とスートが光って浮かぶ。光の粒が立ち昇る(踏むと負けの目印)。
+- 空きマスは穴。フロアが壊れると崩れ落ち、生まれるとせり上がる。
+- 太陽の強化・雷のデバフ・ウィンドマス・移動先の光・選べないマスの暗転を 3D で表示。
+
+### スート演出(A-2)
+- 発動時、術者の足元にスートの陣と光の柱。効果中は回り続ける。
+- ♥ 封印陣→鎖が締め付け砕けて解放 / ♠ 黒曜石の刃と呪いの目 / ♦ 錬金陣と黄金結晶でフロア錬成 / ♣ 星座と星の軌跡。
+
+### キャラクター(A-3 / B-1 / B-2)
+- **器(Vessel)と見た目(Avatar)を分離**。演出はすべて器に対して行い、見た目はカードに応じて差し替わる。
+- パーソナルのカードで見た目が決まる:A=封印の聖獣、2〜K=各生物、JOKER=死神/精霊。術者(人型)は該当なしの予備。
+- スートは見た目を変えず、装飾(足元の陣・周りを巡る鎖/刃/結晶/星座)だけ変える(資料の原則②)。
+- 全15体(A〜K、黒JOKER、白JOKER)は、Riku さんのコンセプトアート(`assets/concept_sheet.png`)に配色・輪郭を寄せた。
+
+### 数字効果
+- **召喚**:数字効果の発動中、その数字の生物が術者の隣に召喚陣から現れて構える(術者がその生物なら本人が構える)。
+- 8:雷雲から落雷(元の演出を置き換え)。4 のデバフも小さな落雷。
+- K:ハンマーで大地を砕きマグマが噴出 / 6:渦潮 / 7:竜巻 / 2:召喚陣の光柱(元の演出に重ねる)。
+
+### 手札系演出(画面全体の 3D レイヤー)
+- 3 夢の泡 / 5 大蛇が相手の手札へ伸びてカードを持ち帰る / 9 捨て札が紫の炎で悪魔へ / 10 虫の群れがカードを運ぶ / J エネルギー吸収 / Q 手札を山羊が食らう。
+
+### 手札・UI
+- 手札のカード:資料のカードフレーム(生成紙・スート色の内線・左上と右下のランク)+**コンセプトアート**。裏面は盤面と同じ封印の大地。
+- UI テーマ:石版のパネル、金縁の石の札のボタン、Cinzel/明朝の文字、暗い大地の背景。スタート画面に封印の紋章と「大地に封じられし者たち」(15体のアート一覧)。
+
+### 動作確認(すべてヘッドレス Chromium のソフトウェア描画で実施)
+- CPU 同士の自動対戦を繰り返し実行し、エラー・進行停止なし。
+- ユーザー(Riku さん)が実機でプレイし、問題なく動作することを確認済み。
+
+---
+
+## 3. ファイル構成
+
+```
+bind3d-project/
+├─ CLAUDE.md                     Claude Code 向けの短い指示
+├─ HANDOFF.md                    この資料
+├─ src/
+│  ├─ original/bind_prototype.html   元のプロトタイプ(編集しない)
+│  ├─ adapter.js                 3D 化のすべて(約3000行、コンセプトアートも data URI で内蔵)
+│  └─ adapter.css                3D 表示・手札フレーム・UI テーマ
+├─ assets/
+│  ├─ concept_sheet.png          Riku さんのコンセプトアート(全15体)
+│  └─ concept_art/*.jpg          上から切り出した15枚(A,2〜10,J,Q,K,JB,JW)。adapter.js 内の CONCEPT_ART と同じ画像
+├─ docs/
+│  └─ Bind_Card_Design_Motifs.md Riku さんのデザイン設定資料(世界観の基準)
+├─ tools/
+│  ├─ build.py                   src → dist の組み立て
+│  ├─ make_test_html.py          テスト用 g.html(three.js をローカル参照)を作る
+│  ├─ package.json               three@0.128.0 / playwright
+│  └─ tests/*.js                 確認スクリプト(下表)
+└─ dist/bind_3d_game.html        ビルド済み(そのままブラウザで遊べる。three.js は CDN から読む)
+```
+
+---
+
+## 4. ビルドと確認
+
+```bash
+npm run build:single   # dist/bind_3d_game.html(11章参照。旧 tools/build.py は build.mjs に置き換え)
+cd tools
+npm install
+npx playwright install chromium
+python3 make_test_html.py         # tools/g.html を生成
+node tests/play.js                # 例
+```
+
+| スクリプト | 内容 | 出力 |
+|---|---|---|
+| `tests/play.js` | 実クリックで配置→ CPU 同士で約90秒対戦。フェーズと位置をログ出力、エラー検出 | p0〜p6.png |
+| `tests/fx.js` | ♥♦♠♣ のスート演出を順に発動しコマ撮り。最後にアニメ中カウンタ=0 を確認 | fx_*.png |
+| `tests/bolt.js` / `nfx.js` | 8 の落雷、召喚、K/6/7/2 | l*.png / n*.png |
+| `tests/hfx.js` | 手札系演出(3,5,9,10,J,Q) | h_*.png |
+| `tests/zoo2.js` | 全15体を盤面に並べて撮影 + 手札 | y*.png, hand2.png |
+| `tests/beast.js` | A の聖獣4スートとチェンジでの入れ替わり | b*.png |
+| `tests/ui.js` | スタート/配置/ゲーム/ルールブック/設定の各画面 | u_*.png |
+| `tests/hand.js` | 手札のカードデザイン | h1.png, h2.png |
+
+- 確認の合格基準:`no errors` が出ること、`animationsInFlight` が最後に 0 に戻ること。
+- WebGL は `--use-gl=swiftshader` で動かしている(GPU なし環境でも可)。
+
+---
+
+## 5. 設計の要点
+
+### 5-1. アダプタ方式(元コードとの接し方)
+1. `render()` をラップし、描画のたびに `afterRender()` → 3D キャンバスを `#floor-grid-el` に差し込み、3D と同期。
+2. **元の DOM のマス(`#floor-cell-i`)は透明にして残し、3D 上のマスの投影位置に重ねる**(`layout()`、clip-path で台形)。
+   → クリック処理と、既存演出の `getBoundingClientRect()` がそのまま 3D 上の位置になる。
+3. `sync()` が毎フレーム `state` と元の表示フラグ(`travelingOriginIndex` / `windMovingHiddenCells` / `animatingCellIndices`)を読み、3D を合わせる。DOM のクラス(`reachable` / `move-dimmed` / `impact-shake` など)も読んでハイライト・揺れに反映。
+4. 演出関数は `override(name, make)` で上書き。3D 表示中だけ差し替わり、2D 表示では元に戻る。
+   - **置き換え型**:移動・テレポート・裂け目・チェンジ・敗北・♥・♦・8 など(盤面の出来事)。
+   - **重ね型**(`Promise.all([orig, fx3d])`):♠・♣・K・6・7・2・手札系。元の 2D 演出もそのまま動く。
+5. 完了通知のルール:`trackAnimation(resolve => { resolve = once(resolve); ... })`、例外時は `failSafe(e, playerIdx, resolve)`。
+
+### 5-2. キャラクター
+- `buildVessel(p)`:位置・ジャンプ移動(`hopTo`)・頭上カード・手番リング・バインド電撃・追加ターン太陽。
+- 見た目の共通インターフェース:`{ key, root, head, eyes, mats, badgeX, badgeY, setSuit(theme), pose(name,k), idle(t,phase), tick(t,dt,phase), blink(on) }`
+  - `pose`:`'jump'`(跳躍中) / `'raise'`(術を構える) / `'rest'`。
+- `AVATARS[key]` に登録、`creatureKeyFor(card)` でカード→見た目を決定、`setAvatar()` で差し替え(光の粒とともに)。
+- 生物は `makeCreature(key, opt, build)` で作る(足元の陣・スートのオーラ・構え・まばたきは共通)。
+- **モデルを Blender 等の glTF に差し替えるときは、このインターフェースを満たすオブジェクトを `AVATARS` に登録するだけでよい。**
+
+### 5-3. テクスチャ・カード
+- フロアは Canvas で描く「色テクスチャ」と「発光テクスチャ」の2枚(`drawBack` / `drawFace`)。点対称は `sym()` で半分を描いて180度回転コピー。
+- 手札は `cardButton` / `cardStatic` をラップして装飾(`decorateCard`)。アートは `CONCEPT_ART`(数字ごとに1枚、4スート共通)。無い場合は 3D の肖像を撮影(`renderPortrait`)。
+- 裏面は `drawBack` の画像を `cardBackDiv` に適用。
+
+### 5-4. 画面全体の 3D レイヤー(手札系演出)
+- 固定配置の透明な WebGL キャンバス(z-index 160)、正投影カメラでピクセル座標。
+- 起点:召喚中の生物 → いなければパーソナル(`casterPx`)。終点:プレイヤーパネルの手札/捨て札(`panelPx`)。
+- 注意:このレイヤーでは `MeshToonMaterial` + 共有 `gradientMap` が描画されなかったため、`MeshLambertMaterial` を使っている。
+
+---
+
+## 6. `src/adapter.js` の構成(行番号は目安)
+
+| 行 | 内容 |
+|---|---|
+| 1〜100 | 初期化、シーン、トゥーン、画像素材の読み込み |
+| 103〜380 | フロアのデザイン(SUIT_THEME、drawBack/drawFace、点対称) |
+| 381〜420 | 盤面のジオメトリ(石の足場) |
+| 466〜640 | 器と見た目、術者(buildCaster) |
+| 641〜840 | A 封印の聖獣(buildBeastA) |
+| 841〜1404 | 生物キット(makeSuitAura / makeCreature)と 2〜K・JOKER、creatureKeyFor |
+| 1406〜1450 | buildVessel / setAvatar |
+| 1451〜1650 | tween・粒子・補助関数・カメラ合わせ・DOM マスの重ね合わせ・render フック |
+| 1651〜1900 | sync(state → 3D)、メインループ |
+| 1902〜2087 | 移動系の上書き(ムーブ/テレポート/裂け目/チェンジ/敗北) |
+| 2088〜2352 | スート演出 |
+| 2353〜2578 | 数字効果(召喚・8・K・6・7・2) |
+| 2579〜2726 | 手札デザイン(CONCEPT_ART、肖像、裏面)、UI テーマ用の石テクスチャ、スタート画面 |
+| 2727〜末尾 | 画面全体の 3D レイヤーと手札系演出 |
+
+※ `CONCEPT_ART` の data URI(約57万文字)が1行に入っているので、エディタで開くときは注意。
+
+---
+
+## 7. 元コードの依存しているグローバル
+
+`state` / `settings` / `render` / `trackAnimation` / `animationsInFlight` / `travelingOriginIndex` / `windMovingHiddenCells` / `animatingCellIndices` / `ASSETS` / `ROWS` / `COLS` / `PLAYER_COLORS` / `SUIT_SYMBOL` / `rankLabel` / `shortestFloorPath` / `neighbors8` / `spawnFlameBurst` / `el` / `getPlayerPanelEl` / `cardButton` / `cardStatic` / `cardBackDiv` / `initGame` ほか、上書きしている `trigger*` 関数(33個)。
+元ファイルを更新したら、これらの名前・引数が変わっていないか確認すること。
+
+---
+
+## 8. 世界観・デザインの決定事項
+
+- 基準資料:`docs/Bind_Card_Design_Motifs.md`(「封印された大地に眠る生物たちの力を、四つの術式によって呼び起こして戦う」)。
+- スート:♥魔術(深紅・封印の解放)/ ♠呪術(紫紺・知識の奪取)/ ♦錬金術(金橙・創造)/ ♣占星術(紺青+金・未来視)。
+- 裏向きフロアは **180度点対称**(向きで情報が漏れない)。表向き = 解放された状態。
+- JOKER:内部ID `JOKER1` = 黒(Reaper of Collapse)、`JOKER2` = 白(Spirit of Renewal)。Riku さん了承済み。
+- 生物(Riku さん設定):
+
+| 数字 | 生物 | 数字 | 生物 |
+|---|---|---|---|
+| A | 封印の聖獣 | 8 | 雷を操る龍 |
+| 2 | 召喚陣で召喚する精霊 | 9 | 捨て札を操る悪魔 |
+| 3 | 夢を食う怪物バク | 10 | 増殖した無数の虫 |
+| 4 | 次元を切り裂くハサミのサソリ | J | 解放されたエネルギーを吸収するゴーレム |
+| 5 | 相手の手札を盗み取る大蛇 | Q | 手札を食らい尽くし代わりを渡す公正の山羊 |
+| 6 | フロアを洗い流す波を操るシャチ | K | ハンマーで大地を砕きマグマを噴かせるミノタウロス |
+| 7 | 風を操る鳳凰 | JOKER | 黒=死神 / 白=再生の精霊 |
+
+- 開発方針:「A(術者で検証)→ B(カードの生物)」の順で進め、B に到達済み。最終イメージは B。
+
+---
+
+## 9. 既知の制約・注意点
+
+1. **ファイルサイズ**:dist は約14.5MB(元 13.7MB + アート 0.6MB + コード)。claude.ai アーティファクトの上限は16MB。
+2. **three.js は CDN**(cdnjs r128)。オフラインでは 3D が使えず 2D 表示に戻る。
+3. **3D モデルは図形の組み合わせ**。アートほどの描き込みは出せない(真上寄りの視点で見分けられることを優先)。
+4. 確認はソフトウェア描画。実機での重さは未計測(ユーザーの実機プレイでは問題なし)。
+5. 元の演出のうち **まだ 2D のままのもの**(38関数):
+   - A:`triggerSunFloorSpawn` `triggerSunDrawCardAppear` `triggerExtraTurnWhiteout` `triggerFloorSpawn`
+   - 2:`triggerSummon2Return` `triggerSummonCircleAt` `triggerSummonFloorSpawn` `triggerSummonReveal`
+   - 4:`triggerLightningFloorTransform` `triggerDebuffAppear` `triggerDiscardFlipRise` `triggerRift4At`
+   - 7:`triggerWindMove`(フロアが飛ぶ) `triggerWindCellForm` `triggerWindCellLanding` `triggerWindCellDissipate` `triggerTornadoVanish`
+   - 9/10/J/Q の後半:`triggerDiscardFallPillar` `triggerHandRevealPillarRise` `triggerRedPurpleDiscardReturn` `triggerBlackMistReturn` `triggerJackAbsorb` `triggerDiscardAppearNebula`
+   - JOKER:`triggerJokerBarrierBreak` `triggerJokerTopdeckRise` `triggerScytheSlash` `triggerScytheSlashHand` `triggerScytheImageSlash` `triggerReaperDrain` `triggerRemainingDiscardNebula`
+   - 共通:`triggerCardFlip` `triggerCardFlipBatch` `triggerDrawCardAppear` `triggerDiscardSpinVanish` `triggerClubGrowthVanish` `triggerHandToDiscardNebula` `triggerHandStealAnim` `triggerHandFog` `triggerEffectRing` `triggerMagmaMorph` `triggerVortexCardAppearAt`
+
+---
+
+## 10. 次にやること(提案・優先度順)
+
+1. **構成の整理(サイズ問題の解決)**
+   - `adapter.js` をモジュールに分割(board / avatars / creatures / fx-suit / fx-number / fx-hand / cards / theme)。
+   - Vite 等でビルドし、画像(元の44枚+コンセプトアート)を data URI から外部ファイルへ。1ファイル制限から解放される。
+   - three.js を npm 依存にしてオフラインでも動くように。
+2. **残りの 2D 演出の 3D 化**(9章の一覧)。優先候補:JOKER(死神の鎌・バリア)、7 のフロアが飛ぶ演出、A の太陽。
+3. **3D モデルの品質向上**:Blender / VRoid で glTF を作り、5-2 のインターフェースで差し替え(数字ごとに1体ずつ置き換え可能)。
+4. 実機でのパフォーマンス計測と調整(粒子数、影の解像度、ピクセル比)。
+5. 必要なら:スマホ縦画面のレイアウト、効果音・BGM。
+
+### Claude Code への最初の指示例
+
+> HANDOFF.md と CLAUDE.md を読んで、現状を把握してください。
+> まず `python3 tools/build.py` と `tools/tests/play.js` で今の状態が動くことを確認し、
+> そのうえで 10章の1(adapter.js のモジュール分割と、画像の外部ファイル化)の計画を立ててください。
+> 元のゲームロジック(src/original)には手を入れないでください。
+
+---
+
+## 11. Claude Code での追加(2026-10-17)
+
+| 追加 | 内容 |
+|---|---|
+| ビルド | `tools/build.py` → `tools/build.mjs` に置き換え。`npm run build` で `dist/web/`(画像は `assets/media/` の別ファイル、three.js・PeerJS は `vendor/` に同梱)。1ファイル版は `npm run build:single` |
+| オンライン対戦 | `src/online.js` / `src/online.css`。PeerJS の P2P、ルームコード6文字、招待リンク `?room=XXXXXX`、同期ずれ検出、再戦 |
+| glTF モデル | `src/models.js`。`assets/models/manifest.json` に書いた生物だけ .glb に差し替え(docs/MODELS.md) |
+| adapter.js の変更 | 末尾の `window.B3` に `AVATARS` `makeCreature` `toon` `glowMat` `setAvatar` `scene` `renderer` を追加しただけ |
+| 公開 | `.github/workflows/pages.yml`(main への push で GitHub Pages) |
+| テスト | `package.json` をルートへ移動(playwright は 1.56.1 に固定)。テストは `tools/serve.js` で http 配信して開く。`tools/tests/online.js` `models.js` を追加 |
+
+ロードマップは `docs/ROADMAP.md`。

@@ -1,0 +1,26 @@
+{
+  "name": "bind-3d",
+  "private": true,
+  "description": "Bind 3D — 2人用トランプ戦略ゲーム Bind の 3D 版(オンライン対戦対応)",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "build:single": "node tools/build.mjs --single",
+    "serve": "node tools/serve.js",
+    "test:play": "node tools/tests/play.js",
+    "test:online": "node tools/tests/online.js",
+    "test:models": "node tools/tests/models.js",
+    "test:suit": "node tools/tests/fx.js",
+    "test:number": "node tools/tests/bolt.js && node tools/tests/nfx.js",
+    "test:hand": "node tools/tests/hfx.js",
+    "test:creatures": "node tools/tests/zoo2.js",
+    "test:ui": "node tools/tests/ui.js",
+    "test": "npm run build && npm run test:online && npm run test:play"
+  },
+  "dependencies": {
+    "peerjs": "1.5.5",
+    "three": "0.128.0"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
