@@ -42,7 +42,7 @@ function toToon(mat){
 /* ---- スートの色調: テクスチャの明暗を保ったまま、色味をスートの色へ寄せる ----
    m.userData.tint(色)と m.userData.tintK(0〜1、0 で元の色)をシェーダーに渡す。 */
 const SUIT_TINT = { H:0xff3a48, S:0xa060ff, D:0xffb030, C:0x4aa0ff };
-const TINT_K = 0.55;
+const TINT_K = 0.68;
 function addTint(m){
   m.userData.tint = { value: new THREE.Color(1, 1, 1) };
   m.userData.tintK = { value: 0 };
@@ -247,7 +247,7 @@ B.gltfOf = gltfOf; B.miniOf = miniOf;
 B.cloneModel = (key, mini) => { const g = (mini ? miniOf : gltfOf)[key]; if(!g) return null; return (THREE.SkeletonUtils && THREE.SkeletonUtils.clone) ? THREE.SkeletonUtils.clone(g.scene) : g.scene.clone(true); };
 B.toToon = m => toToon(m); B.applyTint = (root, sk, k) => applyTint(root, sk, k); B.suitTint = SUIT_TINT;
 function makeSwarm(parent, gltf, opt, bodyScale){
-  const group = new THREE.Group(); parent.add(group);
+  const group = new THREE.Group(); group.userData.noFrame = true; parent.add(group);
   const n = opt.count || 12, R = opt.radius || 0.55, H = opt.height || 0.5;
   const box = new THREE.Box3().setFromObject(gltf.scene), size = box.getSize(new THREE.Vector3());
   const sc = (opt.size || 0.16) / Math.max(size.y, 1e-6);
@@ -274,6 +274,7 @@ function makeSwarm(parent, gltf, opt, bodyScale){
 
 function register(key, factory){
   B.AVATARS[key] = factory;
+  if(B.K && B.K.refreshPortraits) setTimeout(() => B.K.refreshPortraits(key), 0); // カードの絵をモデルから撮り直す
   // 既に図形モデルで作られているものを作り直す
   B.chars.forEach(ch => {
     delete ch.avCache[key];

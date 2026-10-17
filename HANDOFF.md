@@ -239,3 +239,19 @@ node tests/play.js                # 例
 | テスト | `package.json` をルートへ移動(playwright は 1.56.1 に固定)。テストは `tools/serve.js` で http 配信して開く。`tools/tests/online.js` `models.js` を追加 |
 
 ロードマップは `docs/ROADMAP.md`。
+
+## 12. 2026-10-17 追加(第2弾: 全モデル反映と3D演出)
+
+| 項目 | 内容 | 主なファイル |
+|---|---|---|
+| 全15体のモデル | Meshy のリグ付き .glb。骨の役割(頭・首・背骨・尻尾・翼)を配置から自動推定して動かす | models.js(autoRig / proceduralRig) |
+| スート色 | テクスチャの明暗を保ったまま色味をスート色へ(JOKER は元の色) | models.js(addTint) |
+| 10 の群れ | 軽量版 `c10.mini.glb`(約45KB)を周囲に飛ばす | models.js(makeSwarm)、optimize_models.mjs |
+| 頭上ゲージ | 手札(緑/1枚以下で赤)・捨て札(ピンク)。ホバーで中身、対象は点滅して頭上で選択。設定でパネルを隠せる | hud.js / hud.css |
+| 3D専用演出 | 3D表示中は2D演出を呼ばない。チェンジ・表裏・生成・破壊(6/7/K/JOKER/J)・手札系(5蛇/10虫/Q山羊)・飛翔エフェクト・対象を向く | fx3d.js |
+| カード絵 | モデルをスート色で撮影した絵(モデル読み込み後に差し替え) | adapter.js(renderPortrait / refreshPortraits) |
+| 修正 | ウィンドマス浮遊の高さずれ、デバフ着地の演出が未定義、9の戻り演出が別のカードを飛ばしていた | adapter.js / fx3d.js |
+
+- adapter.js の内部部品は `B3.K` で公開(追加モジュールはこれを使う)。
+- 演出中にマスの見た目を自分で動かすときは `K.frozen` に入れる(sync が触らない)。データが追いつく2フレーム後に外す。
+- 長時間テスト: `tools/tests/soak.js`(CPU 同士、既定6分)。
