@@ -92,7 +92,9 @@ for(const key of Object.keys(LOCAL)){
 // glTF モデル(あれば)
 const modelsDir = path.join(root, 'assets', 'models');
 if(fs.existsSync(modelsDir)){
-  fs.cpSync(modelsDir, path.join(outDir, 'models'), { recursive: true });
+  const { optimizeModels } = await import('./optimize_models.mjs');
+  const report = await optimizeModels(modelsDir, path.join(outDir, 'models'), path.join(root, '.cache', 'models'));
+  report.forEach(r => console.log('model ' + r));
 }
 
 fs.writeFileSync(path.join(outDir, 'index.html'), s);

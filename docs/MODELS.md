@@ -30,6 +30,13 @@ Meshy の四足獣リグなど、アニメーションが付かないモデル�
 
 キー: `beast-A`(A)、`c2`〜`c13`(2〜K)、`jb`(黒JOKER)、`jw`(白JOKER)
 
+### 軽量化(ビルド時に自動)
+
+- `npm run build` のとき、`tools/optimize_models.mjs` がテクスチャを最大 1024px に縮小して `dist/web/models/` に出す。
+- 元の `.glb`(`assets/models/`)は変更しない。高解像度の元データとして残る。
+- 1体だけ大きくしたいときは manifest に `"textureSize": 2048` などと書く。
+- 例: beast-A.glb 10.4MB → 1.7MB(見た目はほぼ同じ)。
+
 ## 2. モデルの入手方法(比較)
 
 | 方法 | 品質 | 手間 | 費用 | 向いている用途 |
