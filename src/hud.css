@@ -54,3 +54,19 @@ body.b3-hide-panels #app .floor-grid.b3{ max-width:none; width:100%; aspect-rati
 .b3-gauge[data-mind="bluepurple"]{ --mind:#a35cff; }
 .b3-gauge[data-mind="blackred"]{ --mind:#ff3a2a; }
 .b3-gauge[data-mind="black"]{ --mind:#ff2a14; }
+
+/* ===== 選択中のカード: 表面に封印の印(✓)を出す(枠の重なりに頼らない) ===== */
+.card.selected{ position:relative; transform:translateY(-4px); filter:brightness(1.08); }
+.card.selected::after{
+  content:'✓'; position:absolute; z-index:5; left:50%; bottom:5%; top:auto; transform:translate(-50%, 0);
+  width:52%; max-width:34px; aspect-ratio:1; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font:900 clamp(11px, 1.6vw, 18px)/1 system-ui, sans-serif; color:#2a1a04;
+  background:radial-gradient(circle at 35% 30%, #fff6cf, #ffd36a 45%, #c48a1a 100%);
+  border:2px solid #fff3c4; box-shadow:0 0 0 2px rgba(42,26,4,.6), 0 0 14px 4px rgba(255,210,90,.85);
+  pointer-events:none; animation:b3-sel-pop .18s ease-out;
+}
+.card.selected::before{ /* 表面を少し暗くして、印を目立たせる */
+  content:''; position:absolute; inset:0; z-index:4; background:linear-gradient(transparent 35%, rgba(20,12,4,.45)); box-shadow:inset 0 0 0 2px #ffd36a; border-radius:inherit; pointer-events:none;
+}
+@keyframes b3-sel-pop{ from{ transform:translate(-50%, 0) scale(.3); opacity:0; } to{ transform:translate(-50%, 0) scale(1); opacity:1; } }
