@@ -685,6 +685,7 @@ function projectile(p, target, eff){
   const spec = Object.assign({}, PROJ[key] || PROJ[1]);
   if(key === 'JOKER' && jokerKind() === 'JW') spec.c = 0xeaffff;
   const g = projMesh(spec); K.scene.add(g); g.position.copy(from);
+  if(window.BindAudio) BindAudio.play('shoot', key);
   const fast = spec.shape === 'bolt';
   const dur = fast ? 0.22 : 0.5;
   return tween(dur, t => {
@@ -696,6 +697,7 @@ function projectile(p, target, eff){
     g.children.forEach(c => { if(c.isMesh && !fast) c.rotation.z += 0.2; });
     K.burst(q, spec.c, fast ? 3 : 1, { up:0.3, speed:0.1, life:0.35, g:0 });
   }).then(() => {
+    if(window.BindAudio) BindAudio.play('hit');
     K.burst(target, spec.c, 22, { up:1.8, speed:0.6 });
     K.burst(target, 0xffffff, 6, { up:1.2, speed:0.9, life:0.3 });
     K.disposeObj(g);
