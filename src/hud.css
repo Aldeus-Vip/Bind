@@ -7,7 +7,10 @@
   box-shadow:0 2px 8px rgba(0,0,0,.5); font:700 11px/1.25 system-ui, sans-serif; color:#f3e6c4;
 }
 .b3-gauge .g-row{ display:flex; align-items:center; gap:4px; padding:1px 0; cursor:default; border-radius:4px; }
-.b3-gauge .g-ic{ font-size:10px; opacity:.8; width:12px; text-align:center; }
+.b3-gauge .g-ic{ width:15px; height:15px; display:inline-flex; }
+.b3-gauge .g-hand .g-ic{ color:#7dff9a; }
+.b3-gauge .g-hand.low .g-ic{ color:#ff6b6b; }
+.b3-gauge .g-disc .g-ic{ color:#ff9be0; }
 .b3-gauge .g-num{ width:16px; text-align:right; font-variant-numeric:tabular-nums; }
 .b3-gauge .g-bar{ flex:1; height:6px; min-width:38px; border-radius:3px; background:rgba(255,255,255,.12); overflow:hidden; }
 .b3-gauge .g-bar i{ display:block; height:100%; border-radius:3px; transition:width .25s; }
@@ -22,17 +25,28 @@
 @keyframes b3-gauge-blink{ from{ background:rgba(255,255,255,0); box-shadow:none; } to{ background:rgba(255,230,140,.35); box-shadow:0 0 10px rgba(255,220,120,.9); } }
 /* 中身・選択欄 */
 .b3-gauge .g-pop{
-  position:absolute; left:50%; bottom:calc(100% + 6px); transform:translateX(-50%);
-  max-width:min(420px, 90vw); padding:6px 8px; border-radius:8px;
+  position:absolute; left:50%; bottom:calc(100% + 6px); transform:translateX(calc(-50% + var(--dx, 0px)));
+  width:max-content; max-width:min(440px, calc(100vw - 16px)); padding:6px 8px; border-radius:8px;
   background:rgba(14,10,8,.93); border:1px solid rgba(201,162,75,.7); box-shadow:0 6px 18px rgba(0,0,0,.6);
 }
 .b3-gauge .g-pop:empty{ display:none !important; }
 .b3-gauge .g-title{ font-size:11px; margin-bottom:4px; white-space:nowrap; color:#e9cf8a; }
-.b3-gauge .g-cards{ display:flex; flex-wrap:wrap; gap:4px; }
+.b3-gauge .g-cards{ display:flex; flex-direction:row; flex-wrap:wrap; gap:4px; align-items:flex-start; }
+.b3-gauge .g-cards > *{ flex:0 0 auto; margin:0 !important; }
 .b3-gauge .g-empty{ opacity:.7; }
 .b3-gauge.picking{ z-index:2; border-color:#ffd27a; }
-/* 設定で従来のパネルを隠す(3D表示中のみ) */
+/* 設定で従来のパネルを隠す(3D表示中のみ)
+   山札をフィールドの上に置き、フィールドを操作パネルの左いっぱいまで広げる */
 body.b3-hide-panels #app .left-column .players-panel{ display:none; }
+body.b3-hide-panels #app .game-screen{
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  grid-template-areas: "topbar topbar" "left right" "field right";
+  max-width:none; row-gap:6px;
+}
+body.b3-hide-panels #app .game-screen > .right-column{ grid-row: 2 / span 2; }
+body.b3-hide-panels #app .left-column .deck-gauge-wrap{ max-width:520px; margin:0 auto 0; }
+body.b3-hide-panels #app .center-column{ min-width:0; }
+body.b3-hide-panels #app .floor-grid.b3{ max-width:none; width:100%; aspect-ratio:auto; height:max(420px, calc(100vh - 150px)); margin:0; }
 .b3-gauge.pop-below .g-pop{ bottom:auto; top:calc(100% + 6px); }
 /* 精神波の枠(5/10/Q/♠/JOKER の対象): ゲージが術の色で光る */
 .b3-gauge[data-mind]:not([data-mind=""]){ box-shadow:0 0 14px 3px var(--mind, #6aff9a); border-color:var(--mind, #6aff9a); }

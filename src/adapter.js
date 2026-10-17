@@ -1557,7 +1557,7 @@ function fitCamera(){
   const pts = [];
   for(let i=0;i<NCELLS;i++){
     for(const dx of [-0.52,0.52]) for(const dz of [-0.52,0.52]) pts.push(new THREE.Vector3(tileX(i)+dx, topY(i), tileZ(i)+dz));
-    pts.push(new THREE.Vector3(tileX(i), topY(i)+1.68, tileZ(i)));
+    pts.push(new THREE.Vector3(tileX(i), topY(i)+(document.body.classList.contains("b3-hide-panels") ? 2.2 : 1.68), tileZ(i))); // 頭上ゲージの分も上に空ける
     if(Math.floor(i/NCOLS)===NROWS-1) pts.push(new THREE.Vector3(tileX(i), -0.85, tileZ(i)+0.2));
   }
   let lo = 4, hi = 40;

@@ -14,6 +14,15 @@ const LS = 'bind3d-hud';
 const opt = (() => { try{ return Object.assign({ hidePanels:false }, JSON.parse(localStorage.getItem(LS) || '{}')); }catch(e){ return { hidePanels:false }; } })();
 const save = () => { try{ localStorage.setItem(LS, JSON.stringify(opt)); }catch(e){} };
 const MAXBAR = 10; // ゲージが満タンになる枚数
+// アイコン: 手札 = 扇に広げたカード / 捨て札 = 重なったカードと下向きの矢印
+const ICON_HAND = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+  <rect x="3.5" y="6" width="8" height="12" rx="1.3" transform="rotate(-18 7.5 12)"/>
+  <rect x="8" y="4.5" width="8" height="12" rx="1.3"/>
+  <rect x="12.5" y="6" width="8" height="12" rx="1.3" transform="rotate(18 16.5 12)" fill="rgba(0,0,0,.35)"/></svg>`;
+const ICON_DISCARD = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
+  <rect x="5" y="11" width="14" height="9" rx="1.3" transform="rotate(-6 12 15.5)"/>
+  <rect x="5" y="13" width="14" height="8" rx="1.3" fill="rgba(0,0,0,.35)"/>
+  <path d="M12 2.5v7M8.8 6.6 12 9.8l3.2-3.2"/></svg>`;
 
 const root = document.createElement('div');
 root.id = 'b3-hud';
@@ -30,8 +39,8 @@ const huds = [0, 1].map(p => {
   const box = document.createElement('div');
   box.className = 'b3-gauge';
   box.innerHTML = `
-    <div class="g-row g-hand"><span class="g-ic">手</span><span class="g-num"></span><span class="g-bar"><i></i></span></div>
-    <div class="g-row g-disc"><span class="g-ic">捨</span><span class="g-num"></span><span class="g-bar"><i></i></span></div>
+    <div class="g-row g-hand" title="手札"><span class="g-ic">${ICON_HAND}</span><span class="g-num"></span><span class="g-bar"><i></i></span></div>
+    <div class="g-row g-disc" title="捨て札"><span class="g-ic">${ICON_DISCARD}</span><span class="g-num"></span><span class="g-bar"><i></i></span></div>
     <div class="g-pop"></div>`;
   root.appendChild(box);
   const rows = { hand: box.querySelector('.g-hand'), discard: box.querySelector('.g-disc') };
@@ -94,7 +103,8 @@ function frame(){
   const st = (typeof state !== 'undefined') ? state : null;
   const show = !!(st && st.players && !st.gameOver && st.phase !== 'setup-personal' && K.active());
   if(show !== visible){ visible = show; root.style.display = show ? '' : 'none'; }
-  document.body.classList.toggle('b3-hide-panels', show && opt.hidePanels);
+  // パネルを隠す設定: 山札をフィールドの上へ、フィールドを左いっぱいまで広げる(配置フェーズも同じ配置)
+  document.body.classList.toggle('b3-hide-panels', !!(st && !st.gameOver && K.active() && opt.hidePanels));
   if(!show) return;
   const t = performance.now()/1000;
   huds.forEach(h => {
@@ -122,6 +132,8 @@ function frame(){
     else if(pc.key !== h.popKey){ h.popKey = pc.key; h.pop.innerHTML = ''; pc.build().forEach(n => h.pop.appendChild(n)); }
     h.pop.style.display = pc ? '' : 'none';
     h.box.classList.toggle('pop-below', q.y < 220); // 画面上端に近いときは下に開く
+    // 画面の左右からはみ出さないように寄せる
+    if(pc){ h.pop.style.setProperty('--dx', '0px'); const r = h.pop.getBoundingClientRect(); const dx = r.left < 8 ? 8 - r.left : (r.right > innerWidth - 8 ? innerWidth - 8 - r.right : 0); if(dx) h.pop.style.setProperty('--dx', dx.toFixed(0) + 'px'); }
   });
 }
 requestAnimationFrame(frame);
