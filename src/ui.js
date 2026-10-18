@@ -20,6 +20,39 @@ if(TEX.logo){
   document.documentElement.classList.add('b3-has-logo');
 }
 
+/* ---- サイトの背景: 封じられた生き物たちの力で、森・水・炎・秘術がまだらに交じる大地 ----
+   フロアと同じ大地の絵を暗く敷き、その上に自然の色の霞と、ゆっくり漂う光の粒(花粉・水の粒・火の粉・術の光)を重ねる */
+if(TEX.ground) document.documentElement.style.setProperty('--b3-ground', `url("${TEX.ground}")`);
+(function motes(){
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv = document.createElement('canvas');
+  cv.id = 'b3-motes';
+  document.body.insertBefore(cv, document.body.firstChild);
+  const g = cv.getContext('2d');
+  const COLORS = ['158,214,120', '120,190,255', '255,150,70', '190,130,255', '255,226,150'];
+  let W = 0, H = 0, list = [];
+  const make = () => ({ x:Math.random()*W, y:Math.random()*H, r:0.8 + Math.random()*2.2, c:COLORS[Math.floor(Math.random()*COLORS.length)],
+    vx:(Math.random()-.5)*0.12, vy:-0.05 - Math.random()*0.18, ph:Math.random()*6.3, a:0.25 + Math.random()*0.45 });
+  const fit = () => { W = cv.width = innerWidth; H = cv.height = innerHeight; list = Array.from({ length: Math.round(W*H/26000) }, make); };
+  fit(); addEventListener('resize', fit);
+  let last = 0;
+  (function draw(now){
+    requestAnimationFrame(draw);
+    if(reduce || now - last < 33) return; // 30fps で十分
+    last = now;
+    g.clearRect(0, 0, W, H);
+    for(const m of list){
+      m.x += m.vx + Math.sin(now/1700 + m.ph)*0.12; m.y += m.vy;
+      if(m.y < -10){ m.y = H + 10; m.x = Math.random()*W; }
+      if(m.x < -10) m.x = W + 10; else if(m.x > W + 10) m.x = -10;
+      const a = m.a*(0.6 + 0.4*Math.sin(now/900 + m.ph));
+      const gr = g.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r*4);
+      gr.addColorStop(0, `rgba(${m.c},${a})`); gr.addColorStop(1, `rgba(${m.c},0)`);
+      g.fillStyle = gr; g.beginPath(); g.arc(m.x, m.y, m.r*4, 0, Math.PI*2); g.fill();
+    }
+  })(0);
+})();
+
 /* ---- 自分の手札だけを見せる(CPU 対戦・オンライン対戦) ---- */
 function myIndex(){
   if(typeof state === 'undefined' || !state) return null;

@@ -247,6 +247,7 @@ function wrap(name){
     if(actor()!==NET.me) return;            // 相手の手番
     if(NET.queue.length) return;            // 相手の操作をまだ再生中
     if(!ready(name)) return;                // 演出中・受付外
+    snapHash(NET.applied);
     NET.applied++;
     send({ t:'act', n:NET.applied, fn:name, args:encode(args) });
     return orig.apply(this, args);
@@ -261,6 +262,7 @@ function pump(){
     if(a.n !== NET.applied + 1){ desync(`操作の順番が合いません(期待 ${NET.applied+1} / 受信 ${a.n})`); NET.queue = []; return; }
     if(actor()===NET.me || !ready(a.fn)) return; // 受け付けられるまで待つ
     NET.queue.shift();
+    snapHash(NET.applied);
     NET.applied++;
     NET.remote = true;
     try{ window[a.fn](...decode(a.args)); }
@@ -285,14 +287,19 @@ function stateHash(){
   for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return (h >>> 0).toString(16);
 }
-function recordHash(){
-  if(!NET.active || !state || NET.queue.length) return;
-  const n = NET.applied;
+// 操作を実行する直前(= 両者とも同じ「入力待ち」の状態)の盤面ハッシュを記録して送る。
+// 以前は一定間隔で「入力待ちに見えたら」記録していたが、演出の切れ目で一瞬だけ入力待ちに見えると
+// 両者で記録する瞬間がずれ、実際には一致しているのに同期ずれと判定されることがあった。
+function snapHash(n){
   if(n in NET.hashes) return;
-  if(!(waitingForInput() || state.gameOver)) return;
   NET.hashes[n] = stateHash();
   send({ t:'hash', n, h:NET.hashes[n] });
   checkHash(n);
+}
+// 終局時(これ以上操作が来ない)だけは間隔で記録する
+function recordHash(){
+  if(!NET.active || !state || NET.queue.length || !state.gameOver) return;
+  snapHash(NET.applied);
 }
 function checkHash(n){
   if(n in NET.hashes && n in NET.remoteHashes && NET.hashes[n]!==NET.remoteHashes[n]) desync(`盤面が一致しません(操作 ${n} 回目の後)`);

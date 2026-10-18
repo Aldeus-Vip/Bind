@@ -1518,6 +1518,7 @@ const tweens = [];
 function tween(dur, update){ return new Promise(res => tweens.push({ t:0, dur:Math.max(0.001,dur), update, res })); }
 const wait = s => tween(s, ()=>{});
 const ease = {
+  in:t=>t*t*t,
   out:t=>1-Math.pow(1-t,3),
   inOut:t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,
   back:t=>{const c=1.7;return 1+(c+1)*Math.pow(t-1,3)+c*Math.pow(t-1,2);},
@@ -2192,10 +2193,29 @@ override('triggerChangeFlip', () => function(cellIndex, oldCard, newCard, player
   });
 });
 
-// 敗北: 炎に包まれて黒く焦げ、灰になって崩れる
+// 敗北
+//  表向きのフロア(封印が解かれたマス)に止まった: 目覚めた生き物の霊体がせり上がり、パーソナルを力で呑み込む
+//  どのカードでも動けない(力尽きた): 魂の光が抜け、体は石になって大地へ沈み、再び封じられる
 function restoreChar(ch){
-  ch.mats.forEach(m => { if(m.userData.c0) m.color.copy(m.userData.c0); });
-  ch.root.scale.setScalar(1); ch.body.scale.set(1,1,1); ch.root.rotation.set(0,0,0); if(ch.av) ch.av.pose('rest', 0);
+  ch.mats.forEach(m => { if(m.userData.c0) m.color.copy(m.userData.c0); if(m.emissive && m.userData.e0) m.emissive.copy(m.userData.e0); });
+  ch.root.scale.setScalar(1); ch.body.scale.set(1,1,1); ch.body.position.set(0, 0, 0); ch.root.rotation.set(0,0,0); if(ch.av) ch.av.pose('rest', 0);
+}
+// 生き物の霊体(テーマ色の半透明・加算)。glTF でも手作りの体でも AVATARS から作る
+function spiritOf(card, color){
+  const key = creatureKeyFor(card);
+  let av = null;
+  try{ av = AVATARS[key] ? AVATARS[key]() : null; }catch(e){ av = null; }
+  if(!av || !av.root) return null;
+  const mats = [];
+  av.root.traverse(o => {
+    if(!o.isMesh && !o.isPoints && !o.isLine && !o.isSprite) return;
+    if(o.isSprite || (o.geometry && /Plane/.test(o.geometry.type))){ o.visible = false; return; } // 札・影・地面の板は出さない
+    const m = new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0, blending:ADD, depthWrite:false, side:THREE.DoubleSide });
+    if(o.isSkinnedMesh) m.skinning = true;
+    o.material = m; mats.push(m); o.castShadow = false;
+  });
+  try{ av.pose && av.pose('raise', 1); }catch(e){}
+  return { av, root: av.root, mats };
 }
 override('triggerDefeatBurn', () => function(cellIndex, playerIdx){
   return trackAnimation(resolve => {
@@ -2205,19 +2225,70 @@ override('triggerDefeatBurn', () => function(cellIndex, playerIdx){
     driving[playerIdx] = true;
     ensureAt(ch, cellIndex);
     ch.busy = true;
-    const char = new THREE.Color(0x1a1210);
+    const slot = curState() && curState().floor ? curState().floor[cellIndex] : null;
+    const awakened = !!(slot && slot.faceUp && slot.card);
+    const card = awakened ? slot.card : null;
     (async () => {
       const base = ch.root.position.clone();
-      let acc = 0;
-      await tween(1.4, t => {
-        ch.mats.forEach(m => m.color.copy(m.userData.c0).lerp(char, ease.inOut(t)));
-        ch.root.position.x = base.x + (Math.random()-.5)*0.03*t;
-        acc += 1;
-        if(acc % 2 === 0) burst(base.clone().add(new THREE.Vector3(0,0.2,0)), Math.random()<0.5 ? 0xff7a2a : 0xffd04a, 2, { up:2.2, speed:0.25, spread:0.4, g:-1, life:0.5 });
-      });
-      burst(base.clone().add(new THREE.Vector3(0,0.4,0)), 0x6b6560, 30, { puff:true, up:0.8, speed:0.5, spread:0.4, g:-0.5, life:0.9, grow:2 });
-      await tween(0.6, t => { ch.body.scale.set(1+t*0.3, Math.max(0.02, 1-ease.inOut(t)), 1+t*0.3); });
-      hideChar(ch);
+      ch.mats.forEach(m => { if(m.emissive && !m.userData.e0) m.userData.e0 = m.emissive.clone(); });
+      if(awakened){
+        const th = themeOf(card), glow = new THREE.Color(th.glow), core = new THREE.Color(th.core);
+        const T = tiles[cellIndex];
+        const sp = spiritOf(card, glow);
+        // 霊体は駒の奥(カメラと反対側)から大きくせり上がる
+        const away = base.clone().sub(camera.position).setY(0).normalize();
+        if(sp){
+          sp.root.scale.setScalar(1.9);
+          sp.root.position.copy(base).addScaledVector(away, 0.35).add(new THREE.Vector3(0, -2.2, 0));
+          sp.root.rotation.y = Math.atan2(-away.x, -away.z); // 駒の方を向く
+          scene.add(sp.root);
+        }
+        const halo = flatPlane(1.6, circleTex(card.suit === 'JOKER' ? 'H' : card.suit), glow, base.y + 0.03);
+        halo.position.x = base.x; halo.position.z = base.z; scene.add(halo);
+        // 1) マスが目覚め、霊体がせり上がる
+        await tween(0.8, t => {
+          const e = ease.out(t);
+          if(T) T.flash = 1.4*t;
+          halo.material.opacity = 0.9*e; halo.rotation.z = t*2;
+          if(sp){ sp.root.position.y = base.y - 2.2*(1 - e); sp.mats.forEach(m => m.opacity = 0.42*e); }
+          ch.root.position.x = base.x + (Math.random()-.5)*0.03*t;
+          if(Math.random() < 0.5) burst(base.clone().add(new THREE.Vector3((Math.random()-.5)*0.8, 0.05, (Math.random()-.5)*0.8)), glow.getHex(), 1, { up:2.4, speed:0.15, life:0.7, g:-0.5 });
+        });
+        // 2) 霊体がのしかかり、力の奔流がパーソナルを包む(体がテーマ色に染まる)
+        await tween(0.9, t => {
+          const e = ease.inOut(t);
+          if(sp){ sp.root.scale.setScalar(1.9 + 0.25*Math.sin(t*Math.PI)); sp.root.position.addScaledVector(away, -0.004); sp.mats.forEach(m => m.opacity = 0.42 + 0.2*Math.sin(t*Math.PI*3)); }
+          ch.mats.forEach(m => { m.color.copy(m.userData.c0).lerp(glow, e*0.85); if(m.emissive) m.emissive.copy(glow).multiplyScalar(e*0.8); });
+          ch.root.position.x = base.x + (Math.random()-.5)*0.05;
+          const a = t*14;
+          burst(base.clone().add(new THREE.Vector3(Math.cos(a)*0.5, 0.2 + t*0.8, Math.sin(a)*0.5)), Math.random() < 0.5 ? glow.getHex() : core.getHex(), 1, { up:0.2, speed:0.05, life:0.4, g:0 });
+        });
+        // 3) 呑み込まれる: 体が光の粒になって霊体へ吸い込まれ、消える
+        burst(base.clone().add(new THREE.Vector3(0, 0.5, 0)), core.getHex(), 24, { up:2.6, speed:0.5, spread:0.4, g:-1.5, life:0.8 });
+        await tween(0.6, t => {
+          const e = ease.in(t);
+          ch.body.scale.set(Math.max(0.02, 1 - e), Math.max(0.02, 1 - e*0.6), Math.max(0.02, 1 - e));
+          ch.body.position.y = e*0.9; ch.body.position.addScaledVector(away, 0.01);
+          if(Math.random() < 0.8) burst(base.clone().add(new THREE.Vector3((Math.random()-.5)*0.4, 0.3 + e, (Math.random()-.5)*0.4)), glow.getHex(), 2, { up:1.8, speed:0.2, life:0.5, g:-1 });
+        });
+        hideChar(ch);
+        // 4) 霊体は満ちた力とともに大地へ還る
+        await tween(0.7, t => {
+          if(sp){ sp.root.position.y = base.y - 2.2*ease.in(t); sp.mats.forEach(m => m.opacity = 0.5*(1 - t)); }
+          halo.material.opacity = 0.9*(1 - t);
+          if(T) T.flash = 1.4*(1 - t);
+        });
+        if(sp) disposeObj(sp.root);
+        disposeObj(halo); if(T) T.flash = 0;
+      } else {
+        // 力尽きた: 魂が抜け、石になって沈む
+        const stone = new THREE.Color(0x6d675e), soul = new THREE.Color(PCOL[playerIdx] || '#ffffff');
+        burst(base.clone().add(new THREE.Vector3(0, 0.6, 0)), soul.getHex(), 18, { up:1.6, speed:0.12, spread:0.3, g:-1.2, life:1.0 });
+        await tween(1.1, t => { ch.mats.forEach(m => m.color.copy(m.userData.c0).lerp(stone, ease.inOut(t))); ch.root.position.x = base.x + (Math.random()-.5)*0.02*(1 - t); });
+        await tween(0.8, t => { ch.root.position.y = base.y - 1.2*ease.in(t); if(Math.random() < 0.4) dust(base); });
+        ch.root.position.y = base.y;
+        hideChar(ch);
+      }
       restoreChar(ch);
       ch.busy = false;
       parks[playerIdx] = null;

@@ -105,3 +105,20 @@ body.b3-ui .floor-grid:not(.b3){ max-width: 560px; }
   body.b3-ui .game-screen > .phase-sequence{ top: auto; bottom: 150px; transform: none; width: 112px; opacity: .92; }
   body.b3-ui .game-screen{ grid-template-columns: minmax(0, 1fr); grid-template-areas: "field" "left"; }
 }
+
+/* ===== サイトの背景: 封じられた生き物たちの力で、自然がまだらに交じる大地 ===== */
+html body{
+  background:
+    radial-gradient(ellipse 55% 45% at 12% 18%, rgba(80,140,90,.20), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 88% 22%, rgba(60,120,180,.17), transparent 70%),
+    radial-gradient(ellipse 50% 45% at 85% 88%, rgba(210,95,40,.16), transparent 70%),
+    radial-gradient(ellipse 50% 45% at 14% 86%, rgba(140,85,190,.14), transparent 70%),
+    radial-gradient(ellipse 80% 70% at 50% 45%, transparent 40%, rgba(6,5,4,.75) 100%),
+    linear-gradient(rgba(12,10,8,.80), rgba(12,10,8,.86)),
+    var(--b3-ground, none) center / cover no-repeat,
+    #0e0c0a !important;
+  background-attachment: fixed !important;
+  background-blend-mode: screen, screen, screen, screen, normal, normal, normal !important;
+}
+#b3-motes{ position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 0; }
+#app{ position: relative; z-index: 1; }
