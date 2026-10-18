@@ -92,43 +92,119 @@ function arrange(){
   const hand = right.querySelector(':scope > .hand-section') || right.querySelector(':scope > .hand-row');
   if(hand) hand.remove();
 
-  // 効果フレーム: 見出し(手番・パーソナル)+ 開閉ボタン / 本体(効果・操作)
-  // 新しい選択(タスク)が来たら、閉じていても開く
+  // 効果フレーム(簡略版): [手番] [パーソナル] | [効果のカード印] [何を選ぶかの短い文] [ボタン] [▲▼]
+  // 効果の詳しい説明は、カードの印・パーソナルの札にカーソルを当てると出る
   const task = typeof state !== 'undefined' && state ? state.task : null;
   if(task && task !== lastTask && !opt.frameOpen){ opt.frameOpen = true; save(); }
   lastTask = task;
-  const head = right.querySelector(':scope > .mid-info-row');
-  const frame = el('div', { class:'b3-frame' + (opt.frameOpen ? '' : ' closed') });
-  const toggle = el('button', { class:'b3-frame-toggle', type:'button', title: opt.frameOpen ? '効果フレームを格納' : '効果フレームを展開',
+  const head = right.querySelector('.mid-info-row');
+  const phaseTag = head && head.querySelector('.phase-tag');
+  const personal = head && head.querySelector('.personal-indicator .card');
+  const danger = !!right.querySelector('.task-banner.danger');
+  const msgEl = right.querySelector('.task-message') || right.querySelector('.hint');
+  const msg = msgEl ? shorten(msgEl.textContent) : '';
+  const buttons = [...right.querySelectorAll('button')];
+  buttons.forEach(b => { b.textContent = shortLabel(b.textContent); b.classList.add('b3-act'); });
+
+  const frame = el('div', { class:'b3-frame' + (opt.frameOpen ? '' : ' closed') + (danger ? ' danger' : '') });
+  const toggle = el('button', { class:'b3-frame-toggle', type:'button', title: opt.frameOpen ? '格納' : '展開',
     onclick: () => { opt.frameOpen = !opt.frameOpen; save(); frame.classList.toggle('closed', !opt.frameOpen); toggle.textContent = opt.frameOpen ? '▲' : '▼'; } },
     opt.frameOpen ? '▲' : '▼');
-  const top = el('div', { class:'b3-frame-head' });
-  if(head) top.appendChild(head);
-  top.appendChild(toggle);
+  const bar = el('div', { class:'b3-frame-bar' });
+  if(phaseTag) bar.appendChild(phaseTag);
+  if(personal){
+    const pc = cardOfPersonal();
+    personal.classList.add('b3-pers');
+    if(pc) hoverTip(personal, () => cardTipHTML(pc));
+    bar.appendChild(personal);
+  }
   const body = el('div', { class:'b3-frame-body' });
-  [...right.childNodes].forEach(n => body.appendChild(n));
-  frame.appendChild(top);
-  frame.appendChild(body);
+  const icon = effectIcon();
+  if(icon) body.appendChild(icon);
+  if(msg) body.appendChild(el('span', { class:'b3-msg' }, msg));
+  if(buttons.length) body.appendChild(el('span', { class:'b3-btns' }, ...buttons));
+  bar.appendChild(body);
+  bar.appendChild(toggle);
+  frame.appendChild(bar);
   center.insertBefore(frame, center.firstChild);
   right.remove();
 
-  // 扇状の手札
+  // 扇状の手札(格納ボタンは扇の左右の端)
   if(hand){
     const fan = el('div', { class:'b3-fan' + (opt.handOpen ? '' : ' closed') });
     const row = hand.classList.contains('hand-row') ? hand : hand.querySelector('.hand-row');
-    const title = hand.querySelector(':scope > h3');
-    const label = title ? title.textContent : '手札';
-    const grip = el('button', { class:'b3-fan-grip', type:'button', title:'手札の表示 / 格納',
-      onclick: () => { opt.handOpen = !opt.handOpen; save(); fan.classList.toggle('closed', !opt.handOpen); } }, label);
-    fan.appendChild(grip);
+    const flip = () => { opt.handOpen = !opt.handOpen; save(); fan.classList.toggle('closed', !opt.handOpen); };
+    ['l', 'r'].forEach(side => fan.appendChild(el('button', { class:'b3-fan-toggle ' + side, type:'button', title:'手札の表示 / 格納', onclick: flip })));
     fan.appendChild(hand);
-    if(row){
-      const cards = [...row.children], n = cards.length;
-      cards.forEach((c, i) => { c.style.setProperty('--i', i - (n - 1)/2); c.style.zIndex = i + 1; });
-      row.style.setProperty('--n', n);
-    }
+    if(row) fanLayout(row);
     gs.appendChild(fan);
   }
+}
+
+/* ---- 扇の並べ方: 枚数が増えても端のカードが画面の下へ沈まないよう、角度・間隔・沈み込みを枚数で縮める ----
+   端のカードの傾きは ±18° まで、沈み込みは 10px まで、扇の幅は画面からはみ出さない範囲(最大 900px)まで */
+function fanLayout(row){
+  const cards = [...row.children], n = cards.length, half = Math.max(1, (n - 1)/2);
+  // 扇の中心(フィールドの列の中央)から左右どちらにも画面からはみ出さない幅
+  const col = document.querySelector('#app > .game-screen > .center-column');
+  const cx = col ? col.getBoundingClientRect().left + col.getBoundingClientRect().width/2 : innerWidth/2;
+  const ang = Math.min(7, 18/half), sag = Math.min(4, 10/(half*half));
+  const swing = 2*275*Math.sin(ang*half*Math.PI/180); // 傾けた端のカードが横へ張り出す分(回転の支点はカードの下 約 275px)
+  const maxW = Math.min(2*Math.min(cx, innerWidth - cx) - 40, innerWidth*0.7, 900) - 76 - swing;
+  const dx = n > 1 ? Math.max(14, Math.min(58, maxW/(n - 1))) : 0;
+  cards.forEach((c, i) => { c.style.setProperty('--i', i - (n - 1)/2); c.style.zIndex = i + 1; });
+  row.style.setProperty('--dx', dx.toFixed(1) + 'px');
+  row.style.setProperty('--ang', ang.toFixed(2) + 'deg');
+  row.style.setProperty('--sag', sag.toFixed(2) + 'px');
+  row.style.width = Math.max(3*62 + 40, dx*(n - 1) + 76 + 60).toFixed(0) + 'px';
+}
+
+/* ---- 効果フレームの部品 ---- */
+const LABEL = { '山札から1枚引く':'ドロー', 'スキップする':'スキップ', '決定':'OK', 'キャンセル':'キャンセル' };
+function shortLabel(t){
+  t = t.trim();
+  const m = t.match(/^決定\s*\((\d+)枚選択中\)$/);
+  if(m) return `OK(${m[1]})`;
+  return LABEL[t] || t;
+}
+function shorten(t){
+  return String(t).replace(/^[←\s]+/, '').replace(/^[^::。]{0,14}効果[::]\s*/, '')
+    .replace(/([^)]*)/g, '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+}
+const listOf = kind => { try{ return kind === 'suit' ? SUIT_EFFECT_LIST : NUMBER_EFFECT_LIST; }catch(e){ return []; } };
+const findEff = (kind, key) => listOf(kind).find(e => String(e.key) === String(key));
+const esc = t => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+function effRow(e){ return e ? `<div class="t-row"><b>${esc(e.label)}</b><span>${esc(e.text)}</span></div>` + (e.target ? `<div class="t-sel">選ぶもの: ${esc(e.target)}</div>` : '') : ''; }
+function cardTipHTML(card){
+  const num = findEff('number', card.suit === 'JOKER' ? 'JOKER' : card.rank);
+  const suit = card.suit === 'JOKER' ? null : findEff('suit', card.suit);
+  return effRow(num) + (suit ? `<div class="t-row t-suit"><b>${esc(suit.label)}</b><span>${esc(suit.text)}</span></div>` : '');
+}
+function cardOfPersonal(){ try{ return state.players[state.current].personalCard; }catch(e){ return null; } }
+// 発動中の効果: カードの印(枠つき)+「〜の効果」。カーソルで説明
+function effectIcon(){
+  const ae = typeof state !== 'undefined' && state ? state.activeEffect : null;
+  if(!ae) return null;
+  const isNum = ae.kind === 'number';
+  const e = findEff(isNum ? 'number' : 'suit', ae.key);
+  const mark = isNum ? (ae.key === 'JOKER' ? '★' : rankLabel(ae.key)) : SUIT_SYMBOL[ae.key];
+  const red = !isNum && (ae.key === 'H' || ae.key === 'D');
+  const name = isNum ? (ae.key === 'JOKER' ? 'JOKER' : rankLabel(ae.key)) : SUIT_SYMBOL[ae.key];
+  const node = el('span', { class:'b3-eff' },
+    el('span', { class:'b3-eff-card' + (red ? ' red' : '') + (isNum ? '' : ' suit') }, mark),
+    el('span', { class:'b3-eff-name' }, `${name}の効果`));
+  if(e) hoverTip(node, () => effRow(e));
+  return node;
+}
+function hoverTip(node, html){
+  node.addEventListener('mouseenter', () => {
+    const tip = document.getElementById('b3-tip'); if(!tip) return;
+    tip.innerHTML = html(); tip.style.display = '';
+    const r = node.getBoundingClientRect(), w = tip.offsetWidth;
+    tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width/2 - w/2)) + 'px';
+    tip.style.top = (r.bottom + 10) + 'px';
+  });
+  node.addEventListener('mouseleave', () => { const tip = document.getElementById('b3-tip'); if(tip) tip.style.display = 'none'; });
 }
 const origRender = window.render;
 window.render = function(){
@@ -137,29 +213,13 @@ window.render = function(){
   return r;
 };
 
-// 扇はフィールドの列の真ん中に合わせる(画面の下端に固定)
+// 扇はフィールドの列の真ん中に合わせる(画面の下端に固定)。効果フレームと扇はフィールドに重ねるだけで、盤面の大きさは変えない
 (function place(){
   requestAnimationFrame(place);
   const fan = document.querySelector('.b3-fan');
   const col = document.querySelector('#app > .game-screen > .center-column');
   if(fan && col){ const r = col.getBoundingClientRect(); fan.style.left = (r.left + r.width/2).toFixed(0) + 'px'; }
-  fitBoard(fan);
 })();
-// 3D の盤面は、効果フレームの下・手札の上の帯に収まるようにカメラをずらす(手札は半分まで重ねてよい)
-function fitBoard(fan){
-  const B = window.B3, K = B && B.K;
-  if(!K || !K.viewInset || !K.active()) return;
-  const grid = document.getElementById('floor-grid-el'), frame = document.querySelector('.b3-frame');
-  if(!grid) return;
-  const g = grid.getBoundingClientRect();
-  const top = frame ? Math.max(0, frame.getBoundingClientRect().bottom - g.top) : 0;
-  const bottom = fan ? Math.max(0, (g.bottom - fan.getBoundingClientRect().top)*0.5) : 0;
-  if(Math.abs(top - K.viewInset.top) > 6 || Math.abs(bottom - K.viewInset.bottom) > 6){
-    K.viewInset.top = top; K.viewInset.bottom = bottom;
-    B.layout(true);
-  }
-}
-
 window.B3UI = { opt, arrange, myIndex };
 if(typeof render === 'function' && document.getElementById('app')) try{ arrange(); }catch(e){}
 })();
