@@ -278,27 +278,176 @@ fx('triggerSummon2Return', async (i) => {
   off: i => { const tok = summon2.get(i); if(tok){ tok.alive = false; summon2.delete(i); K.disposeObj(tok.circle); K.disposeObj(tok.pil); resetTile(tok.T); } release(i); },
 });
 
-// K: ハンマーで割って表にする → 敗れた方は炎柱が立ち、ひび割れて爆散 / 残った方は余熱が残る
-fx('triggerKCrackReveal', (i) => K.hammerFx(i, false));
+/* ---- K のハンマー: ミノタウロス(c13)のモデルから、右手のハンマーの部分だけを切り出す ----
+   モデルは1つのメッシュだが、ハンマーは体とつながっていない独立した部品になっている。
+   位置で溶接した三角形のつながりで部品に分け、右手側(+X)の小さな部品をハンマーとして使う。 */
+let hammerCache;
+function hammerModel(){
+  if(hammerCache !== undefined) return hammerCache ? hammerCache.clone() : null;
+  hammerCache = null;
+  const gltf = window.B3.gltfOf && window.B3.gltfOf.c13;
+  if(!gltf) return null;
+  let src = null; gltf.scene.traverse(o => { if(!src && o.isMesh) src = o; });
+  if(!src) return null;
+  const g = src.geometry, P = g.attributes.position, n = P.count;
+  const idx = g.index ? g.index.array : Array.from({ length:n }, (_, i) => i);
+  const weld = new Map(), id = new Int32Array(n);
+  for(let i = 0; i < n; i++){ const k = P.getX(i).toFixed(4) + ',' + P.getY(i).toFixed(4) + ',' + P.getZ(i).toFixed(4); if(!weld.has(k)) weld.set(k, i); id[i] = weld.get(k); }
+  const par = Int32Array.from({ length:n }, (_, i) => i);
+  const f = x => { while(par[x] !== x){ par[x] = par[par[x]]; x = par[x]; } return x; };
+  for(let t = 0; t < idx.length; t += 3){ const a = f(id[idx[t]]); par[f(id[idx[t+1]])] = a; par[f(id[idx[t+2]])] = a; }
+  const size = new Map(), cx = new Map();
+  gltf.scene.updateMatrixWorld(true);
+  const wv = new THREE.Vector3();
+  for(let i = 0; i < n; i++){ const r = f(id[i]); size.set(r, (size.get(r) || 0) + 1); wv.fromBufferAttribute(P, i).applyMatrix4(src.matrixWorld); cx.set(r, (cx.get(r) || 0) + wv.x); }
+  const pick = new Set([...size.keys()].filter(r => size.get(r) < n*0.1 && cx.get(r)/size.get(r) > 0.25));
+  if(!pick.size) return null;
+  const tri = [];
+  for(let t = 0; t < idx.length; t += 3) if(pick.has(f(id[idx[t]]))) tri.push(idx[t], idx[t+1], idx[t+2]);
+  const geo = new THREE.BufferGeometry();
+  // 圧縮(量子化・インターリーブ)された属性もあるので getX/getY/getZ で読む
+  const GET = ['getX', 'getY', 'getZ'];
+  ['position', 'uv'].forEach(name => {
+    const a = g.attributes[name]; if(!a) return;
+    const m = Math.min(3, a.itemSize), out = new Float32Array(tri.length*m);
+    tri.forEach((v, k) => { for(let c = 0; c < m; c++) out[k*m + c] = a[GET[c]](v); });
+    geo.setAttribute(name, new THREE.BufferAttribute(out, m));
+  });
+  // 量子化を戻すノードの変換(位置・縮尺)をかける
+  gltf.scene.updateMatrixWorld(true);
+  geo.applyMatrix4(src.matrixWorld);
+  geo.computeVertexNormals();
+  // 柄の先を原点に、頭が -Y 方向へ来る向きにそろえる(柄の先 = 中心からいちばん遠い点)
+  const pos = geo.attributes.position, cnt = pos.count, v = new THREE.Vector3(), ctr = new THREE.Vector3();
+  for(let i = 0; i < cnt; i++) ctr.add(v.fromBufferAttribute(pos, i));
+  ctr.divideScalar(cnt);
+  const tip = new THREE.Vector3(); let far = -1;
+  for(let i = 0; i < cnt; i++){ v.fromBufferAttribute(pos, i); const d = v.distanceToSquared(ctr); if(d > far){ far = d; tip.copy(v); } }
+  let maxD = 0; for(let i = 0; i < cnt; i++) maxD = Math.max(maxD, v.fromBufferAttribute(pos, i).distanceTo(tip));
+  const head = new THREE.Vector3(); let hn = 0;
+  for(let i = 0; i < cnt; i++){ v.fromBufferAttribute(pos, i); if(v.distanceTo(tip) > maxD*0.7){ head.add(v); hn++; } }
+  head.divideScalar(Math.max(1, hn));
+  geo.translate(-tip.x, -tip.y, -tip.z);
+  const q = new THREE.Quaternion().setFromUnitVectors(head.clone().sub(tip).normalize(), new THREE.Vector3(0, -1, 0));
+  geo.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q));
+  geo.scale(0.95/maxD, 0.95/maxD, 0.95/maxD); // 盤面で振るう大きさ(長さ約 0.95)
+  // 遠い点は頭の角になることがあるので、最後に「柄の端(いちばん下)が原点・頭が +Y」へそろえ直す
+  geo.computeBoundingBox();
+  let lowY = Infinity; const low = new THREE.Vector3();
+  for(let i = 0; i < pos.count; i++){ v.fromBufferAttribute(geo.attributes.position, i); if(v.y < lowY){ lowY = v.y; low.copy(v); } }
+  let cy = 0; for(let i = 0; i < pos.count; i++) cy += geo.attributes.position.getY(i);
+  cy /= pos.count; // このモデルは柄(グリップの装飾)の方が頂点が多く、重心は柄の側に寄る
+  if(cy > (geo.boundingBox.min.y + geo.boundingBox.max.y)/2) geo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI)); // 頭が下なら上下を返す
+  geo.computeBoundingBox();
+  lowY = Infinity;
+  for(let i = 0; i < pos.count; i++){ v.fromBufferAttribute(geo.attributes.position, i); if(v.y < lowY){ lowY = v.y; low.copy(v); } }
+  geo.translate(-low.x, -low.y, -low.z);
+  geo.computeVertexNormals();
+  const sm = src.material;
+  // 黒曜石の頭に走る溶岩のひびだけが光る(テクスチャの明るいところを発光に)
+  const mat = new THREE.MeshStandardMaterial({ map: sm.map || null, emissiveMap: sm.map || null, color:0xffffff, roughness:0.5, metalness:0.3, emissive:0xff6a2a, emissiveIntensity:0.9 });
+  const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true;
+  const holder = new THREE.Group(); holder.add(mesh);
+  hammerCache = holder;
+  return holder.clone();
+}
+
+/* ---- マグマ: 地割れが赤く光り、溶岩の柱が噴き上がり、溶岩の塊が飛び散って冷える ---- */
+const crackTex = (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const g = cv.getContext('2d'), c = 128;
+  g.strokeStyle = '#ffb040'; g.shadowColor = '#ff5a10'; g.shadowBlur = 10; g.lineCap = 'round';
+  for(let k = 0; k < 9; k++){
+    let a = k/9*Math.PI*2 + Math.random()*0.3, x = c, y = c, w = 7;
+    g.beginPath(); g.moveTo(x, y);
+    for(let s = 0; s < 7; s++){ a += (Math.random()-.5)*0.8; const r = 10 + Math.random()*14; x += Math.cos(a)*r; y += Math.sin(a)*r; g.lineWidth = w; g.lineTo(x, y); w = Math.max(1.5, w*0.75); }
+    g.stroke();
+  }
+  const rg = g.createRadialGradient(c, c, 0, c, c, 46); rg.addColorStop(0, 'rgba(255,220,120,1)'); rg.addColorStop(0.5, 'rgba(255,110,20,.8)'); rg.addColorStop(1, 'rgba(255,60,0,0)');
+  g.shadowBlur = 0; g.fillStyle = rg; g.beginPath(); g.arc(c, c, 46, 0, Math.PI*2); g.fill();
+  return new THREE.CanvasTexture(cv);
+})();
+const blobGeo = new THREE.SphereGeometry(1, 8, 6);
+const LAVA_HOT = new THREE.Color(0xffd060), LAVA_MID = new THREE.Color(0xff5a10), LAVA_COLD = new THREE.Color(0x3a1408);
+async function magmaFx(i, power){
+  const c = ctrOf(i, 0.02);
+  const crack = addMesh(new THREE.Mesh(new THREE.PlaneGeometry(1.05, 1.05), new THREE.MeshBasicMaterial({ map:crackTex, transparent:true, opacity:0, blending:K.ADD, depthWrite:false })));
+  crack.rotation.x = -Math.PI/2; crack.rotation.z = Math.random()*Math.PI; crack.position.copy(c);
+  const H = 1.9*power;
+  const geyser = addMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.1*power, 0.2*power, 1, 20, 1, true), new THREE.MeshBasicMaterial({ map:K.pillarTex, color:0xff6a1a, transparent:true, opacity:0, blending:K.ADD, depthWrite:false, side:THREE.DoubleSide })));
+  const core = addMesh(new THREE.Mesh(new THREE.CylinderGeometry(0.05*power, 0.1*power, 1, 14, 1, true), new THREE.MeshBasicMaterial({ map:K.pillarTex, color:0xffe08a, transparent:true, opacity:0, blending:K.ADD, depthWrite:false, side:THREE.DoubleSide })));
+  const light = addMesh(new THREE.PointLight(0xff7a2a, 0, 3.5, 2)); light.position.copy(c).add(V(0, 0.5, 0));
+  // 溶岩の塊(重力で放物線を描き、着地すると冷えて消える)
+  const blobs = Array.from({ length: Math.round(10 + 16*power) }, () => {
+    const m = addMesh(new THREE.Mesh(blobGeo, new THREE.MeshBasicMaterial({ color:LAVA_HOT.clone() })));
+    const a = Math.random()*Math.PI*2, sp = (0.3 + Math.random()*0.9)*power;
+    m.scale.setScalar((0.025 + Math.random()*0.045)*Math.sqrt(power));
+    m.position.copy(c).add(V(Math.cos(a)*0.06, 0.05, Math.sin(a)*0.06));
+    m.userData = { v:V(Math.cos(a)*sp, (2.4 + Math.random()*2.4)*Math.sqrt(power), Math.sin(a)*sp), t:0, delay:Math.random()*0.35, done:false };
+    m.visible = false;
+    return m;
+  });
+  K.burst(c.clone().add(V(0, 0.1, 0)), 0x8c8170, Math.round(8*power), { shards:true, up:2.4, speed:0.7 });
+  let last = performance.now();
+  await tween(1.5, t => {
+    const now = performance.now(), dt = Math.min(0.05, (now - last)/1000); last = now;
+    crack.material.opacity = Math.min(1, t*6) * (t < 0.7 ? 1 : 1 - (t - 0.7)/0.3);
+    const rise = Math.min(1, t/0.18), fall = t < 0.45 ? 1 : Math.max(0, 1 - (t - 0.45)/0.35);
+    const h = Math.max(0.01, H*rise*fall);
+    [geyser, core].forEach((m, k) => { m.scale.set(1 + Math.sin(t*40 + k)*0.06, h*(k ? 0.85 : 1), 1 + Math.cos(t*37 + k)*0.06); m.position.copy(c).add(V(0, h*(k ? 0.85 : 1)/2, 0)); m.material.opacity = (k ? 1 : 0.9)*Math.min(1, rise*1.5)*fall; });
+    light.intensity = 3.2*power*Math.min(1, t*8)*(1 - t);
+    blobs.forEach(b => {
+      const u = b.userData; if(u.done) return;
+      if(t*1.5 < u.delay) return;
+      b.visible = true; u.t += dt;
+      u.v.y -= 9.8*dt; b.position.addScaledVector(u.v, dt);
+      const k = Math.min(1, u.t/0.9);
+      b.material.color.copy(LAVA_HOT).lerp(LAVA_MID, Math.min(1, k*2)).lerp(LAVA_COLD, Math.max(0, k*2 - 1));
+      if(b.position.y < c.y - 0.02 && u.v.y < 0){ u.done = true; b.visible = false; if(Math.random() < 0.5) K.burst(b.position.clone().setY(c.y + 0.02), 0x2a1a14, 2, { puff:true, up:0.4, speed:0.08, life:0.5, grow:2, g:-0.3 }); }
+    });
+    if(Math.random() < 0.35*power) K.burst(c.clone().add(V((Math.random()-.5)*0.3, 0.2 + Math.random()*0.4*power, (Math.random()-.5)*0.3)), 0x3a2a24, 1, { puff:true, up:0.9, speed:0.06, life:1.0, grow:3, g:-0.6 });
+  });
+  [crack, geyser, core, ...blobs].forEach(m => K.disposeObj(m)); K.scene.remove(light);
+}
+// ミノタウロスのハンマーを振り下ろす(カメラの側から奥のマスへ)
+async function hammerStrike(i, power){
+  const c = ctrOf(i, 0);
+  const h = hammerModel();
+  if(!h){ await K.hammerFx(i, false); return; } // モデルが無いときは以前の簡易ハンマー
+  h.traverse(o => { if(o.isMesh){ o.material = o.material.clone(); o.material.transparent = true; } });
+  const yaw = K.cam ? K.cam.yaw : 0;
+  const pivot = addMesh(new THREE.Group());
+  pivot.position.copy(c).add(V(Math.sin(yaw)*0.65, 0.95, Math.cos(yaw)*0.65));
+  pivot.rotation.y = yaw; pivot.add(h);
+  const setOp = o => h.traverse(m => { if(m.isMesh) m.material.opacity = o; });
+  // 構える → 振り下ろす
+  await tween(0.28, t => { const e = ease.out(t); h.scale.setScalar((0.4 + 0.6*e)*1.3); h.rotation.x = 0.2 + 0.5*e; setOp(e); });
+  await wait(0.06);
+  await tween(0.16, t => { h.rotation.x = 0.7 - 3.24*t*t; }); // 頭がマスの中央に当たる角度(-2.54)まで
+  const gridEl = K.canvas.parentNode;
+  const shake = tween(0.35, t => { if(gridEl) gridEl.style.transform = `translate(${((Math.random()-.5)*9*(1-t)).toFixed(1)}px, ${((Math.random()-.5)*9*(1-t)).toFixed(1)}px)`; });
+  const T = K.tiles[i]; if(T) T.flash = 1.3;
+  const erupt = magmaFx(i, power);
+  await wait(0.25);
+  await tween(0.3, t => { h.rotation.x = -2.54 + 0.5*t; setOp(1 - t); });
+  K.disposeObj(pivot);
+  await shake; if(gridEl) gridEl.style.transform = '';
+  await erupt;
+  if(T) T.flash = 0;
+}
+// K: ハンマーで割って表にする(小さな噴出)→ 敗れた方は大きく噴き上がって砕け散る / 残った方は余熱が残る
+fx('triggerKCrackReveal', (i) => hammerStrike(i, 0.7));
 async function kDestroy(i){
   const T = K.tiles[i]; if(!T) return;
   hold(i); T.anim = true;
   const c = ctrOf(i, 0);
-  const fire = addMesh(pillar(0xff6a1a, 0.38, 2.6)); fire.position.copy(c).add(V(0, 1.3, 0));
-  const light = addMesh(new THREE.PointLight(0xff7a2a, 0, 3.5, 2)); light.position.copy(c).add(V(0, 0.6, 0));
-  await tween(0.7, t => {
-    fire.material.opacity = Math.min(1, t*2.5); fire.scale.set(1 + Math.sin(t*30)*0.05, 0.4 + t*0.6, 1 + Math.sin(t*30)*0.05);
-    light.intensity = 3*t;
-    T.flash = 1.4*t; T.lift.position.x = (Math.random()-.5)*0.06*t; T.lift.position.z = (Math.random()-.5)*0.06*t;
-    if(Math.random() < 0.7) spark(c.clone().add(V((Math.random()-.5)*0.6, 0.1, (Math.random()-.5)*0.6)), Math.random()<0.5 ? 0xff5a10 : 0xffb030, 1, { up:3.2, speed:0.2, life:0.6 });
-  });
-  // 爆散
+  const erupt = magmaFx(i, 1.4);
+  await tween(0.55, t => { T.flash = 1.4*t; T.lift.position.x = (Math.random()-.5)*0.06*t; T.lift.position.z = (Math.random()-.5)*0.06*t; });
+  // 砕け散る
   spark(c.clone().add(V(0, 0.3, 0)), 0x8c8170, 26, { shards:true, up:3.2, speed:1.1 });
-  spark(c.clone().add(V(0, 0.3, 0)), 0xff7a2a, 40, { up:3.8, speed:1.0 });
-  spark(c.clone().add(V(0, 0.3, 0)), 0xffe08a, 16, { up:4.4, speed:0.5 });
+  spark(c.clone().add(V(0, 0.3, 0)), 0xff7a2a, 30, { up:3.8, speed:1.0 });
   vanish(T);
-  await tween(0.5, t => { fire.material.opacity = 1 - t; fire.scale.y = 1 + t*0.4; light.intensity = 3*(1 - t); });
-  K.disposeObj(fire); K.scene.remove(light);
+  await erupt;
   release(i);
 }
 fx('triggerKDestroy', kDestroy);
@@ -306,7 +455,7 @@ fx('triggerHammerSmash', kDestroy);
 async function kSurvive(i){
   const T = K.tiles[i]; if(!T) return;
   const c = ctrOf(i, 0.05);
-  await tween(0.5, t => { T.flash = 1.1*(1 - t); if(Math.random() < 0.5) spark(c.clone().add(V((Math.random()-.5)*0.6, 0, (Math.random()-.5)*0.6)), 0xff7a2a, 1, { up:1.8, speed:0.2, life:0.5 }); });
+  await tween(0.6, t => { T.flash = 1.1*(1 - t); if(Math.random() < 0.5) spark(c.clone().add(V((Math.random()-.5)*0.6, 0, (Math.random()-.5)*0.6)), Math.random() < 0.5 ? 0xff7a2a : 0x3a2a24, 1, { up:1.2, speed:0.15, life:0.7 }); });
   T.flash = 0;
 }
 fx('triggerKShatterSurvive', kSurvive);
@@ -744,5 +893,5 @@ Object.keys(window).filter(n => /^trigger[A-Z]/.test(n) && typeof window[n] === 
   K.override(n, () => function(){ return Promise.resolve(); });
 });
 
-window.B3.fx = { glowSprite, shell, flipSlab, projectile };
+window.B3.fx = { glowSprite, shell, flipSlab, projectile, hammerModel, magmaFx, hammerStrike };
 })();
