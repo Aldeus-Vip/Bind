@@ -496,6 +496,23 @@ const eyeTex = canvasTex(256, 160, g => {
   g.fillStyle = gr; g.beginPath(); g.arc(128,80,44,0,Math.PI*2); g.fill();
   g.fillStyle = '#05010a'; g.beginPath(); g.ellipse(128,80,8,34,0,0,Math.PI*2); g.fill();
 });
+// バインド状態の印: 封印の円環に雷の紋。体の中央に浮かび、火花を散らす
+const bindTex = canvasTex(256, 256, g => {
+  const c = 128;
+  const bg = g.createRadialGradient(c, c, 10, c, c, 118);
+  bg.addColorStop(0, 'rgba(40,24,60,0.95)'); bg.addColorStop(0.75, 'rgba(18,12,26,0.9)'); bg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = bg; g.beginPath(); g.arc(c, c, 118, 0, Math.PI*2); g.fill();
+  g.shadowColor = '#ffcf4a'; g.shadowBlur = 14; g.strokeStyle = '#e8b84a';
+  g.lineWidth = 7; g.beginPath(); g.arc(c, c, 100, 0, Math.PI*2); g.stroke();
+  g.lineWidth = 3; g.beginPath(); g.arc(c, c, 86, 0, Math.PI*2); g.stroke();
+  // 円環の刻み(鎖の目)
+  g.lineWidth = 4;
+  for(let k = 0; k < 16; k++){ const a = k/16*Math.PI*2; g.beginPath(); g.moveTo(c + Math.cos(a)*88, c + Math.sin(a)*88); g.lineTo(c + Math.cos(a)*98, c + Math.sin(a)*98); g.stroke(); }
+  // 雷の紋
+  g.shadowColor = '#fff2a0'; g.shadowBlur = 22; g.fillStyle = '#fff4c0';
+  g.beginPath(); g.moveTo(146, 34); g.lineTo(84, 136); g.lineTo(122, 136); g.lineTo(104, 222); g.lineTo(174, 112); g.lineTo(134, 112); g.lineTo(160, 34); g.closePath(); g.fill();
+  g.shadowBlur = 0; g.strokeStyle = '#ffcf4a'; g.lineWidth = 3; g.stroke();
+});
 const starTex = canvasTex(64, 64, g => {
   const gr = g.createRadialGradient(32,32,0,32,32,32); gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(0.25,'rgba(255,230,160,0.9)'); gr.addColorStop(1,'rgba(255,215,106,0)');
   g.fillStyle = gr; g.fillRect(0,0,64,64);
@@ -1449,18 +1466,25 @@ function buildVessel(p){
   ring.rotation.x = -Math.PI/2; ring.position.y = 0.014; root.add(ring);
   const badge = new THREE.Sprite(new THREE.SpriteMaterial({ transparent:true, depthTest:false }));
   badge.scale.set(0.28, 0.39, 1); badge.position.y = 1.1; badge.renderOrder = 10; root.add(badge);
+  // バインド中: 体の中央の雷の印 + 火花 + 縁を走る小さな稲妻(他の生物の演出と重ならないよう体の中だけ)
   const bolts = new THREE.Group(); root.add(bolts);
-  const boltLines = [0,1,2].map(k=>{
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(17*3),3));
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: k===2 ? 0xffffff : 0xffe14f, transparent:true }));
-    bolts.add(line); return line;
+  const bindIcon = new THREE.Sprite(new THREE.SpriteMaterial({ map:bindTex, transparent:true, depthTest:false, depthWrite:false }));
+  bindIcon.scale.set(0.34, 0.34, 1); bindIcon.renderOrder = 11; bolts.add(bindIcon);
+  const sparks = Array.from({ length:12 }, () => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:starTex, color:0xffe07a, transparent:true, depthTest:false, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0 }));
+    sp.renderOrder = 12; sp.userData = { life:0, v:new THREE.Vector3() }; bolts.add(sp); return sp;
+  });
+  const boltLines = [0,1].map(k=>{
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(7*3),3));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: k ? 0xffffff : 0xffe14f, transparent:true, depthTest:false, blending:THREE.AdditiveBlending }));
+    line.renderOrder = 12; bolts.add(line); return line;
   });
   bolts.visible = false;
   const sunSp = new THREE.Sprite(new THREE.SpriteMaterial({ map:sunTex, transparent:true, depthWrite:false, opacity:0.95 }));
   sunSp.scale.set(0.75,0.75,1); sunSp.position.set(0,0.75,-0.3); sunSp.visible = false; root.add(sunSp);
   root.visible = false;
   scene.add(root);
-  const ch = { p, root, ring, badge, badgeKey:null, bolts, boltLines, boltT:0, sunSp,
+  const ch = { p, root, ring, badge, badgeKey:null, bolts, boltLines, boltT:0, bindIcon, sparks, sunSp,
     av:null, avKey:null, avCache:{}, body:null, head:null, eyes:[], mats:[], suitKey:null,
     idx:null, shown:false, busy:false, phase:Math.random()*6, blinkAt:1+Math.random()*3, override:null };
   setAvatar(ch, 'caster', true);
@@ -1922,21 +1946,46 @@ scene.add(motes);
 
 /* ---------------- loop ---------------- */
 const clock = new THREE.Clock();
-function updateBolts(ch, t){
+function updateBolts(ch, t, dt){
+  dt = dt || 0.016;
+  // 体の中央に印を置き、カメラに向けて少し手前へ(体に埋もれない)
+  const y = (ch.av ? ch.av.badgeY : 1.1)*0.5;
+  const toCam = camera.position.clone().sub(ch.root.position).setY(0).normalize().multiplyScalar(0.22);
+  const ry = ch.root.rotation.y, c = Math.cos(-ry), s = Math.sin(-ry);
+  const lx = toCam.x*c + toCam.z*s, lz = -toCam.x*s + toCam.z*c; // ワールドの向き → 駒のローカル
+  ch.bolts.position.set(lx, y, lz);
+  ch.bolts.quaternion.copy(ch.root.quaternion).invert().multiply(camera.quaternion); // 火花と稲妻は画面に向けた面で
+  const pulse = 1 + Math.sin(t*9)*0.06 + (Math.random() < 0.05 ? 0.12 : 0);
+  ch.bindIcon.scale.set(0.34*pulse, 0.34*pulse, 1);
+  ch.bindIcon.material.opacity = 0.85 + Math.sin(t*13)*0.15;
+  // 火花: 印のまわりから弾ける
+  ch.sparks.forEach(sp => {
+    const u = sp.userData;
+    if(u.life <= 0){
+      if(Math.random() < dt*7){
+        const a = Math.random()*Math.PI*2;
+        u.life = u.max = 0.25 + Math.random()*0.25;
+        sp.position.set(Math.cos(a)*0.14, Math.sin(a)*0.14, 0.02);
+        u.v.set(Math.cos(a), Math.sin(a) + 0.4, (Math.random()-.5)*0.5).multiplyScalar(0.7 + Math.random()*0.8);
+      } else { sp.material.opacity = 0; return; }
+    }
+    u.life -= dt; u.v.y -= dt*2.2;
+    sp.position.addScaledVector(u.v, dt);
+    const k = Math.max(0, u.life/u.max);
+    sp.material.opacity = k; sp.scale.setScalar(0.05 + 0.04*k);
+  });
+  // 縁を走る小さな稲妻(ときどき)
   ch.boltT -= 1;
   if(ch.boltT > 0) return;
-  ch.boltT = 4;
+  ch.boltT = 3 + Math.floor(Math.random()*4);
   ch.boltLines.forEach((line, k) => {
-    const arr = line.geometry.attributes.position.array;
-    const r = 0.36 + k*0.05, y0 = 0.2 + k*0.25;
-    for(let j=0;j<17;j++){
-      const a = j/16*Math.PI*2 + t*3*(k%2?-1:1);
-      arr[j*3] = Math.cos(a)*r + (Math.random()-.5)*0.08;
-      arr[j*3+1] = y0 + (Math.random()-.5)*0.18;
-      arr[j*3+2] = Math.sin(a)*r + (Math.random()-.5)*0.08;
+    const arr = line.geometry.attributes.position.array, a0 = Math.random()*Math.PI*2, on = Math.random() < 0.7;
+    for(let j=0;j<7;j++){
+      const a = a0 + j*0.22, r = 0.17 + (Math.random()-.5)*0.05 + (j===0||j===6 ? 0 : 0.03);
+      arr[j*3] = Math.cos(a)*r; arr[j*3+1] = Math.sin(a)*r; arr[j*3+2] = 0.03;
     }
     line.geometry.attributes.position.needsUpdate = true;
-    line.material.opacity = 0.5 + Math.random()*0.5;
+    line.material.opacity = on ? 0.6 + Math.random()*0.4 : 0;
   });
 }
 function loop(){
@@ -1983,7 +2032,7 @@ function loop(){
     if(ch.blinkAt < 0) ch.blinkAt = 2 + Math.random()*3;
     ch.ring.rotation.z = t*1.2;
     ch.badge.position.y = (ch.av ? ch.av.badgeY : 1.1) + Math.sin(t*2 + ch.phase)*0.03;
-    if(ch.bolts.visible) updateBolts(ch, t);
+    if(ch.bolts.visible) updateBolts(ch, t, dt);
     if(ch.sunSp.visible) ch.sunSp.material.rotation = t*0.8;
   });
   motes.rotation.y = t*0.02;
