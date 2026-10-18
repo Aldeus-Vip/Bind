@@ -92,6 +92,9 @@ const IM = {
   lightningFloor: loadImg(A.lightningFloorNew),
   sun: loadImg(A.sunEmblem),
   wind: loadImg(A.windRing7),
+  // フロアの大地と封印の紋章(assets/textures、build.mjs が BIND_TEX に入れる)
+  ground: loadImg((window.BIND_TEX || {}).ground),
+  seal: loadImg((window.BIND_TEX || {}).seal),
 };
 const ready = im => im && im.complete && im.naturalWidth > 0;
 const SUITSYM = (typeof SUIT_SYMBOL!=='undefined') ? SUIT_SYMBOL : { H:'♥', S:'♠', D:'♦', C:'♣', JOKER:'★' };
@@ -218,7 +221,36 @@ function drawLogo(g, emit, alpha){
   };
   sym(g, draw);
 }
-function drawBack(g, emit){
+/* ---- フロア(新デザイン): 封じられた生物の力で少し変容した大地 ----
+   大地の絵を盤面全体に1枚として敷き、各マスはその位置の部分を切り出す(マスをまたいで地形がつながる)。
+   中央に金の封印紋章(鍵穴・ルーン・鎖)。発光テクスチャには紋章だけを入れ、選べるマスでは紋章が光る。
+   i が無い(カードの裏面など)ときは、大地の中央を使う。 */
+function groundCrop(g, i, dark){
+  const im = IM.ground, W = im.naturalWidth, H = im.naturalHeight;
+  let sx, sy, sw, sh;
+  if(i == null){ sw = sh = Math.min(W, H)*0.55; sx = (W - sw)/2; sy = (H - sh)/2; }
+  else { const c = i % NCOLS, r = Math.floor(i / NCOLS); sw = W/NCOLS; sh = H/NROWS; sx = c*sw; sy = r*sh; }
+  g.drawImage(im, sx, sy, sw, sh, 0, 0, TS, TS);
+  // 縁を暗くして石板らしい立体感を出す
+  const v = g.createRadialGradient(TS/2, TS/2, TS*0.3, TS/2, TS/2, TS*0.75);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${dark ? 0.7 : 0.5})`);
+  g.fillStyle = v; g.fillRect(0, 0, TS, TS);
+  g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,0.45)'; g.strokeRect(3, 3, TS-6, TS-6);
+  g.lineWidth = 2; g.strokeStyle = 'rgba(255,240,210,0.12)'; g.strokeRect(8, 8, TS-16, TS-16);
+}
+function drawSeal(g, alpha, size){
+  const s = TS*(size || 0.82);
+  g.save(); g.globalAlpha = alpha; g.drawImage(IM.seal, (TS - s)/2, (TS - s)/2, s, s); g.restore();
+}
+function drawBackNew(g, emit, i){
+  if(emit){ g.fillStyle = '#000'; g.fillRect(0, 0, TS, TS); drawSeal(g, 0.55); return; }
+  groundCrop(g, i, false);
+  // 紋章の下に薄い影を落として、刻まれているように見せる
+  g.save(); g.globalCompositeOperation = 'multiply'; g.globalAlpha = 0.35; g.translate(3, 4); drawSeal(g, 1); g.restore();
+  drawSeal(g, 0.62);
+}
+function drawBack(g, emit, i){
+  if(ready(IM.ground) && ready(IM.seal)) return drawBackNew(g, emit, i);
   const paths = crackPaths(7, 0.44);
   if(emit){
     g.fillStyle = '#000'; g.fillRect(0,0,TS,TS);
@@ -280,10 +312,15 @@ function drawMotif(g, th, emit){
   }
   g.restore();
 }
-function drawFace(g, card, emit){
+function drawFace(g, card, emit, i){
   const th = themeOf(card), c = TS/2;
   const paths = crackPaths(23 + (card.rank||0)*7, 0.5);
   if(emit){ g.fillStyle = '#000'; g.fillRect(0,0,TS,TS); }
+  else if(ready(IM.ground)){
+    // 解放された大地: 同じ大地が、術式の色に染まり暗く沈む
+    groundCrop(g, i, true);
+    g.fillStyle = th.dark; g.globalAlpha = 0.5; g.fillRect(0, 0, TS, TS); g.globalAlpha = 1;
+  }
   else {
     stoneBase(g, '#3e3530', 13, true);
     g.fillStyle = th.dark; g.globalAlpha = 0.55; g.fillRect(INSET, INSET, TS-INSET*2, TS-INSET*2); g.globalAlpha = 1;
@@ -316,12 +353,14 @@ function drawFace(g, card, emit){
   g.restore();
 }
 const topTexCache = new Map();
-function topTex(key, card){
-  if(topTexCache.has(key)) return topTexCache.get(key);
+// マスごとに大地の切り出し位置が違うので、テクスチャはマス番号ごとに作る(i が無ければ共通)
+function topTex(key, card, i){
+  const ck = key + (i != null ? '@' + i : '');
+  if(topTexCache.has(ck)) return topTexCache.get(ck);
   let pair;
-  if(key.startsWith('face:')) pair = { map: canvasTex(TS,TS,g=>drawFace(g, card, false)), emit: canvasTex(TS,TS,g=>drawFace(g, card, true)), theme: themeOf(card) };
-  else pair = { map: canvasTex(TS,TS,g=>drawBack(g,false)), emit: canvasTex(TS,TS,g=>drawBack(g,true)), theme:null };
-  topTexCache.set(key, pair);
+  if(key.startsWith('face:')) pair = { map: canvasTex(TS,TS,g=>drawFace(g, card, false, i)), emit: canvasTex(TS,TS,g=>drawFace(g, card, true, i)), theme: themeOf(card) };
+  else pair = { map: canvasTex(TS,TS,g=>drawBack(g,false,i)), emit: canvasTex(TS,TS,g=>drawBack(g,true,i)), theme:null };
+  topTexCache.set(ck, pair);
   return pair;
 }
 // 太陽の強化・雷のデバフはマスの上に重ねる
@@ -391,7 +430,7 @@ const tileTopGeo = new THREE.BoxGeometry(1.02, 0.12, 1.02);
 const mossGeo = new THREE.BoxGeometry(1.04, 0.05, 1.04);
 const inlayGeo = new THREE.PlaneGeometry(0.86, 0.86);
 const glowGeo = new THREE.RingGeometry(0.42, 0.5, 4, 1);
-const rockMat = toon(0x4d3f33), mossMat = toon(0x5d7f4c), slabSide = toon(0x5e5649);
+const rockMat = toon(0x3a332c), mossMat = toon(0x2a2520), slabSide = toon(0x4a443c); // 縁は暗い石(大地の絵を引き立てる)
 for(let i=0;i<NCELLS;i++){
   const h = tileH(i);
   const g = new THREE.Group(); g.position.set(tileX(i), 0, tileZ(i));
@@ -1654,7 +1693,7 @@ let lastState = null;
 function setTop(T, key, card){
   T.key = key;
   if(!key) return;
-  const tp = topTex(key, card);
+  const tp = topTex(key, card, T.i);
   T.topMat.map = tp.map; T.topMat.emissiveMap = tp.emit; T.topMat.needsUpdate = true;
   T.theme = tp.theme;
 }
@@ -1772,7 +1811,9 @@ function sync(dt){
     T.hover += (hov - T.hover) * 0.25;
     const bright = 1 - 0.5*T.dim + 0.15*T.hover;
     T.topMat.color.setScalar(lava ? bright*0.9 : bright);
-    T.topMat.emissiveIntensity = (lava ? (0.75 + Math.sin(t*3 + i)*0.15) * (1 - 0.5*T.dim) : 0.55*(1-0.6*T.dim)) + T.flash;
+    // 選べるマス(移動先・効果の対象)は、裏向きなら封印の紋章が明るく光る
+    const pick = !lava && gc !== null ? 1.7 + Math.sin(t*4)*0.5 : 0;
+    T.topMat.emissiveIntensity = (lava ? (0.75 + Math.sin(t*3 + i)*0.15) * (1 - 0.5*T.dim) : 0.22*(1-0.6*T.dim) + pick) + T.flash;
     // 解放された大地からは術式の色の光の粒が立ち昇る
     if(lava && T.shown && T.theme && Math.random() < dt*0.9) ember(T);
     T.inlayMat.opacity = 1 - 0.45*T.dim;
@@ -2712,6 +2753,8 @@ function cardBackURL(){
   return backURL;
 }
 if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => { backURL = null; });
+// 大地・紋章の画像が読み込まれたら、カードの裏面も描き直す
+[IM.ground, IM.seal].forEach(im => { if(im) im.addEventListener('load', () => { backURL = null; }); });
 if(typeof window.cardBackDiv === 'function'){
   const origBack = window.cardBackDiv;
   window.cardBackDiv = function(){

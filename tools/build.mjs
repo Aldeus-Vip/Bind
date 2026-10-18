@@ -60,7 +60,15 @@ if(single && fs.existsSync(path.join(modelsSrc, 'manifest.json'))){
     files[f] = 'data:model/gltf-binary;base64,' + fs.readFileSync(path.join(tmp, f)).toString('base64');
   embedded = `<script>window.BIND_EMBEDDED_MODELS = ${JSON.stringify({ manifest, files })};</script>\n`;
 }
-const tags = embedded +
+// フロアなどのテクスチャ(assets/textures): Web 版は textures/ に置き、1ファイル版は data URI で埋め込む
+const texDir = path.join(root, 'assets', 'textures');
+const texMap = {};
+if(fs.existsSync(texDir)) for(const f of fs.readdirSync(texDir)){
+  const key = f.replace(/\.[^.]+$/, ''), ext = path.extname(f).slice(1).toLowerCase();
+  texMap[key] = single ? `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,` + fs.readFileSync(path.join(texDir, f)).toString('base64') : 'textures/' + f;
+}
+const texScript = `<script>window.BIND_TEX = ${JSON.stringify(texMap)};</script>\n`;
+const tags = texScript + embedded +
   `<script src="${src.three}"></script>\n` +
   `<script src="${src.gltf}"></script>\n` +
   `<script src="${src.skel}"></script>\n` +
@@ -103,6 +111,7 @@ for(const key of Object.keys(LOCAL)){
   fs.copyFileSync(from, path.join(outDir, LOCAL[key]));
 }
 
+if(fs.existsSync(texDir)) fs.cpSync(texDir, path.join(outDir, 'textures'), { recursive: true });
 // glTF モデル(あれば)
 const modelsDir = path.join(root, 'assets', 'models');
 if(fs.existsSync(modelsDir)){

@@ -123,7 +123,7 @@
 
   /* ---- ボタン: 石に刻んだ金縁の札 ---- */
   .btn, .hand-tab-btn, .log-shortcut-btn, .rulebook-close,
-  #settings-btn, #log-btn, #effectlist-btn, #playerinfo-btn, #rulebook-btn, #view3d-btn{
+  #settings-btn, #log-btn, #effectlist-btn, #playerinfo-btn, #rulebook-btn, #view3d-btn, #sound-btn{
     font-family:var(--b3-mincho) !important; font-weight:700 !important; letter-spacing:.06em;
     color:var(--b3-ivory) !important;
     background: linear-gradient(180deg, #3b342a 0%, #26211b 100%) !important;
@@ -133,7 +133,7 @@
     transition: box-shadow .18s ease, border-color .18s ease, transform .12s ease, filter .18s ease !important;
   }
   .btn:hover, .hand-tab-btn:hover, .log-shortcut-btn:hover, .rulebook-close:hover,
-  #settings-btn:hover, #log-btn:hover, #effectlist-btn:hover, #playerinfo-btn:hover, #rulebook-btn:hover, #view3d-btn:hover{
+  #settings-btn:hover, #log-btn:hover, #effectlist-btn:hover, #playerinfo-btn:hover, #rulebook-btn:hover, #view3d-btn:hover, #sound-btn:hover{
     border-color: var(--b3-gold-hi) !important;
     box-shadow: inset 0 1px 0 rgba(255,240,210,.18), 0 0 0 1px rgba(243,214,138,.35), 0 0 16px var(--b3-glow), 0 2px 8px rgba(0,0,0,.5) !important;
   }
