@@ -301,3 +301,5 @@ node tests/play.js                # 例
 | A 太陽の紋章 | `assets/textures/sun_emblem.png` | `IM.sun` を差し替え(追加ターンの印・太陽の強化フロア・A のフロア生成) |
 
 - `fx:true` のモデルは生物として登録せず、`B3.gltfOf[key]` に入れるだけ。
+| ウィンドマス | `assets/textures/wind_ring.png` | `IM.wind`(マスの上でゆっくり回る) |
+| 雷撃フロア | `assets/textures/lightning_floor.png`(黒を透過) | `IM.lightningFloor`。加算で重ね、マスを暗く沈めて稲妻が脈打ち・ときどき閃く |

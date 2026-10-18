@@ -89,9 +89,9 @@ function loadImg(src){
 }
 const IM = {
   magma: loadImg(A.magmaTexture),
-  lightningFloor: loadImg(A.lightningFloorNew),
+  lightningFloor: loadImg((window.BIND_TEX || {}).lightning_floor || A.lightningFloorNew), // 雷撃フロア(黒を透過した稲妻の絵)
   sun: loadImg((window.BIND_TEX || {}).sun_emblem || A.sunEmblem), // A の太陽の紋章(聖獣の意匠に合わせた新しい絵)
-  wind: loadImg(A.windRing7),
+  wind: loadImg((window.BIND_TEX || {}).wind_ring || A.windRing7), // ウィンドマス(透過した風の渦の絵)
   // フロアの大地と封印の紋章(assets/textures、build.mjs が BIND_TEX に入れる)
   ground: loadImg((window.BIND_TEX || {}).ground),
   seal: loadImg((window.BIND_TEX || {}).seal),
@@ -369,10 +369,9 @@ function overlayTex(key){
   if(overlayCache.has(key)) return overlayCache.get(key);
   let t = null;
   if(key==='sun') t = canvasTex(256,256,g=>{ if(ready(IM.sun)){ g.globalAlpha = 0.95; g.drawImage(IM.sun, 48,48,160,160); } });
-  else if(key==='debuff') t = canvasTex(256,256,g=>{
-    g.save(); g.beginPath(); g.arc(128,128,96,0,Math.PI*2); g.clip();
-    if(ready(IM.lightningFloor)) g.drawImage(IM.lightningFloor, 0,0,256,256); else { g.fillStyle='rgba(120,90,220,0.6)'; g.fillRect(0,0,256,256); }
-    g.restore();
+  else if(key==='debuff') t = canvasTex(512,512,g=>{
+    // 新しい絵(透過済み)はそのまま全面に(細い稲妻がつぶれないよう 512px)。加算合成で光らせ、明滅は sync で付ける
+    if(ready(IM.lightningFloor)){ g.drawImage(IM.lightningFloor, 0,0,512,512); return; }
     g.strokeStyle='rgba(170,140,255,0.95)'; g.lineWidth=5; g.beginPath(); g.arc(128,128,96,0,Math.PI*2); g.stroke();
   });
   overlayCache.set(key, t);
@@ -1779,7 +1778,10 @@ function setTop(T, key, card){
 function setOverlay(T, ov){
   T.ov = ov;
   if(!ov){ T.inlay.visible = false; return; }
-  T.inlayMat.map = overlayTex(ov); T.inlayMat.needsUpdate = true; T.inlay.visible = true;
+  T.inlayMat.map = overlayTex(ov);
+  T.inlayMat.blending = ov === 'debuff' ? THREE.AdditiveBlending : THREE.NormalBlending; // 雷撃は光として重ねる
+  if(ov === 'debuff') T.inlayMat.color.setRGB(2.2, 2.0, 3.2); else T.inlayMat.color.setRGB(1, 1, 1); // 加算で稲妻の線を青紫のままはっきり光らせる
+  T.inlayMat.needsUpdate = true; T.inlay.visible = true;
 }
 // 封印が解かれる: 亀裂が光り、揺れ、光が噴き出して表向きの大地に変わる
 async function flipTop(T, key, card){
@@ -1872,7 +1874,7 @@ function sync(dt){
     const lava = !!(T.key && T.key.startsWith('face:'));
     // ウィンドマス
     T.wind.visible = !!(st.windCells && st.windCells.has(i));
-    if(T.wind.visible){ T.wind.rotation.z = t*1.6; T.wind.position.y = (exists ? topY(i) : TOP_Y) + 0.06; }
+    if(T.wind.visible){ T.wind.rotation.z = -t*1.2; T.wind.position.y = (exists ? topY(i) : TOP_Y) + 0.06; }
 
     // DOMのクラスから選択状態を読む
     const el = document.getElementById('floor-cell-'+i);
@@ -1903,17 +1905,24 @@ function sync(dt){
     T.dim += (dimT - T.dim) * 0.2;
     T.hover += (hov - T.hover) * 0.25;
     const bright = 1 - 0.5*T.dim + 0.15*T.hover;
-    T.topMat.color.setScalar(lava ? bright*0.9 : bright);
+    T.topMat.color.setScalar(lava ? bright*0.9 : T.ov === 'debuff' ? bright*0.5 : bright); // 雷撃フロアは暗く沈めて稲妻を浮き立たせる
     // 選べるマス(移動先・効果の対象)は、裏向きなら封印の紋章が明るく光る
     const pick = lava ? 0 : domPick ? 1.7 + Math.sin(t*4)*0.5 : preview.has(i) ? 0.45 : 0; // 先読みは控えめに
     T.topMat.emissiveIntensity = (lava ? (0.75 + Math.sin(t*3 + i)*0.15) * (1 - 0.5*T.dim) : 0.22*(1-0.6*T.dim) + pick) + T.flash;
     // 先読みで「止まると負け」の表向きフロアは、絵柄ごと赤く脈打つ
     const redWarn = lava && !domPick && preview.get(i) === 0xff4a4a;
-    T.topMat.emissive.setHex(redWarn ? 0xff2a2a : 0xffffff);
+    T.topMat.emissive.setHex(redWarn ? 0xff2a2a : T.ov === 'debuff' ? 0x5a3cff : 0xffffff);
     if(redWarn) T.topMat.emissiveIntensity = 0.6 + Math.sin(t*6)*0.35 + T.flash;
+    else if(T.ov === 'debuff' && !lava) T.topMat.emissiveIntensity += 0.3 + 0.22*Math.sin(t*4.2 + i*1.7); // 雷撃フロアは紫に脈打つ
     // 解放された大地からは術式の色の光の粒が立ち昇る
     if(lava && T.shown && T.theme && Math.random() < dt*0.9) ember(T);
     T.inlayMat.opacity = 1 - 0.45*T.dim;
+    if(T.ov === 'debuff'){
+      // 雷撃フロア: 稲妻がゆっくり脈打ち、ときどき強く閃く
+      const zap = Math.random() < 0.035 ? 0.6 : 0;
+      T.inlayMat.opacity = Math.min(1.2, 0.62 + 0.25*Math.sin(t*4.2 + i*1.7) + zap)*(1 - 0.45*T.dim);
+      T.inlay.scale.setScalar(1 + 0.025*Math.sin(t*6.3 + i) + zap*0.05);
+    } else if(T.inlay.scale.x !== 1) T.inlay.scale.setScalar(1);
     // 揺れ(既存演出の impact-shake / zap-shake を検知)
     const shaking = cl && (cl.contains('impact-shake') || cl.contains('zap-shake'));
     if(!T.anim){
