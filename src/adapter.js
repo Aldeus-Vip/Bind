@@ -384,7 +384,7 @@ if(document.fonts && document.fonts.load){
 
 const badgeCache = new Map();
 function badgeTex(p, card, name){
-  const key = p+':'+(card?card.id:'none')+':'+name;
+  const key = p+':'+(card?card.id:'none')+':'+name+':'+(PCOL[p]||''); // 色を選び直したら作り直す
   if(badgeCache.has(key)) return badgeCache.get(key);
   const col = PCOL[p] || '#888';
   const t = canvasTex(160,224,g=>{
@@ -1926,12 +1926,13 @@ function sync(dt){
     if(ch.override && pl.personalCard && pl.personalCard.id===ch.override.id) ch.override = null;
     const card = ch.override || pl.personalCard;
     const nm = String(pl.name||('P'+(p+1))).replace('プレイヤー','P');
-    const bk = p+':'+(card?card.id:'none')+':'+nm;
+    const bk = p+':'+(card?card.id:'none')+':'+nm+':'+(PCOL[p]||'');
     if(bk !== ch.badgeKey){ ch.badgeKey = bk; ch.badge.material.map = badgeTex(p, card, nm); ch.badge.material.needsUpdate = true; }
     ch.badge.visible = !!card;
     ch.bolts.visible = !!pl.bound && ch.shown;
     ch.sunSp.visible = !!pl.extraTurn && ch.shown;
     const isTurn = st.current===p && st.phase!=='setup-personal';
+    ch.ring.material.color.set(PCOL[p] || '#888'); // 対戦前に選んだ色 / CPU はグレー
     ch.ring.material.opacity = isTurn ? 0.6 + Math.sin(t*4)*0.3 : 0.25;
     ch.ring.scale.setScalar(isTurn ? 1 : 0.8);
   });

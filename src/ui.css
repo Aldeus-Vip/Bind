@@ -130,3 +130,11 @@ html body{
   background-blend-mode: screen, screen, screen, screen, normal, normal, normal !important;
 }
 #b3-motes{ position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: -1; } /* 背景の上・画面の部品の下 */
+
+/* ===== 色の選択(スタート画面) ===== */
+.b3-colors{ display: flex; align-items: center; justify-content: center; gap: 8px; margin: 18px auto 0; }
+.b3-colors-label{ font-family: var(--b3-mincho, serif); font-size: 13px; color: #d8ccb4; margin-right: 6px; letter-spacing: .08em; }
+.b3-swatch{ width: 26px; height: 26px; border-radius: 50%; cursor: pointer; padding: 0;
+  background: var(--sw); border: 2px solid rgba(0,0,0,.5); box-shadow: 0 0 0 1px rgba(255,240,210,.25), 0 2px 6px rgba(0,0,0,.5); transition: transform .12s; }
+.b3-swatch:hover{ transform: scale(1.12); }
+.b3-swatch.on{ box-shadow: 0 0 0 2px #f3d68a, 0 0 12px var(--sw); transform: scale(1.12); }

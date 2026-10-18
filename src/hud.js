@@ -153,6 +153,7 @@ function frame(){
   const t = performance.now()/1000;
   huds.forEach(h => {
     const ch = K.chars[h.p], pl = st.players[h.p];
+    if(typeof PLAYER_COLORS !== 'undefined' && PLAYER_COLORS[h.p]) h.box.style.setProperty('--pc', PLAYER_COLORS[h.p]);
     if(!pl || !ch.shown){ h.box.style.display = 'none'; return; }
     h.box.style.display = '';
     const q = headPx(ch);

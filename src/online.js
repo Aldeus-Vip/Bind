@@ -131,6 +131,7 @@ function leave(silent){
 }
 
 function send(m){ if(NET.transport) NET.transport.send(m); }
+function sendColor(){ const u = window.B3UI; if(NET.active && u && u.opt) send({ t:'color', c:u.opt.color }); }
 
 /* ---------------- 対戦の開始 ---------------- */
 function hostStart(){
@@ -155,6 +156,7 @@ function startGame(seed, myIndex){
   state.players[NET.me].name = 'あなた';
   state.players[1 - NET.me].name = '相手';
   log(`オンライン対戦: あなたは${NET.me===0 ? '先攻' : '後攻'}です。`);
+  sendColor(); // 自分の色を相手へ(見た目だけ。盤面の同期には関係しない)
   setStatus('');
   updateBar();
   render();
@@ -188,6 +190,10 @@ function onMessage(m){
     case 'bye':
       NET.connected = false;
       if(NET.active) showBanner('相手が退出しました。', true);
+      break;
+    case 'color':
+      NET.peerColor = m.c;
+      if(NET.active) render();
       break;
     case 'error':
       setStatus(m.msg); showBanner(m.msg, true);
@@ -437,5 +443,6 @@ function rematch(){
   else { send({ t:'rematch' }); showBanner('再戦を申し込みました。', false); }
 }
 
+NET.sendColor = sendColor;
 NET.connect = connect; NET.leave = leave; NET.rematch = rematch; NET.hash = stateHash; NET.newCode = newCode;
 })();

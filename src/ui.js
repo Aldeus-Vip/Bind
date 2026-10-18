@@ -10,7 +10,7 @@
 (function(){
 'use strict';
 const LS = 'bind3d-ui';
-const opt = (() => { try{ return Object.assign({ frameOpen:true, handOpen:true }, JSON.parse(localStorage.getItem(LS) || '{}')); }catch(e){ return { frameOpen:true, handOpen:true }; } })();
+const opt = (() => { try{ return Object.assign({ frameOpen:true, handOpen:true, color:'#c9a24b' }, JSON.parse(localStorage.getItem(LS) || '{}')); }catch(e){ return { frameOpen:true, handOpen:true, color:'#c9a24b' }; } })();
 const save = () => { try{ localStorage.setItem(LS, JSON.stringify(opt)); }catch(e){} };
 
 /* ---- タイトルロゴ ---- */
@@ -78,6 +78,47 @@ window.renderHandSection = function(){
     el('div', rowProps, ...pl.hand.map((c, i) => canMove ? cardButton(c, () => moveSelectDiscard(i))
                                            : canEffect ? cardButton(c, () => handEffectDiscard(i))
                                            : cardStatic(c))));
+};
+
+/* ---- プレイヤーの色: 対戦前に自分の色を選ぶ。CPU はグレー ----
+   PLAYER_COLORS(元の配列)の中身を書き換える。駒の足元の輪・パネルの枠・頭上ゲージはこの配列を見る。
+   オンライン対戦では互いの色を送り合う(online.js)。同じ色なら相手側を別の色にする */
+const PALETTE = [
+  ['#c9a24b', '金'], ['#c0464c', '紅'], ['#3fa39b', '翠'], ['#8b5cd6', '紫'], ['#3f86d8', '蒼'], ['#d4689a', '桜'], ['#e07a2e', '橙'],
+];
+const CPU_GRAY = '#8d8d8d';
+const DEFAULT_COLORS = (typeof PLAYER_COLORS !== 'undefined') ? PLAYER_COLORS.slice() : ['#c9a24b', '#b2454a'];
+const otherColor = mine => (PALETTE.find(([c]) => c !== mine && c !== '#c9a24b') || PALETTE[1])[0];
+function applyColors(){
+  if(typeof PLAYER_COLORS === 'undefined' || typeof state === 'undefined' || !state || !state.players) return;
+  const net = window.BindNet, mine = opt.color;
+  let cols;
+  if(net && net.active && !net.bot){
+    const peer = net.peerColor && net.peerColor !== mine ? net.peerColor : otherColor(mine);
+    cols = [0, 1].map(p => p === net.me ? mine : peer);
+  } else if(net && net.active){
+    cols = DEFAULT_COLORS.slice();
+  } else if(state.vsCPU){
+    cols = [0, 1].map(p => p === state.cpuIndex ? CPU_GRAY : mine);
+  } else {
+    cols = [mine, DEFAULT_COLORS[1] !== mine ? DEFAULT_COLORS[1] : otherColor(mine)];
+  }
+  cols.forEach((c, i) => { PLAYER_COLORS[i] = c; });
+}
+// スタート画面に色の選択欄
+const origStart = window.renderStartScreen;
+window.renderStartScreen = function(){
+  const scr = origStart.apply(this, arguments);
+  if(typeof pendingCpuLevel !== 'undefined' && pendingCpuLevel) return scr;
+  const row = el('div', { class:'b3-colors' }, el('span', { class:'b3-colors-label' }, 'あなたの色'));
+  PALETTE.forEach(([c, name]) => {
+    const b = el('button', { type:'button', class:'b3-swatch' + (c === opt.color ? ' on' : ''), title:name, style:`--sw:${c}`,
+      onclick: () => { opt.color = c; save(); row.querySelectorAll('.b3-swatch').forEach(x => x.classList.toggle('on', x === b)); if(window.BindNet && BindNet.sendColor) BindNet.sendColor(); } });
+    row.appendChild(b);
+  });
+  const sel = scr.querySelector('.player-select');
+  if(sel) sel.parentNode.insertBefore(row, sel); else scr.appendChild(row);
+  return scr;
 };
 
 /* ---- 組み替え ---- */
@@ -208,6 +249,7 @@ function hoverTip(node, html){
 }
 const origRender = window.render;
 window.render = function(){
+  try{ applyColors(); }catch(e){}
   const r = origRender.apply(this, arguments);
   try{ arrange(); }catch(e){ console.error('[ui] arrange', e); }
   return r;
