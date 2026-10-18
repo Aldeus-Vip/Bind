@@ -90,7 +90,7 @@ function loadImg(src){
 const IM = {
   magma: loadImg(A.magmaTexture),
   lightningFloor: loadImg(A.lightningFloorNew),
-  sun: loadImg(A.sunEmblem),
+  sun: loadImg((window.BIND_TEX || {}).sun_emblem || A.sunEmblem), // A の太陽の紋章(聖獣の意匠に合わせた新しい絵)
   wind: loadImg(A.windRing7),
   // フロアの大地と封印の紋章(assets/textures、build.mjs が BIND_TEX に入れる)
   ground: loadImg((window.BIND_TEX || {}).ground),
@@ -2161,17 +2161,37 @@ override('triggerDualRiftTeleport', () => function(originIdx, destIdx, playerIdx
     const sizeOf = i => { const e = document.getElementById(`floor-cell-${i}`); const r = e ? e.getBoundingClientRect() : null; return r && r.width ? r : { width:90, height:70 }; };
     const oS = screenOf(originIdx), dS = screenOf(destIdx), oR = sizeOf(originIdx), dR = sizeOf(destIdx);
     const ocx = oS.x, ocy = oS.y, dcx = dS.x, dcy = dS.y;
-    const mk = (x,y,w,h) => el('img', { src: ASSETS.rift4, class:'rift4-fx b3-flat',
-      style:`left:${x.toFixed(1)}px; top:${y.toFixed(1)}px; width:${w.toFixed(1)}px; height:${h.toFixed(1)}px;` });
-    const rO = mk(ocx, ocy, oR.width, oR.height), rD = mk(dcx, dcy, dR.width, dR.height);
-    layer.appendChild(rO); layer.appendChild(rD);
-    setTimeout(()=>{ rO.classList.add('rift4-show'); rD.classList.add('rift4-show'); }, 20);
-    // 演出の途中でカメラ・スクロール・画面の大きさが変わっても、裂け目がマスについていくように毎フレーム置き直す
-    (function follow(){
-      if(!rO.isConnected && !rD.isConnected) return;
-      [[rO, originIdx], [rD, destIdx]].forEach(([im, i]) => { const q = screenOf(i); im.style.left = q.x.toFixed(1) + 'px'; im.style.top = q.y.toFixed(1) + 'px'; });
-      requestAnimationFrame(follow);
-    })();
+    // 次元の裂け目のモデル(fx-rift)があれば、出発と到着のマスの床に開く。無ければ元の 2D の裂け目の絵
+    const FX = window.B3 && window.B3.fx;
+    const discs = FX && FX.fxDisc ? [originIdx, destIdx].map(i => {
+      const d = FX.fxDisc('fx-rift', { wave:0.05, waveK:30, swirl:0.6, spin:1.6, glow:1.1, glowColor:0xc89aff });
+      if(d){ d.position.set(tileX(i), topY(i) + 0.08, tileZ(i)); scene.add(d); }
+      return d;
+    }) : [null, null];
+    const use3D = !!(discs[0] && discs[1]);
+    if(!use3D) discs.forEach(d => { if(d){ scene.remove(d); d.userData.mat.dispose(); } });
+    let rO = null, rD = null, riftT = 0, riftK = 0, riftOn = true;
+    if(use3D){
+      (function spinRift(){
+        if(!riftOn) return;
+        riftT += 1/60;
+        discs.forEach((d, k) => { d.userData.tick(riftT + k*0.7, riftK); d.scale.setScalar(0.2 + 1.05*riftK); });
+        requestAnimationFrame(spinRift);
+      })();
+      tween(0.45, t => { riftK = ease.out(t); });
+    } else {
+      const mk = (x,y,w,h) => el('img', { src: ASSETS.rift4, class:'rift4-fx b3-flat',
+        style:`left:${x.toFixed(1)}px; top:${y.toFixed(1)}px; width:${w.toFixed(1)}px; height:${h.toFixed(1)}px;` });
+      rO = mk(ocx, ocy, oR.width, oR.height); rD = mk(dcx, dcy, dR.width, dR.height);
+      layer.appendChild(rO); layer.appendChild(rD);
+      setTimeout(()=>{ rO.classList.add('rift4-show'); rD.classList.add('rift4-show'); }, 20);
+      // 演出の途中でカメラ・スクロール・画面の大きさが変わっても、裂け目がマスについていくように毎フレーム置き直す
+      (function follow(){
+        if(!rO.isConnected && !rD.isConnected) return;
+        [[rO, originIdx], [rD, destIdx]].forEach(([im, i]) => { const q = screenOf(i); im.style.left = q.x.toFixed(1) + 'px'; im.style.top = q.y.toFixed(1) + 'px'; });
+        requestAnimationFrame(follow);
+      })();
+    }
     (async () => {
       await wait(0.48);
       const y0 = ch.root.position.y;
@@ -2180,9 +2200,14 @@ override('triggerDualRiftTeleport', () => function(originIdx, destIdx, playerIdx
       const y1 = ch.root.position.y;
       await tween(0.42, t => { ch.root.position.y = y1 - (1-ease.out(t))*0.9; ch.root.rotation.y = (1-t)*Math.PI*2; ch.root.scale.setScalar(0.4 + 0.6*ease.back(t)); });
       ch.root.scale.setScalar(1); ch.root.rotation.y = 0; ch.root.position.y = y1;
-      rO.classList.add('rift4-close'); rD.classList.add('rift4-close');
-      await wait(0.42);
-      rO.remove(); rD.remove();
+      if(use3D){
+        await tween(0.42, t => { riftK = 1 - ease.inOut(t); });
+        riftOn = false; discs.forEach(d => { scene.remove(d); d.userData.mat.dispose(); });
+      } else {
+        rO.classList.add('rift4-close'); rD.classList.add('rift4-close');
+        await wait(0.42);
+        rO.remove(); rD.remove();
+      }
       travelingOriginIndex = null;
       parks[playerIdx] = destIdx;
       driving[playerIdx] = false;
@@ -2807,14 +2832,55 @@ function whirlFx(cellIndex){
 }
 override('triggerWhirlpoolDrain', orig => function(i){ return Promise.all([orig.apply(this, arguments), whirlFx(i)]).then(v => v[0]); });
 
-/* ---------- 7: 竜巻 ---------- */
-const windFxM = new THREE.MeshBasicMaterial({ color:0x9fffd0, transparent:true, opacity:0.5, blending:ADD, depthWrite:false, side:THREE.DoubleSide });
+/* ---------- 7: 竜巻 ----------
+   風の模様の画像(assets/textures/wind.jpg)を、上ほど広がる3層の筒に巻きつけて回す。黒は加算合成で透明になる。
+   高さはパーソナルの 1/3 ほど。模様は横と上へ流れ、層ごとに違う速さで回る。 */
+const windPatternTex = (() => {
+  const url = (window.BIND_TEX || {}).wind;
+  if(!url) return null;
+  const t = new THREE.TextureLoader().load(url);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+})();
+const TORNADO_H = 0.42;
+const tornadoVS = `varying vec2 vUv; varying float vF;
+  void main(){ vUv = uv; vec4 mv = modelViewMatrix*vec4(position, 1.0);
+    vec3 n = normalize(normalMatrix*normal); vF = abs(dot(n, normalize(-mv.xyz)));
+    gl_Position = projectionMatrix*mv; }`;
+const tornadoFS = `uniform sampler2D map; uniform vec2 off; uniform vec2 rep; uniform float op; uniform vec3 tint;
+  varying vec2 vUv; varying float vF;
+  void main(){ vec3 c = texture2D(map, vUv*rep + off).rgb*tint;
+    float fadeV = smoothstep(0.0, 0.18, vUv.y)*smoothstep(1.0, 0.7, vUv.y);
+    float edge = smoothstep(0.05, 0.6, vF);
+    gl_FragColor = vec4(c*op*fadeV*edge, 1.0); }`;
+// [下の半径, 上の半径, 高さ比, 横の繰り返し, 速さ, 明るさ](高さに合わせて半径も縮める。マスの幅 1 に収まる太さ)
+const TORNADO_LAYERS = [[0.05, 0.30, 1.00, 2, 0.55, 0.75], [0.035, 0.22, 0.90, 3, 0.90, 0.55], [0.02, 0.13, 0.77, 2, 1.30, 0.5]];
 function tornado(){
-  const g = new THREE.Group(); const rings = [];
-  for(let k=0;k<7;k++){ const r = new THREE.Mesh(new THREE.TorusGeometry(0.1 + k*0.06, 0.014, 6, 28, Math.PI*1.5), windFxM); r.rotation.x = Math.PI/2; r.position.y = 0.05 + k*0.13; g.add(r); rings.push(r); }
-  g.userData.rings = rings; scene.add(g); return g;
+  const g = new THREE.Group(); const layers = [];
+  if(windPatternTex){
+    TORNADO_LAYERS.forEach(([rb, rt, hk, rep, speed, op]) => {
+      const h = TORNADO_H*hk;
+      const mat = new THREE.ShaderMaterial({ transparent:true, depthWrite:false, blending:ADD, side:THREE.DoubleSide,
+        uniforms:{ map:{ value:windPatternTex }, off:{ value:new THREE.Vector2() }, rep:{ value:new THREE.Vector2(rep, 1.2) }, op:{ value:op }, tint:{ value:new THREE.Color(0xffffff) } },
+        vertexShader:tornadoVS, fragmentShader:tornadoFS });
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 48, 12, true), mat);
+      mesh.position.y = h/2 + 0.03;
+      g.add(mesh); layers.push({ mesh, mat, speed, op });
+    });
+  } else {
+    for(let k=0;k<7;k++){ const r = new THREE.Mesh(new THREE.TorusGeometry(0.04 + k*0.025, 0.008, 6, 28, Math.PI*1.5), windFxM); r.rotation.x = Math.PI/2; r.position.y = 0.03 + k*0.055; g.add(r); layers.push({ ring:r }); }
+  }
+  g.userData.layers = layers; scene.add(g); return g;
 }
-function spinTornado(g, t){ g.userData.rings.forEach((r,j) => { r.rotation.z = t*10*(1 + j*0.15); r.position.x = Math.sin(t*6 + j*0.6)*0.04; }); }
+const windFxM = new THREE.MeshBasicMaterial({ color:0x9fffd0, transparent:true, opacity:0.5, blending:ADD, depthWrite:false, side:THREE.DoubleSide });
+function spinTornado(g, t){
+  g.userData.layers.forEach((l, j) => {
+    if(l.ring){ l.ring.rotation.z = t*10*(1 + j*0.15); l.ring.position.x = Math.sin(t*6 + j*0.6)*0.02; return; }
+    l.mat.uniforms.off.value.set(-t*l.speed, -t*0.35); // 模様を横と上に流す
+    l.mesh.rotation.y = t*(1.5 + j);                    // 層ごとに違う速さで回す
+    l.mesh.position.x = Math.sin(t*5 + j)*0.012;         // 芯が少し揺れる
+  });
+}
 function tornadoAt(cellIndex, dur){
   return trackAnimation(resolve => {
     resolve = once(resolve);
@@ -3285,7 +3351,7 @@ override('triggerHandWipeNebula', orig => parallel(orig, (target) => uiFx(async 
 const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, burst, dust, parts, partGeo, puffGeo,
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
-  circleTex, starTex, pillarTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
+  circleTex, starTex, pillarTex, sunTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
   preview, cam, CAM0, setCam, viewInset, fitExtra, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,

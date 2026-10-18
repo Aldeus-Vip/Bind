@@ -290,3 +290,14 @@ node tests/play.js                # 例
 | オンライン | `src/online.js` `snapHash` | 盤面ハッシュは「操作を実行する直前」に記録(以前は間隔で取っていて、演出の切れ目で誤った同期ずれ判定が出ることがあった) |
 
 - 2D 表示の敗北演出(炎)は元ファイル側の演出なので、そのまま。
+
+## 16. エフェクト素材の差し替え(2026-10-18)
+
+| 効果 | 素材 | 実装 |
+|---|---|---|
+| 4 次元の裂け目 | `assets/models/fx-rift.glb`(manifest で `fx:true`) | `fx3d.js` の `fxDisc` で床に寝かせ、頂点シェーダーで波打たせて回す。ワープ(`triggerDualRiftTeleport`)と新フロア(`triggerFloorSpawn`) |
+| 6 渦潮 | `assets/models/fx-whirl.glb` | 同上(`triggerWhirlpoolDrain`) |
+| 7 竜巻 | `assets/textures/wind.jpg` | `adapter.js` の `tornado()`: 3層の筒に模様を巻き、加算合成で黒を透過。高さ 0.42(パーソナルの約 1/3) |
+| A 太陽の紋章 | `assets/textures/sun_emblem.png` | `IM.sun` を差し替え(追加ターンの印・太陽の強化フロア・A のフロア生成) |
+
+- `fx:true` のモデルは生物として登録せず、`B3.gltfOf[key]` に入れるだけ。

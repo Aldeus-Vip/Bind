@@ -109,5 +109,15 @@
     "file": "jw.glb",
     "toon": true,
     "height": 1.25
+  },
+  "fx-rift": {
+    "file": "fx-rift.glb",
+    "fx": true,
+    "_note": "4 の次元の裂け目(エフェクト用。生物ではない)"
+  },
+  "fx-whirl": {
+    "file": "fx-whirl.glb",
+    "fx": true,
+    "_note": "6 の渦潮(エフェクト用)"
   }
 }

@@ -228,15 +228,34 @@ fx('triggerVortexHide', async (i) => {
 // A: 太陽が降りてフロアを生む(この後 sync がせり上げる)
 fx('triggerSunFloorSpawn', async (i) => {
   const c = ctrOf(i, 0);
-  const sun = addMesh(glowSprite(0xffd76a, 0.3)); sun.position.copy(c).add(V(0, 2.2, 0));
+  // 聖獣の太陽の紋章が空から降り、光の柱とともにフロアへ宿る(後ろに柔らかな光)
+  const halo = addMesh(glowSprite(0xffd76a, 0.3, 0.7)); halo.position.copy(c).add(V(0, 2.2, 0));
+  const sun = addMesh(new THREE.Sprite(new THREE.SpriteMaterial({ map:K.sunTex, transparent:true, depthWrite:false, opacity:0 })));
+  sun.renderOrder = 21; sun.position.copy(halo.position);
   const pl = addMesh(pillar(0xffd76a, 0.42, 2.4)); pl.position.copy(c).add(V(0, 1.2, 0));
-  await tween(0.8, t => { const k = ease.out(t); sun.position.y = c.y + 2.2 - k*1.8; sun.scale.setScalar(0.3 + k*0.6); pl.material.opacity = Math.sin(Math.PI*t)*0.8; });
+  await tween(0.9, t => {
+    const k = ease.out(t);
+    [halo, sun].forEach(o => { o.position.y = c.y + 2.2 - k*1.8; });
+    halo.scale.setScalar(0.4 + k*0.9); sun.scale.setScalar(0.3 + k*0.55); sun.material.opacity = Math.min(1, t*3);
+    sun.material.rotation = t*0.8;
+    pl.material.opacity = Math.sin(Math.PI*t)*0.8;
+  });
   spark(c.clone().add(V(0, 0.2, 0)), 0xffe7a0, 26, { up:2.4, speed:0.6 });
-  K.disposeObj(sun); K.disposeObj(pl);
+  await tween(0.35, t => { sun.material.opacity = 1 - t; halo.material.opacity = 0.7*(1 - t); sun.position.y = c.y + 0.4 - 0.3*t; });
+  K.disposeObj(sun); K.disposeObj(halo); K.disposeObj(pl);
 });
 // 4: 次元の裂け目からフロアが生まれる
 fx('triggerFloorSpawn', async (i) => {
   const c = ctrOf(i, 0.02);
+  // 次元の裂け目のモデルが床に開いて波打ち、閉じる(無ければ紫の輪)
+  const disc = fxDisc('fx-rift', { wave:0.05, waveK:30, swirl:0.6, spin:1.6, glow:1.1, glowColor:0xc89aff });
+  if(disc){
+    disc.position.copy(c).add(V(0, 0.08, 0)); addMesh(disc);
+    await tween(0.75, t => { const k = Math.sin(Math.PI*t); disc.userData.tick(t*1.2, k); disc.scale.setScalar(0.2 + 1.1*k); });
+    spark(c.clone().add(V(0, 0.1, 0)), 0xd0a0ff, 18, { up:2, speed:0.5 });
+    disposeDisc(disc);
+    return;
+  }
   const r = addMesh(ring(0.4, 0.03, 0xa35cff)); r.position.copy(c);
   await tween(0.6, t => { r.material.opacity = Math.sin(Math.PI*t); r.scale.setScalar(0.3 + t*1.2); r.rotation.z = t*6; });
   spark(c.clone().add(V(0, 0.1, 0)), 0xd0a0ff, 18, { up:2, speed:0.5 });
@@ -352,6 +371,63 @@ function hammerModel(){
   return holder.clone();
 }
 
+/* ---- エフェクト用のモデル(4 の裂け目 fx-rift / 6 の渦潮 fx-whirl) ----
+   どちらも正面(+Z)を向いた薄い円盤。圧縮された頂点を実寸に直した形を作っておき(1 回だけ)、
+   使うたびに専用の材質で包む。材質は頂点シェーダーで波打たせ、ゆっくり渦を巻かせる。 */
+const fxGeoCache = {};
+function fxBaked(key){
+  if(key in fxGeoCache) return fxGeoCache[key];
+  const gltf = window.B3.gltfOf && window.B3.gltfOf[key];
+  if(!gltf) return null; // まだ読み込み中(そのときは従来の演出)
+  let src = null; gltf.scene.traverse(o => { if(!src && o.isMesh) src = o; });
+  if(!src) return (fxGeoCache[key] = null);
+  gltf.scene.updateMatrixWorld(true);
+  const g = src.geometry, P = g.attributes.position, UV = g.attributes.uv, n = P.count;
+  const pos = new Float32Array(n*3), uv = UV ? new Float32Array(n*2) : null, v = new THREE.Vector3();
+  for(let i = 0; i < n; i++){
+    v.fromBufferAttribute(P, i).applyMatrix4(src.matrixWorld); pos[i*3] = v.x; pos[i*3+1] = v.y; pos[i*3+2] = v.z;
+    if(uv){ uv[i*2] = UV.getX(i); uv[i*2+1] = UV.getY(i); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if(uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  if(g.index) geo.setIndex(Array.from(g.index.array));
+  geo.computeBoundingBox();
+  // 中心を原点に、直径を 1 に
+  const bb = geo.boundingBox, c = bb.getCenter(new THREE.Vector3()), d = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y);
+  geo.translate(-c.x, -c.y, -c.z); geo.scale(1/d, 1/d, 1/d);
+  geo.computeVertexNormals();
+  const m = src.material || {};
+  return (fxGeoCache[key] = { geo, map: m.map || null, normalMap: m.normalMap || null });
+}
+// 円盤のエフェクト: 床に寝かせて置く。opt.wave(波の高さ)・opt.swirl(渦のねじれ)・opt.glow(発光)
+function fxDisc(key, opt){
+  const b = fxBaked(key); if(!b) return null;
+  opt = opt || {};
+  const u = { uT:{ value:0 }, uA:{ value: opt.wave || 0.035 }, uK:{ value: opt.waveK || 22 }, uS:{ value: opt.swirl || 0.25 } };
+  const mat = new THREE.MeshStandardMaterial({ map: b.map, normalMap: b.normalMap, emissiveMap: b.map, emissive: new THREE.Color(opt.glowColor || 0xffffff),
+    emissiveIntensity: opt.glow == null ? 0.6 : opt.glow, roughness: 0.35, metalness: 0.1, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = 'uniform float uT; uniform float uA; uniform float uK; uniform float uS;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      {
+        float r = length(position.xy);
+        // 中心から外へ広がる波(中心は静か)と、外側ほど遅れて回る渦のねじれ
+        transformed.z += sin(r*uK - uT*5.0)*uA*smoothstep(0.02, 0.2, r);
+        float a = uS*sin(uT*1.6 - r*7.0)*r;
+        transformed.xy = mat2(cos(a), -sin(a), sin(a), cos(a))*transformed.xy;
+      }`);
+  };
+  mat.customProgramCacheKey = () => 'bind-fxdisc';
+  const mesh = new THREE.Mesh(b.geo, mat);
+  mesh.rotation.x = -Math.PI/2; // 正面(+Z)を上へ
+  mesh.renderOrder = 6;
+  const g = new THREE.Group(); g.add(mesh);
+  g.userData = { mat, u, mesh, tick(t, k){ u.uT.value = t; mat.opacity = k; mesh.rotation.z = -t*(opt.spin || 1.2); } };
+  return g;
+}
+function disposeDisc(g){ if(!g) return; K.scene.remove(g); g.userData.mat.dispose(); } // 形はキャッシュを使い回す
+
 /* ---- マグマ: 地割れが赤く光り、溶岩の柱が噴き上がり、溶岩の塊が飛び散って冷える ---- */
 const crackTex = (() => {
   const cv = document.createElement('canvas'); cv.width = cv.height = 256;
@@ -466,18 +542,31 @@ fx('triggerWhirlpoolDrain', async (i) => {
   const T = K.tiles[i]; if(!T) return;
   hold(i); T.anim = true;
   const c = ctrOf(i, 0.02);
-  const rings = []; for(let k=0;k<7;k++){ const r = addMesh(ring(0.14 + k*0.08, 0.02, k%2 ? 0x8fd0ff : 0x4aa8ff, Math.PI*1.6)); r.position.copy(c).add(V(0, k*0.03, 0)); rings.push(r); }
-  await tween(0.5, t => { rings.forEach((r, j) => { r.material.opacity = 0.7*t; r.rotation.z = -t*10*(1 + j*0.2); }); });
+  // 渦潮のモデル(fx-whirl)があれば、それを床の上で波打たせながら回す。無ければ水の輪
+  const disc = fxDisc('fx-whirl', { wave:0.045, waveK:26, swirl:0.5, spin:2.4, glow:0.35, glowColor:0x9fd8ff });
+  let tt = 0;
+  if(disc){ disc.position.copy(c).add(V(0, 0.06, 0)); addMesh(disc); }
+  const rings = []; if(!disc) for(let k=0;k<7;k++){ const r = addMesh(ring(0.14 + k*0.08, 0.02, k%2 ? 0x8fd0ff : 0x4aa8ff, Math.PI*1.6)); r.position.copy(c).add(V(0, k*0.03, 0)); rings.push(r); }
+  await tween(0.5, t => {
+    tt = t*0.5;
+    if(disc){ disc.userData.tick(tt, 0.95*t); disc.scale.setScalar(0.3 + 0.75*ease.back(t)); }
+    rings.forEach((r, j) => { r.material.opacity = 0.7*t; r.rotation.z = -t*10*(1 + j*0.2); });
+  });
   await tween(1.0, t => {
     const k = ease.inOut(t);
+    tt = 0.5 + t;
+    if(disc){ disc.userData.tick(tt, 0.95); disc.position.y = c.y + 0.06 - k*0.25; disc.scale.setScalar(1.05 - 0.15*k); }
     rings.forEach((r, j) => { r.rotation.z -= 0.25*(1 + j*0.15); r.scale.setScalar(1 + 0.2*Math.sin(t*8 + j)); });
     T.g.position.y = -k*1.4; T.g.rotation.y = k*Math.PI*2.5; T.g.scale.setScalar(1 - 0.5*k);
     if(Math.random() < 0.8) spark(c.clone().add(V((Math.random()-.5)*0.9, 0.05, (Math.random()-.5)*0.9)), Math.random()<0.6 ? 0x8fd0ff : 0xffffff, 2, { up:2.6, speed:0.5, life:0.6 });
   });
   spark(c.clone().add(V(0, 0.1, 0)), 0xbfe8ff, 30, { up:3, speed:0.8 });
   vanish(T);
-  await tween(0.4, t => rings.forEach(r => { r.material.opacity = 0.7*(1 - t); r.scale.setScalar(1 - 0.6*t); }));
-  rings.forEach(K.disposeObj);
+  await tween(0.4, t => {
+    if(disc){ disc.userData.tick(1.5 + t*0.4, 0.95*(1 - t)); disc.scale.setScalar(0.9*(1 - 0.7*t)); }
+    rings.forEach(r => { r.material.opacity = 0.7*(1 - t); r.scale.setScalar(1 - 0.6*t); });
+  });
+  rings.forEach(K.disposeObj); disposeDisc(disc);
   release(i);
 });
 
@@ -893,5 +982,5 @@ Object.keys(window).filter(n => /^trigger[A-Z]/.test(n) && typeof window[n] === 
   K.override(n, () => function(){ return Promise.resolve(); });
 });
 
-window.B3.fx = { glowSprite, shell, flipSlab, projectile, hammerModel, magmaFx, hammerStrike };
+window.B3.fx = { glowSprite, shell, flipSlab, projectile, hammerModel, magmaFx, hammerStrike, fxDisc, fxBaked };
 })();

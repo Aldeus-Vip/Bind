@@ -297,6 +297,8 @@ const urlOf = file => (EMB && EMB.files[file]) || BASE + file;
     if(!manifest) return;
     Object.entries(manifest).forEach(([key, spec]) => {
       if(key.startsWith('_') || !spec || !spec.file) return;
+      // エフェクト用のモデル(fx: true)は読み込むだけで、生物としては登録しない(fx3d.js が使う)
+      if(spec.fx){ loader.load(urlOf(spec.file), gltf => { gltfOf[key] = gltf; console.info(`[Bind3D] エフェクトのモデルを読み込みました: ${key}`); }, undefined, e => console.warn(`[Bind3D] エフェクトのモデルを読み込めませんでした: ${key}`, e)); return; }
       const loadMain = () => loader.load(urlOf(spec.file),
         gltf => { gltfOf[key] = gltf; register(key, makeGltfAvatar(key, spec, gltf)); console.info(`[Bind3D] モデルを読み込みました: ${key} (${spec.file})`); },
         undefined,
