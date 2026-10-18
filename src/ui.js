@@ -167,19 +167,21 @@ function arrange(){
   bar.appendChild(body);
   bar.appendChild(toggle);
   frame.appendChild(bar);
-  center.insertBefore(frame, center.firstChild);
   right.remove();
 
-  // 扇状の手札(格納ボタンは扇の左右の端)
+  // 画面の下: 効果欄(1行)+ その下に扇状の手札。格納ボタンは手札の左右の端。格納しても効果欄は残る
+  const fan = el('div', { class:'b3-fan' + (opt.handOpen ? '' : ' closed') + (hand ? '' : ' no-hand') });
+  fan.appendChild(frame);
   if(hand){
-    const fan = el('div', { class:'b3-fan' + (opt.handOpen ? '' : ' closed') });
+    const tray = el('div', { class:'b3-tray' });
     const row = hand.classList.contains('hand-row') ? hand : hand.querySelector('.hand-row');
     const flip = () => { opt.handOpen = !opt.handOpen; save(); fan.classList.toggle('closed', !opt.handOpen); };
-    ['l', 'r'].forEach(side => fan.appendChild(el('button', { class:'b3-fan-toggle ' + side, type:'button', title:'手札の表示 / 格納', onclick: flip })));
-    fan.appendChild(hand);
+    ['l', 'r'].forEach(side => tray.appendChild(el('button', { class:'b3-fan-toggle ' + side, type:'button', title:'手札の表示 / 格納', onclick: flip })));
+    tray.appendChild(hand);
+    fan.appendChild(tray);
     if(row) fanLayout(row);
-    gs.appendChild(fan);
   }
+  gs.appendChild(fan);
 }
 
 /* ---- 扇の並べ方: 枚数が増えても端のカードが画面の下へ沈まないよう、角度・間隔・沈み込みを枚数で縮める ----
@@ -243,7 +245,8 @@ function hoverTip(node, html){
     tip.innerHTML = html(); tip.style.display = '';
     const r = node.getBoundingClientRect(), w = tip.offsetWidth;
     tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width/2 - w/2)) + 'px';
-    tip.style.top = (r.bottom + 10) + 'px';
+    const h = tip.offsetHeight;
+    tip.style.top = (r.top - h - 10 > 8 ? r.top - h - 10 : r.bottom + 10) + 'px'; // 画面の下にあるので、ふつうは上に出す
   });
   node.addEventListener('mouseleave', () => { const tip = document.getElementById('b3-tip'); if(tip) tip.style.display = 'none'; });
 }
@@ -261,6 +264,12 @@ window.render = function(){
   const fan = document.querySelector('.b3-fan');
   const col = document.querySelector('#app > .game-screen > .center-column');
   if(fan && col){ const r = col.getBoundingClientRect(); fan.style.left = (r.left + r.width/2).toFixed(0) + 'px'; }
+  // 3D の盤面を、効果欄の1行分だけ上へずらす(盤面の大きさは変えない)
+  const B = window.B3, K = B && B.K, frame = fan && fan.querySelector('.b3-frame');
+  if(K && K.viewInset && K.active()){
+    const lift = frame ? Math.round(frame.offsetHeight) : 0;
+    if(Math.abs(lift - (K.viewInset.lift || 0)) > 2){ K.viewInset.lift = lift; B.layout(true); }
+  }
 })();
 window.B3UI = { opt, arrange, myIndex };
 if(typeof render === 'function' && document.getElementById('app')) try{ arrange(); }catch(e){}

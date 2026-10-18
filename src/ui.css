@@ -38,10 +38,10 @@ body.b3-ui.b3-hide-panels #app .floor-grid.b3{ height: max(440px, calc(100vh - 1
 
 /* 効果フレーム(簡略版): フィールドの上に重ねる1行のバー。背景は半透明でフィールドが透ける */
 .b3-frame{
-  position: absolute; left: 50%; top: 0; transform: translateX(-50%); z-index: 155;
-  width: max-content; max-width: 96%; padding: 6px 8px 6px 10px; border-radius: 0 0 10px 10px;
-  border: 1px solid rgba(212,171,82,.45); border-top: none;
-  background: linear-gradient(180deg, rgba(31,27,22,.78), rgba(31,27,22,.55));
+  position: relative; z-index: 2; pointer-events: auto; margin: 0 auto 4px;
+  width: max-content; max-width: min(96vw, 900px); padding: 5px 8px 5px 10px; border-radius: 10px;
+  border: 1px solid rgba(212,171,82,.45);
+  background: linear-gradient(180deg, rgba(31,27,22,.78), rgba(31,27,22,.62));
   box-shadow: 0 6px 18px rgba(0,0,0,.35);
   -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
 }
@@ -72,9 +72,13 @@ body.b3-ui.b3-hide-panels #app .floor-grid.b3{ height: max(440px, calc(100vh - 1
 /* 扇状の手札: 画面の下端に重ねる。格納ボタンは左右の端。カーソルを当てたカードはその場で少し持ち上がる */
 .b3-fan{
   position: fixed; bottom: 0; left: 50%; z-index: 156; transform: translateX(-50%);
-  pointer-events: none; transition: transform .25s ease;
+  pointer-events: none; display: flex; flex-direction: column; align-items: center;
 }
-.b3-fan.closed{ transform: translate(-50%, calc(100% - 28px)); }
+.b3-fan.no-hand{ bottom: 8px; }
+.b3-tray{ position: relative; transition: height .25s ease; }
+/* 格納: 手札はカードの頭だけ残し、効果欄はそのまま */
+.b3-fan.closed .b3-tray .hand-row{ height: 30px !important; overflow: hidden; }
+.b3-fan.closed .b3-tray .hand-row > .card{ bottom: auto !important; top: 6px; }
 .b3-fan-toggle{
   position: absolute; top: 2px; z-index: 60; pointer-events: auto; cursor: pointer;
   width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 11px; color: #f1dfae;
@@ -84,7 +88,7 @@ body.b3-ui.b3-hide-panels #app .floor-grid.b3{ height: max(440px, calc(100vh - 1
 .b3-fan-toggle::after{ content: "▾"; }
 .b3-fan.closed .b3-fan-toggle::after{ content: "▴"; }
 .b3-fan-toggle:hover{ background: rgba(90,70,36,.95); }
-.b3-fan > .hand-section, .b3-fan > .hand-row{
+.b3-fan .hand-section, .b3-fan .b3-tray > .hand-row{
   pointer-events: auto; margin: 0 !important; padding: 6px 34px 0 !important; min-width: 280px;
   background: linear-gradient(180deg, rgba(31,27,22,0), rgba(20,17,14,.55) 60%) !important;
   border: none !important; border-radius: 14px 14px 0 0 !important; box-shadow: none !important;

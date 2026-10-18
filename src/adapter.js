@@ -1640,7 +1640,7 @@ const polys = [];
 // プレイヤーが操作できるカメラ(回転 yaw・見下ろし角 pitch・ズーム)。0 / PITCH / 1 が初期位置
 const CAM0 = { yaw:0, pitch:PITCH, zoom:1 };
 const cam = Object.assign({}, CAM0);
-const viewInset = { top:0, bottom:0 }; // 上下に重なる UI の分(いまは使っていない。0 のまま)
+const viewInset = { top:0, bottom:0, lift:0 }; // top/bottom: 盤面を収める帯を狭める(未使用) / lift: 盤面を上へずらす px(ui.js が効果欄の高さを入れる)
 const fitExtra = []; // カメラの画角に収めたい追加の点
 try{ const sv = JSON.parse(localStorage.getItem('b3-cam') || 'null'); if(sv) ['yaw','pitch','zoom'].forEach(k => { if(typeof sv[k]==='number' && isFinite(sv[k])) cam[k] = sv[k]; }); }catch(e){}
 const CAM_LIM = { pitch:[0.55, 1.5], zoom:[0.6, 2.2] };
@@ -1674,7 +1674,9 @@ function fitCamera(){
   }
   const r = span(hi / cam.zoom);
   const shift = (r.y1 + r.y0)/2 - (top + bot)/2; // 盤面の中心を帯の中心へ(NDC)
-  if(Math.abs(shift) > 1e-3 && lastW) camera.setViewOffset(lastW, lastH, 0, -shift*lastH/2, lastW, lastH);
+  // lift: 下に重なる効果欄の分だけ、盤面の大きさは変えずに画面上で上へずらす(px)
+  const offY = -shift*lastH/2 + (ins.lift || 0);
+  if(Math.abs(offY) > 0.5 && lastW) camera.setViewOffset(lastW, lastH, 0, offY, lastW, lastH);
   camera.updateMatrixWorld();
 }
 let camSaveT = 0;
@@ -2608,12 +2610,38 @@ let summonClock = performance.now();
   requestAnimationFrame(tickSummons);
   const now = performance.now(), dt = Math.min(0.05, (now - summonClock)/1000); summonClock = now;
   const t = now/1000;
-  summons.forEach(s => { s.av.idle(t, s.phase); s.av.tick(t, dt, s.phase); s.blinkAt -= dt; s.av.blink(s.blinkAt < 0.12 && s.blinkAt > 0); if(s.blinkAt < 0) s.blinkAt = 2 + Math.random()*3; });
+  summons.forEach(s => {
+    placeSummon(s);
+    s.av.idle(t, s.phase); s.av.tick(t, dt, s.phase); s.blinkAt -= dt; s.av.blink(s.blinkAt < 0.12 && s.blinkAt > 0); if(s.blinkAt < 0) s.blinkAt = 2 + Math.random()*3;
+  });
 })();
-function summonPos(ch, n){
-  const base = ch.root.position;
-  const side = base.x > 0.2 ? -1 : 1;
-  return new THREE.Vector3(base.x + side*(0.7 + n*0.45), base.y, base.z + 0.18 - n*0.1);
+/* 連鎖の召喚は、フィールドの上側に重ねて並べる(フロアの情報を隠さない)
+   自分: 左上から右へ / 相手: 右上から左へ。画面の位置に合わせて毎フレーム置き直す(カメラを動かしてもついてくる) */
+const SUMMON_SCALE = 0.5, SUMMON_STEP = 78;
+const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+function isMineSide(p){
+  const u = window.B3UI, me = u && u.myIndex ? u.myIndex() : null;
+  return me != null ? p === me : p === 0;
+}
+function summonAnchor(p, n){
+  const r = canvas.getBoundingClientRect();
+  if(!r.width) return chars[p] ? chars[p].root.position.clone() : new THREE.Vector3();
+  const mine = isMineSide(p);
+  // 盤面の奥の列の左端 / 右端のマスを起点に、奥の列の少し上へ横一列に並べる
+  const a = screenOf(mine ? 0 : NCOLS - 1, 0);
+  const sx = (a.x - r.left) + (mine ? 1 : -1)*n*SUMMON_STEP, sy = Math.max(40, (a.y - r.top) - 34);
+  _ndc.set(sx/r.width*2 - 1, -(sy/r.height)*2 + 1);
+  _ray.setFromCamera(_ndc, camera);
+  const D = camera.position.distanceTo(TARGET)*0.82; // 盤面より少し手前
+  return _ray.ray.origin.clone().addScaledVector(_ray.ray.direction, D);
+}
+function placeSummon(s){
+  const pos = summonAnchor(s.p, s.n);
+  s.base = pos;
+  s.av.root.position.set(pos.x, pos.y + s.dy, pos.z);
+  s.av.root.rotation.y = Math.atan2(camera.position.x - pos.x, camera.position.z - pos.z); // こちらを向く
+  if(s.circle){ s.circle.position.set(pos.x, pos.y + 0.02, pos.z); }
+  if(s.beam){ s.beam.position.set(pos.x, pos.y + s.beam.scale.y/2, pos.z); }
 }
 override('triggerNumberEffect', orig => async function(rank, playerIdx, depth){
   const ch = chars[playerIdx], st = state;
@@ -2626,32 +2654,36 @@ override('triggerNumberEffect', orig => async function(rank, playerIdx, depth){
     try{ return await orig.apply(this, arguments); }
     finally{ tween(0.35, t => ch.av.pose('raise', 1-t)).then(() => ch.av.pose('rest', 0)); }
   }
-  // 隣に召喚する
+  // フィールドの上側に召喚する(召喚陣から上へ光が伸び、生物がせり上がる)
   const cache = summonCache[playerIdx];
   if(!cache[key] || [...summons].some(s => s.av === cache[key])) cache[key] = (AVATARS[key])(playerIdx);
   const av = cache[key];
   const sk = ch.suitKey || 'H';
   av.setSuit(SUIT_THEME[sk] || SUIT_THEME.H);
-  const s = { av, phase:Math.random()*6, blinkAt:2 };
-  const pos = summonPos(ch, [...summons].filter(x => x.p===playerIdx).length);
-  s.p = playerIdx;
-  av.root.position.copy(pos); av.root.rotation.y = 0; av.root.scale.setScalar(0.01);
-  scene.add(av.root); summons.add(s);
-  const circle = flatPlane(1.2, circleTex(['H','S','D','C'].includes(sk) ? sk : 'H'), 0xffffff, pos.y + 0.03);
-  circle.position.x = pos.x; circle.position.z = pos.z; scene.add(circle);
+  const glow = new THREE.Color((SUIT_THEME[sk]||SUIT_THEME.H).glow).getHex();
+  const s = { av, phase:Math.random()*6, blinkAt:2, p:playerIdx, n:[...summons].filter(x => x.p===playerIdx).length, dy:-0.35 };
+  s.circle = flatPlane(0.6, circleTex(['H','S','D','C'].includes(sk) ? sk : 'H'), 0xffffff, 0);
+  s.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 1, 20, 1, true), new THREE.MeshBasicMaterial({ map:pillarTex, color:glow, transparent:true, opacity:0, blending:ADD, depthWrite:false, side:THREE.DoubleSide }));
+  s.beam.scale.y = 0.01;
+  av.root.scale.setScalar(0.01);
+  scene.add(av.root); scene.add(s.circle); scene.add(s.beam); summons.add(s);
+  placeSummon(s);
   await trackAnimation(res => {
     res = once(res);
     (async () => {
-      await tween(0.3, t => { circle.material.opacity = t; circle.scale.setScalar(0.4 + 0.6*ease.back(t)); circle.rotation.z = t; });
-      burst(pos.clone().add(new THREE.Vector3(0,0.3,0)), new THREE.Color((SUIT_THEME[sk]||SUIT_THEME.H).glow).getHex(), 22, { up:2.5, speed:0.5 });
-      await tween(0.45, t => { av.root.scale.setScalar(Math.max(0.01, 0.85*ease.back(t))); av.root.position.y = pos.y - 0.4*(1-ease.out(t)); av.pose('raise', t); });
+      await tween(0.3, t => { s.circle.material.opacity = t; s.circle.scale.setScalar(0.4 + 0.6*ease.back(t)); s.circle.rotation.z = t; });
+      // 光の柱が上へ伸び、その中から生物がせり上がる
+      await tween(0.25, t => { s.beam.scale.y = 0.01 + 1.3*ease.out(t); s.beam.material.opacity = 0.8*t; });
+      burst(s.base.clone().add(new THREE.Vector3(0, 0.2, 0)), glow, 14, { up:2.6, speed:0.25 });
+      await tween(0.45, t => { av.root.scale.setScalar(Math.max(0.01, SUMMON_SCALE*ease.back(t))); s.dy = -0.35*(1 - ease.out(t)); av.pose('raise', t); s.beam.material.opacity = 0.8*(1 - t); });
+      s.beam.visible = false;
       res();
     })().catch(e => failSafe(e, null, res));
   });
   try{ return await orig.apply(this, arguments); }
   finally{
-    tween(0.45, t => { av.root.scale.setScalar(Math.max(0.01, 0.85*(1-ease.inOut(t)))); av.root.position.y = pos.y - 0.4*t; circle.material.opacity = 1-t; })
-      .then(() => { scene.remove(av.root); summons.delete(s); av.pose('rest', 0); disposeObj(circle); });
+    tween(0.45, t => { av.root.scale.setScalar(Math.max(0.01, SUMMON_SCALE*(1-ease.inOut(t)))); s.dy = -0.35*t; s.circle.material.opacity = 1-t; })
+      .then(() => { scene.remove(av.root); summons.delete(s); av.pose('rest', 0); disposeObj(s.circle); disposeObj(s.beam); });
   }
 });
 
