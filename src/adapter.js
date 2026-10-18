@@ -431,6 +431,25 @@ const mossGeo = new THREE.BoxGeometry(1.04, 0.05, 1.04);
 const inlayGeo = new THREE.PlaneGeometry(0.86, 0.86);
 const glowGeo = new THREE.RingGeometry(0.42, 0.5, 4, 1);
 const rockMat = toon(0x3a332c), mossMat = toon(0x2a2520), slabSide = toon(0x4a443c); // 縁は暗い石(大地の絵を引き立てる)
+// 側面・台座にも同じ大地の絵を暗く敷き、フロア全体を一つの岩塊に見せる(目立たないよう明るさは 3〜4 割)
+function applySideTex(){
+  if(!ready(IM.ground)) return;
+  const im = IM.ground, W = 512, H = 256;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  // 大地の絵の中ほどを横長に切り出す
+  const sw = im.naturalWidth*0.6, sh = sw*H/W;
+  g.drawImage(im, (im.naturalWidth - sw)/2, (im.naturalHeight - sh)/2, sw, sh, 0, 0, W, H);
+  // 暗く落とし、下ほど影に沈める
+  g.fillStyle = 'rgba(14,11,8,0.55)'; g.fillRect(0, 0, W, H);
+  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.45)');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  if(renderer.capabilities) tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  [[rockMat, 0xb0a898], [slabSide, 0xd8d0c0], [mossMat, 0xa8a090]].forEach(([m, c]) => { m.map = tex; m.color.setHex(c); m.needsUpdate = true; });
+}
+if(IM.ground){ if(ready(IM.ground)) applySideTex(); else IM.ground.addEventListener('load', applySideTex); }
 for(let i=0;i<NCELLS;i++){
   const h = tileH(i);
   const g = new THREE.Group(); g.position.set(tileX(i), 0, tileZ(i));
