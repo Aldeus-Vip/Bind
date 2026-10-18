@@ -1642,6 +1642,7 @@ const CAM0 = { yaw:0, pitch:PITCH, zoom:1 };
 const cam = Object.assign({}, CAM0);
 const viewInset = { top:0, bottom:0, lift:0 }; // top/bottom: 盤面を収める帯を狭める(未使用) / lift: 盤面を上へずらす px(ui.js が効果欄の高さを入れる)
 const fitExtra = []; // カメラの画角に収めたい追加の点
+const focus = { field:false }; // 今の操作の場所(ui.js が入れる)。field: フロアを選ぶ場面
 try{ const sv = JSON.parse(localStorage.getItem('b3-cam') || 'null'); if(sv) ['yaw','pitch','zoom'].forEach(k => { if(typeof sv[k]==='number' && isFinite(sv[k])) cam[k] = sv[k]; }); }catch(e){}
 const CAM_LIM = { pitch:[0.55, 1.5], zoom:[0.6, 2.2] };
 function camPlace(d){
@@ -1896,7 +1897,9 @@ function sync(dt){
     if(hov) go = 1;
     if(gc!==null) T.glowMat.color.setHex(gc);
     T.glowMat.opacity += (go - T.glowMat.opacity) * 0.25;
-    const dimT = (cl && cl.contains('move-dimmed')) ? 1 : 0;
+    // フロアを選ぶ場面(ui.js が focus.field を立てる): 選べないマスは少し暗く(内容は読める明るさ)
+    const selectable = cl && (cl.contains('clickable') || cl.contains('reachable') || cl.contains('reachable-lethal') || cl.contains('selected'));
+    const dimT = (cl && cl.contains('move-dimmed')) ? 1 : (focus.field && !selectable) ? 0.6 : 0;
     T.dim += (dimT - T.dim) * 0.2;
     T.hover += (hov - T.hover) * 0.25;
     const bright = 1 - 0.5*T.dim + 0.15*T.hover;
@@ -3355,7 +3358,7 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, sunTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
-  preview, cam, CAM0, setCam, viewInset, fitExtra, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  preview, cam, CAM0, setCam, viewInset, fitExtra, focus, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };

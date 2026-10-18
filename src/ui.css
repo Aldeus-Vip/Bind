@@ -143,3 +143,34 @@ html body{
 .b3-swatch:hover{ transform: scale(1.12); }
 .b3-swatch.on{ box-shadow: 0 0 0 2px #f3d68a, 0 0 12px var(--sw); transform: scale(1.12); }
 .floor-grid.b3.b3-spec-hover{ cursor: pointer; }
+
+/* ===== 今操作できる場所を明るく、それ以外を少し暗く(src/ui.js applyFocus) =====
+   明滅はゆっくり・控えめに。暗くするのは内容が読める程度まで */
+@keyframes b3-breathe{
+  0%, 100%{ box-shadow: 0 0 0 1px rgba(243,214,138,.55), 0 0 8px rgba(255,200,90,.22), 0 6px 18px rgba(0,0,0,.35); }
+  50%{ box-shadow: 0 0 0 2px rgba(243,214,138,.95), 0 0 24px rgba(255,200,90,.55), 0 6px 18px rgba(0,0,0,.35); }
+}
+@keyframes b3-breathe-soft{
+  0%, 100%{ filter: brightness(1); }
+  50%{ filter: brightness(1.18); }
+}
+.floor-grid.b3 > .b3-canvas, .b3-tray, .b3-frame{ transition: filter .4s ease, opacity .4s ease; }
+/* 盤面を少し暗く(フロアを選ぶ場面以外) */
+body.b3-focus-panel .floor-grid.b3 > .b3-canvas{ filter: brightness(.62); }
+body.b3-focus-gauge .floor-grid.b3 > .b3-canvas,
+body.b3-focus-hand .floor-grid.b3 > .b3-canvas{ filter: brightness(.78); }
+/* 手札を少し暗く(手札を選ぶ場面以外) */
+body.b3-focus-panel .b3-tray, body.b3-focus-field .b3-tray, body.b3-focus-gauge .b3-tray{ filter: brightness(.7); }
+/* 効果欄: ボタンで操作する場面は光る。フロアや手札を選ぶ場面は少し控えめに */
+body.b3-focus-panel .b3-frame{ animation: b3-breathe 1.6s ease-in-out infinite; border-color: #f3d68a; }
+body.b3-focus-panel .b3-frame .btn.b3-act{ animation: b3-breathe-soft 1.6s ease-in-out infinite; }
+body.b3-focus-field .b3-frame, body.b3-focus-gauge .b3-frame, body.b3-focus-hand .b3-frame{ filter: brightness(.88); }
+/* 手札: 選べるカードがゆっくり光る */
+body.b3-focus-hand .b3-fan .hand-row > .card:not(.static){ animation: b3-breathe 1.6s ease-in-out infinite; }
+/* 手札・捨て札を選ぶ: 頭上ゲージとプレイヤー欄がゆっくり明滅(以前の速い点滅をやわらげる) */
+body.b3-focus-gauge .b3-gauge.picking{ animation: b3-breathe 1.6s ease-in-out infinite; }
+body.b3-focus-gauge .b3-gauge .g-row.target{ animation: b3-gauge-blink .8s ease-in-out infinite alternate; }
+body.b3-focus-gauge .player-card.discard-active{ animation: b3-breathe 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce){
+  body[class*="b3-focus-"] .b3-frame, body[class*="b3-focus-"] .card, body[class*="b3-focus-"] .b3-gauge, body[class*="b3-focus-"] .player-card, body[class*="b3-focus-"] .btn{ animation: none !important; }
+}

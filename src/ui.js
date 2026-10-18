@@ -258,12 +258,48 @@ window.render = function(){
   return r;
 };
 
+/* ---- 今操作できる場所を明るく、それ以外を少し暗く ----
+   field : フロアを選ぶ(選べるマスが光り、ほかのマスと手元は少し暗く)
+   gauge : 手札・捨て札を選ぶ(頭上ゲージ・プレイヤー欄がゆっくり明滅、盤面は少し暗く)
+   panel : 効果欄のボタンで操作(ドロー・2択など。効果欄が光り、盤面と手札は少し暗く)
+   hand  : 手札から1枚選ぶ(手札が光り、盤面は少し暗く)
+   暗くするのは「見ながら判断できる」程度まで。明滅はゆっくり(約 1.6 秒)で、動きを減らす設定では止める */
+const FOCUS = ['field', 'gauge', 'panel', 'hand'];
+function focusMode(){
+  const st = typeof state !== 'undefined' ? state : null;
+  if(!st || !st.players || st.gameOver) return '';
+  if(typeof animationsInFlight !== 'undefined' && animationsInFlight > 0) return '';
+  const actor = st.phase === 'setup-personal' ? st.setupPlayer : st.current;
+  const me = myIndex();
+  if(me != null ? actor !== me : (st.vsCPU && actor === st.cpuIndex)) return '';
+  const t = st.task;
+  if(t){
+    if(t.type === 'move-destination' || t.type === 'setup-place' || t.kind === 'floor' || t.kind === 'floor-multi') return 'field';
+    if(['hand-slot', 'hand-area', 'discard', 'discard-of', 'discard-multi'].includes(t.kind)) return 'gauge';
+    if(st.phase === 'setup-personal') return 'field';
+    return 'panel';
+  }
+  if(st.phase === 'draw') return 'panel';
+  if(st.phase === 'move' || st.phase === 'hand-effect' || st.phase === 'setup-personal') return 'hand';
+  return '';
+}
+let focusNow = null;
+function applyFocus(){
+  const m = focusMode();
+  if(m === focusNow) return;
+  focusNow = m;
+  FOCUS.forEach(k => document.body.classList.toggle('b3-focus-' + k, k === m));
+  const K = window.B3 && window.B3.K;
+  if(K && K.focus) K.focus.field = m === 'field';
+}
+
 // 扇はフィールドの列の真ん中に合わせる(画面の下端に固定)。効果フレームと扇はフィールドに重ねるだけで、盤面の大きさは変えない
 (function place(){
   requestAnimationFrame(place);
   const fan = document.querySelector('.b3-fan');
   const col = document.querySelector('#app > .game-screen > .center-column');
   if(fan && col){ const r = col.getBoundingClientRect(); fan.style.left = (r.left + r.width/2).toFixed(0) + 'px'; }
+  applyFocus();
   // 3D の盤面を、効果欄の1行分だけ上へずらす(盤面の大きさは変えない)
   const B = window.B3, K = B && B.K, frame = fan && fan.querySelector('.b3-frame');
   if(K && K.viewInset && K.active()){
