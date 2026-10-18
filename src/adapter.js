@@ -1596,6 +1596,7 @@ const polys = [];
 // プレイヤーが操作できるカメラ(回転 yaw・見下ろし角 pitch・ズーム)。0 / PITCH / 1 が初期位置
 const CAM0 = { yaw:0, pitch:PITCH, zoom:1 };
 const cam = Object.assign({}, CAM0);
+const viewInset = { top:0, bottom:0 }; // ui.js が効果フレーム・手札の高さを入れる
 try{ const sv = JSON.parse(localStorage.getItem('b3-cam') || 'null'); if(sv) ['yaw','pitch','zoom'].forEach(k => { if(typeof sv[k]==='number' && isFinite(sv[k])) cam[k] = sv[k]; }); }catch(e){}
 const CAM_LIM = { pitch:[0.55, 1.5], zoom:[0.6, 2.2] };
 function camPlace(d){
@@ -1610,15 +1611,25 @@ function fitCamera(){
     pts.push(new THREE.Vector3(tileX(i), topY(i)+(document.body.classList.contains("b3-hide-panels") ? 2.2 : 1.68), tileZ(i))); // 頭上ゲージの分も上に空ける
     if(Math.floor(i/NCOLS)===NROWS-1) pts.push(new THREE.Vector3(tileX(i), -0.85, tileZ(i)+0.2));
   }
+  // 上下に重なる UI(効果フレーム・手札)の分だけ、盤面を収める帯を狭め、画面の中で上下にずらす
+  const H = lastH || 1, ins = viewInset;
+  const top = 0.97 - 2*Math.min(0.4, (ins.top||0)/H), bot = -0.97 + 2*Math.min(0.4, (ins.bottom||0)/H);
+  camera.clearViewOffset();
+  const span = d => {
+    camPlace(d);
+    let y0 = Infinity, y1 = -Infinity, okX = true;
+    for(const p of pts){ const v = p.clone().project(camera); if(Math.abs(v.x)>0.97) okX = false; y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y); }
+    return { okX, y0, y1 };
+  };
   let lo = 4, hi = 40;
   for(let k=0;k<26;k++){
-    const d = (lo+hi)/2;
-    camPlace(d);
-    let fits = true;
-    for(const p of pts){ const v = p.clone().project(camera); if(Math.abs(v.x)>0.97 || Math.abs(v.y)>0.97){ fits = false; break; } }
-    if(fits) hi = d; else lo = d;
+    const d = (lo+hi)/2, r = span(d);
+    if(r.okX && r.y1 - r.y0 <= top - bot) hi = d; else lo = d;
   }
-  camPlace(hi / cam.zoom);
+  const r = span(hi / cam.zoom);
+  const shift = (r.y1 + r.y0)/2 - (top + bot)/2; // 盤面の中心を帯の中心へ(NDC)
+  if(Math.abs(shift) > 1e-3 && lastW) camera.setViewOffset(lastW, lastH, 0, -shift*lastH/2, lastW, lastH);
+  camera.updateMatrixWorld();
 }
 let camSaveT = 0;
 function setCam(o){
@@ -1945,7 +1956,7 @@ function loop(){
     if(!ch.busy){
       ch.av.idle(t, ch.phase);
       // 待機中はカメラの方を向く。効果の対象があるときはしばらくそちらを向く(faceTo)
-      const facing = ch.faceYaw!=null && performance.now() < ch.faceUntil, want = facing ? ch.faceYaw : cam.yaw;
+      const facing = ch.faceYaw!=null && performance.now() < ch.faceUntil, want = facing ? ch.faceYaw : 0;
       let dy = want - ch.root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       ch.root.rotation.y += dy*(facing ? 0.12 : 0.06);
       // ウィンドマスでは軽く浮遊する(以前は += で毎フレーム足し込んでいたため高さがずれて残っていた)
@@ -3083,7 +3094,7 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
-  preview, cam, CAM0, setCam, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  preview, cam, CAM0, setCam, viewInset, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };

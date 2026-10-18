@@ -1,0 +1,107 @@
+/* ===== 画面構成(src/ui.js) ===== */
+/* タイトルロゴ */
+html.b3-has-logo .start-screen .title, html.b3-has-logo .gameover-screen .title{
+  background: var(--b3-logo) center / contain no-repeat !important;
+  -webkit-background-clip: border-box !important; background-clip: border-box !important;
+  color: transparent !important; font-size: 0 !important; letter-spacing: 0 !important; padding: 0 !important;
+  width: min(560px, 90vw); aspect-ratio: 640 / 482; margin: 0 auto 6px; height: auto;
+  filter: drop-shadow(0 0 22px rgba(255,180,90,.18)) drop-shadow(0 6px 10px rgba(0,0,0,.6));
+}
+html.b3-has-logo .start-screen{ padding-top: 40px !important; }
+
+/* 上のボタン列と重ならないよう、いちばん上までスクロールしても余白を取る */
+body.b3-ui #app{ padding-top: 66px; padding-left: 150px; max-width: none; }
+
+/* ターンの流れ: 左端に縦(上から下) */
+body.b3-ui .game-screen > .phase-sequence{
+  position: fixed; left: 12px; top: 50%; transform: translateY(-50%); z-index: 120;
+  flex-direction: column; align-items: stretch; gap: 2px; width: 128px; margin: 0; padding: 10px 8px;
+  overflow: visible;
+}
+body.b3-ui .game-screen > .phase-sequence .phase-step{ text-align: center; padding: 7px 6px; }
+body.b3-ui .game-screen > .phase-sequence .phase-arrow{ text-align: center; line-height: 1; font-size: 0; }
+body.b3-ui .game-screen > .phase-sequence .phase-arrow::after{ content: "▼"; font-size: 9px; color: rgba(212,171,82,.55); }
+
+/* 2列: 左 = 山札・プレイヤー / 右 = フィールド(右の欄はフィールドの上に重ねる) */
+body.b3-ui .game-screen{
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  grid-template-areas: "left field";
+  max-width: none;
+}
+body.b3-ui .game-screen > .center-column{ position: relative; min-width: 0; }
+body.b3-ui .floor-grid.b3{ max-width: none; width: 100%; aspect-ratio: auto; height: max(460px, calc(100vh - 86px)); margin: 0; }
+/* パネルを隠す設定: 山札をフィールドの上に、フィールドを左いっぱいに */
+body.b3-ui.b3-hide-panels #app .game-screen{
+  grid-template-columns: minmax(0, 1fr); grid-template-areas: "left" "field"; row-gap: 6px;
+}
+body.b3-ui.b3-hide-panels #app .floor-grid.b3{ height: max(440px, calc(100vh - 110px)); }
+
+/* 効果フレーム: フィールドの上に重ねる。下側は半透明でフィールドが透けて見える */
+.b3-frame{
+  position: absolute; left: 50%; top: 0; transform: translateX(-50%); z-index: 155;
+  width: min(620px, 94%); padding: 8px 14px 18px; border-radius: 0 0 10px 10px;
+  border: 1px solid rgba(212,171,82,.42); border-top: none;
+  background: linear-gradient(180deg, rgba(31,27,22,.94) 0%, rgba(31,27,22,.9) 55%, rgba(31,27,22,.38) 100%);
+  box-shadow: 0 8px 22px rgba(0,0,0,.35);
+  -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px);
+}
+.b3-frame-head{ display: flex; align-items: center; gap: 8px; }
+.b3-frame-head .mid-info-row{ flex: 1; margin: 0; }
+.b3-frame-toggle{
+  flex: 0 0 auto; width: 30px; height: 30px; padding: 0; border-radius: 6px; cursor: pointer;
+  color: #f1dfae; background: rgba(40,32,22,.9); border: 1px solid rgba(201,162,75,.5); font-size: 12px;
+}
+.b3-frame-toggle:hover{ background: rgba(90,70,36,.9); }
+.b3-frame-body{ max-height: 44vh; overflow: auto; }
+.b3-frame-body .effect-indicator{ margin: 6px 0; }
+.b3-frame-body .action-area{ margin: 6px 0 2px; min-height: 0; }
+.b3-frame-body .hint{ margin: 6px 0; }
+.b3-frame.closed{ padding-bottom: 8px; background: rgba(31,27,22,.82); }
+.b3-frame.closed .b3-frame-body{ display: none; }
+
+/* 扇状の手札: 画面の下端。カーソルを当てたカードが上に突き出る */
+.b3-fan{
+  position: fixed; bottom: 0; left: 50%; z-index: 156; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; pointer-events: none;
+  transition: transform .25s ease;
+}
+.b3-fan.closed{ transform: translate(-50%, calc(100% - 30px)); }
+.b3-fan-grip{
+  pointer-events: auto; cursor: pointer; margin-bottom: -2px; padding: 4px 16px 5px; font-size: 12px;
+  font-family: var(--b3-mincho, serif); font-weight: 700; letter-spacing: .06em; color: #f1dfae;
+  background: linear-gradient(180deg, #3b342a, #26211b); border: 1px solid rgba(201,162,75,.55); border-bottom: none;
+  border-radius: 8px 8px 0 0; box-shadow: 0 -2px 10px rgba(0,0,0,.4);
+}
+.b3-fan-grip::after{ content: " ▾"; }
+.b3-fan.closed .b3-fan-grip::after{ content: " ▴"; }
+.b3-fan > .hand-section, .b3-fan > .hand-row{
+  pointer-events: auto; margin: 0 !important; padding: 6px 18px 0 !important; min-width: 280px;
+  background: linear-gradient(180deg, rgba(31,27,22,.0), rgba(31,27,22,.55) 40%, rgba(20,17,14,.85)) !important;
+  border: none !important; border-radius: 14px 14px 0 0 !important; box-shadow: none !important;
+}
+.b3-fan .hand-section > h3{ display: none; }
+.b3-fan .hand-tabs{ justify-content: center; margin-bottom: 0; }
+.b3-fan .hand-row{
+  position: relative; display: block !important; height: 118px; min-height: 0; margin: 0 !important;
+  width: calc(max(var(--n, 1), 3) * 66px + 60px);
+}
+.b3-fan .hand-row > .card{
+  position: absolute; left: 50%; bottom: -18px; width: 76px !important; height: 106px !important; margin-left: -38px;
+  transform-origin: 50% 260%;
+  rotate: calc(var(--i, 0) * 7deg);
+  translate: calc(var(--i, 0) * 58px) calc(var(--i, 0) * var(--i, 0) * 4px);
+  transition: translate .18s ease, rotate .18s ease, scale .18s ease, box-shadow .18s ease, transform .15s ease !important;
+}
+.b3-fan .hand-row > .card:hover{
+  rotate: 0deg; scale: 1.18; z-index: 50 !important;
+  translate: calc(var(--i, 0) * 58px) -40px;
+}
+.b3-fan .hand-row > .card .rank{ font-size: 24px; }
+
+/* 2D 表示: フィールドは元の大きさのまま中央に */
+body.b3-ui .floor-grid:not(.b3){ max-width: 560px; }
+@media (max-width: 860px){
+  body.b3-ui #app{ padding-left: 12px; }
+  body.b3-ui .game-screen > .phase-sequence{ top: auto; bottom: 150px; transform: none; width: 112px; opacity: .92; }
+  body.b3-ui .game-screen{ grid-template-columns: minmax(0, 1fr); grid-template-areas: "field" "left"; }
+}

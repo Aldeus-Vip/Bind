@@ -35,13 +35,25 @@ const VENDOR_SRC = {
 };
 
 let s = read('src/original/bind_prototype.html');
-const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css');
-const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/audio.js'), read('src/online.js')];
+const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css') + '\n' + read('src/ui.css');
+const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/audio.js'), read('src/online.js'), read('src/ui.js')];
 
 s = s.replace('<title>Bind — プロトタイプ</title>', '<title>Bind 3D</title>');
 s = s.replace('</head>',
   '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
   '<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">\n</head>');
+// favicon(assets/favicon): Web 版は同じ階層にファイルを置き、1ファイル版は data URI で埋め込む
+const favDir = path.join(root, 'assets', 'favicon');
+if(fs.existsSync(favDir)){
+  s = s.replace(/<link rel="icon" type="image\/x-icon"[^>]*>\n?/, ''); // 元の仮アイコンを外す
+  const fav = f => single ? 'data:image/png;base64,' + fs.readFileSync(path.join(favDir, f)).toString('base64') : f;
+  s = s.replace('</head>',
+    (single ? '' : '<link rel="icon" href="favicon.ico" sizes="any">\n<link rel="manifest" href="site.webmanifest">\n') +
+    `<link rel="icon" type="image/png" sizes="32x32" href="${fav('icon-32.png')}">\n` +
+    (single ? '' : '<link rel="icon" type="image/png" sizes="16x16" href="icon-16.png">\n') +
+    `<link rel="apple-touch-icon" href="${fav('apple-touch-icon.png')}">\n` +
+    '<meta name="theme-color" content="#1e1816">\n</head>');
+}
 const i = s.indexOf('</head>'), j = s.lastIndexOf('</style>', i);
 s = s.slice(0, j) + css + s.slice(j);
 
@@ -112,6 +124,7 @@ for(const key of Object.keys(LOCAL)){
 }
 
 if(fs.existsSync(texDir)) fs.cpSync(texDir, path.join(outDir, 'textures'), { recursive: true });
+if(fs.existsSync(favDir)) for(const f of fs.readdirSync(favDir)) fs.copyFileSync(path.join(favDir, f), path.join(outDir, f));
 // glTF モデル(あれば)
 const modelsDir = path.join(root, 'assets', 'models');
 if(fs.existsSync(modelsDir)){

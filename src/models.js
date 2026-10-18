@@ -177,9 +177,12 @@ function proceduralRig(model, rig){
     const tk = Math.min(1, 5 / Math.max(1, J.tail.length)); // 長い尻尾は1本あたりを控えめに
     J.tail.forEach((j, i) => turn(j, (-raise*0.12 + jump*0.15)*tk, Math.sin(t*1.8 - i*0.6)*(0.10 + Math.min(i, 5)*0.04)*(1 + raise*1.5)*tk, 0));
     // 翼: 付け根から羽ばたく(構えると大きく広げる)
-    const flap = Math.sin(t*2.2)*0.12 + raise*0.35 - jump*0.2;
-    J.wingsL.forEach((j, i) => turn(j, 0, 0, (i ? 0.4 : 1)*flap));
-    J.wingsR.forEach((j, i) => turn(j, 0, 0, -(i ? 0.4 : 1)*flap));
+    // 待機中もはっきり羽ばたく。先の骨は少し遅れてしなる。ときどき大きく羽を伸ばす
+    const stroke = ph => { const s = Math.sin(t*2.6 - ph); return s > 0 ? s : s*0.75; };
+    const stretch = Math.max(0, Math.sin(t*0.29)*6 - 5)*0.25;
+    const flap = i => (stroke(i*0.7)*0.32 + 0.06 + stretch)*(i ? 0.6 : 1) + raise*0.35 - jump*0.2;
+    J.wingsL.forEach((j, i) => turn(j, 0, 0, flap(i)));
+    J.wingsR.forEach((j, i) => turn(j, 0, 0, -flap(i)));
     const flick = Math.max(0, Math.sin(t*0.37)*8 - 7); // ときどき耳を動かす
     J.ears.forEach((j, i) => turn(j, -flick*0.25, 0, (i ? 1 : -1)*flick*0.15));
   };
