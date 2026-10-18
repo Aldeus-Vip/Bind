@@ -2,8 +2,9 @@
 #b3-hud{ position:fixed; left:0; top:0; width:0; height:0; z-index:150; pointer-events:none; }
 .b3-gauge{
   position:absolute; left:0; top:0; pointer-events:auto;
-  padding:3px 6px 4px; border-radius:7px; min-width:74px;
-  background:rgba(14,10,8,.78); border:1px solid rgba(201,162,75,.55);
+  padding:3px 6px 4px 9px; border-radius:7px; min-width:74px;
+  background:rgba(14,10,8,.8); border:2px solid var(--pc, rgba(201,162,75,.55));
+  background-image:linear-gradient(90deg, var(--pc, #c9a24b) 0 4px, transparent 4px); /* 左端に持ち主の色の帯 */
   box-shadow:0 2px 8px rgba(0,0,0,.5); font:700 11px/1.25 system-ui, sans-serif; color:#f3e6c4;
 }
 .b3-gauge .g-row{ display:flex; align-items:center; gap:4px; padding:1px 0; cursor:default; border-radius:4px; }

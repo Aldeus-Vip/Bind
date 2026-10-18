@@ -38,6 +38,8 @@ function viewerCanSee(p){
 const huds = [0, 1].map(p => {
   const box = document.createElement('div');
   box.className = 'b3-gauge';
+  // 持ち主の色(駒の足元の輪と同じプレイヤーカラー)で枠を付ける
+  box.style.setProperty('--pc', (typeof PLAYER_COLORS !== 'undefined' && PLAYER_COLORS[p]) || '#c9a24b');
   box.innerHTML = `
     <div class="g-row g-hand" title="手札"><span class="g-ic">${ICON_HAND}</span><span class="g-num"></span><span class="g-bar"><i></i></span></div>
     <div class="g-row g-disc" title="捨て札"><span class="g-ic">${ICON_DISCARD}</span><span class="g-num"></span><span class="g-bar"><i></i></span></div>
@@ -92,8 +94,9 @@ function popContent(h){
   return null;
 }
 
+// 駒の真上ではなく横(頭上カードの反対側)に置き、奥のマスにも駒の体にも重なりにくくする
 function headPx(ch){
-  const v = ch.root.position.clone(); v.y += (ch.av ? ch.av.badgeY : 1.1) + 0.42;
+  const v = ch.root.position.clone(); v.y += (ch.av ? ch.av.badgeY : 1.1)*0.78; v.x -= 0.5; v.z += 0.12;
   return K.boardPx(v);
 }
 
@@ -112,7 +115,7 @@ function frame(){
     if(!pl || !ch.shown){ h.box.style.display = 'none'; return; }
     h.box.style.display = '';
     const q = headPx(ch);
-    h.box.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px) translate(-50%, -100%)`;
+    h.box.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px) translate(-100%, -50%)`;
     const nh = pl.hand.length, nd = pl.discard.length;
     h.rows.hand.querySelector('.g-num').textContent = nh;
     h.rows.discard.querySelector('.g-num').textContent = nd;
@@ -166,5 +169,51 @@ if(typeof origSettings === 'function'){
       el('div', { class:'settings-desc' }, '画面横のプレイヤーごとの手札・捨て札の表示を隠し、パーソナル頭上のゲージだけで確認します(ゲージにカーソルを乗せると中身を表示。効果の対象選択も頭上で行えます)。'))));
   };
 }
-B.hud = { opt, huds };
+/* ---- 先読み: 手札のカードにカーソルを合わせると、盤面に結果を先に見せる ----
+   青緑 = そのカードを捨てたときに移動できるマス(安全なマスが無ければ赤 = 落ちるマス)
+   赤   = 相手の駒の隣(差分1で届くマス)。相手の手札は見えないので、すぐ届く範囲だけを示す
+   重なるマスは橙。自分の手番で、手札の中身が見えるときだけ。 */
+const C_MINE = 0x5fe0d0, C_LETHAL = 0xff3b3b, C_OPP = 0xd8463a, C_BOTH = 0xffa040;
+let previewIdx = null;
+function computePreview(handIdx){
+  const st = state, p = st.current, pl = st.players[p], card = pl.hand[handIdx];
+  if(!card || pl.personalIndex == null) return null;
+  let diff = Math.abs(cardValue(card) - cardValue(pl.personalCard));
+  if(pl.bound && diff >= 2) diff = 1;
+  const out = new Map();
+  if(diff > 0){
+    const reach = reachableAfterSteps(pl.personalIndex, diff, p);
+    const origin = pl.personalIndex;
+    const safe = [...reach].filter(i => i === origin ? (st.floor[i] === null || !st.floor[i].faceUp) : (st.windCells.has(i) || st.floor[i] === null || !st.floor[i].faceUp));
+    (safe.length ? safe : [...reach]).forEach(i => out.set(i, safe.length ? C_MINE : C_LETHAL));
+  }
+  // 相手がすぐ届く範囲(差分1 = 隣のマス)
+  st.players.forEach((op, q) => {
+    if(q === p || op.personalIndex == null) return;
+    const near = reachableAfterSteps(op.personalIndex, 1, q);
+    near.forEach(i => out.set(i, out.has(i) && out.get(i) === C_MINE ? C_BOTH : (out.get(i) || C_OPP)));
+  });
+  return out;
+}
+function setPreview(m){
+  K.preview.clear();
+  if(m) m.forEach((c, i) => K.preview.set(i, c));
+}
+document.addEventListener('mouseover', e => {
+  const cardEl = e.target.closest && e.target.closest('.right-column .hand-row .card');
+  let idx = null;
+  if(cardEl && typeof state !== 'undefined' && state && !state.gameOver && K.active()
+     && (state.phase === 'move' || state.phase === 'hand-effect') && viewerCanSee(state.current)
+     && !(state.task && state.task.type !== 'move-destination')){
+    idx = [...cardEl.parentNode.children].indexOf(cardEl);
+  }
+  if(idx === previewIdx) return;
+  previewIdx = idx;
+  try{ setPreview(idx != null && state.phase === 'move' ? computePreview(idx) : null); }catch(err){ setPreview(null); }
+});
+// 描き直し・手番の変化で消す
+const origRender2 = window.render;
+window.render = function(){ const r = origRender2.apply(this, arguments); if(!state || state.phase !== 'move'){ previewIdx = null; setPreview(null); } return r; };
+
+B.hud = { opt, huds, computePreview };
 })();

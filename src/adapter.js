@@ -34,7 +34,7 @@ const PCOL = (typeof PLAYER_COLORS!=='undefined') ? PLAYER_COLORS : ['#c9a24b','
 /* ---------------- scene ---------------- */
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-const PITCH = 0.96;
+const PITCH = 1.06; // 少し上から見下ろす(頭上の表示が奥のマスに重なりにくい)
 const TARGET = new THREE.Vector3(0, 0.45, 0.1);
 
 scene.add(new THREE.HemisphereLight(0xfff2d6, 0x1c2e27, 0.55));
@@ -1486,6 +1486,7 @@ const chars = [buildVessel(0), buildVessel(1)];
 const driving = [false, false];
 const holdBack = new Set(); // ♥演出中は裏向きの見た目を保つ
 const frozen = new Set(); // 専用演出の間、sync がマスの見た目に触れない
+const preview = new Map(); // マス番号 → 光らせる色(先読み表示)
 const parks = [null, null];
 
 /* ---------------- tween / particles ---------------- */
@@ -1801,6 +1802,9 @@ function sync(dt){
       else if(cl.contains('reachable-lethal')){ gc = 0xff4a4a; go = 0.55 + Math.sin(t*6)*0.35; }
       else if(cl.contains('reachable')){ gc = 0xffd27a; go = 0.5 + Math.sin(t*4)*0.25; }
     }
+    // 先読み表示(hud.js): 手札のカードにカーソルを合わせたときの移動先・相手が届くマス
+    const domPick = gc !== null;
+    if(gc===null && preview.has(i)){ gc = preview.get(i); go = 0.6 + Math.sin(t*3)*0.2; }
     const hov = (hoverIdx===i && cl && cl.contains('clickable')) ? 1 : 0;
     if(hov && gc===null){ gc = 0xffd27a; }
     if(hov) go = 1;
@@ -1812,7 +1816,7 @@ function sync(dt){
     const bright = 1 - 0.5*T.dim + 0.15*T.hover;
     T.topMat.color.setScalar(lava ? bright*0.9 : bright);
     // 選べるマス(移動先・効果の対象)は、裏向きなら封印の紋章が明るく光る
-    const pick = !lava && gc !== null ? 1.7 + Math.sin(t*4)*0.5 : 0;
+    const pick = lava ? 0 : domPick ? 1.7 + Math.sin(t*4)*0.5 : preview.has(i) ? 0.45 : 0; // 先読みは控えめに
     T.topMat.emissiveIntensity = (lava ? (0.75 + Math.sin(t*3 + i)*0.15) * (1 - 0.5*T.dim) : 0.22*(1-0.6*T.dim) + pick) + T.flash;
     // 解放された大地からは術式の色の光の粒が立ち昇る
     if(lava && T.shown && T.theme && Math.random() < dt*0.9) ember(T);
@@ -3061,7 +3065,7 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
-  ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  preview, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
