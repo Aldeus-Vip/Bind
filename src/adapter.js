@@ -2648,7 +2648,7 @@ let summonClock = performance.now();
 })();
 /* 連鎖の召喚は、フィールドの上側に重ねて並べる(フロアの情報を隠さない)
    自分: 左上から右へ / 相手: 右上から左へ。画面の位置に合わせて毎フレーム置き直す(カメラを動かしてもついてくる) */
-const SUMMON_SCALE = 0.5, SUMMON_STEP = 78;
+const SUMMON_SCALE = 0.42, SUMMON_STEP = 64;
 const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
 function isMineSide(p){
   const u = window.B3UI, me = u && u.myIndex ? u.myIndex() : null;
@@ -2658,13 +2658,22 @@ function summonAnchor(p, n){
   const r = canvas.getBoundingClientRect();
   if(!r.width) return chars[p] ? chars[p].root.position.clone() : new THREE.Vector3();
   const mine = isMineSide(p);
-  // 盤面の奥の列の左端 / 右端のマスを起点に、奥の列の少し上へ横一列に並べる
-  const a = screenOf(mine ? 0 : NCOLS - 1, 0);
-  const sx = (a.x - r.left) + (mine ? 1 : -1)*n*SUMMON_STEP, sy = Math.max(40, (a.y - r.top) - 34);
+  // 盤面(全マスの上面の角)が画面に映る範囲。召喚はその上端より上に、足元を合わせて並べる(フロアに重ねない)
+  let top = Infinity, left = Infinity, right = -Infinity;
+  for(let i = 0; i < NCELLS; i++) for(const dx of [-0.52, 0.52]) for(const dz of [-0.52, 0.52]){
+    const v = new THREE.Vector3(tileX(i) + dx, topY(i), tileZ(i) + dz).project(camera);
+    const x = (v.x + 1)/2*r.width, y = (1 - v.y)/2*r.height;
+    if(y < top) top = y;
+    if(x < left) left = x;
+    if(x > right) right = x;
+  }
+  const sx = mine ? left + 34 + n*SUMMON_STEP : right - 34 - n*SUMMON_STEP;
+  const sy = Math.max(30, top - 16); // 足元の召喚陣も盤面にかからない高さ
   _ndc.set(sx/r.width*2 - 1, -(sy/r.height)*2 + 1);
   _ray.setFromCamera(_ndc, camera);
-  const D = camera.position.distanceTo(TARGET)*0.82; // 盤面より少し手前
-  return _ray.ray.origin.clone().addScaledVector(_ray.ray.direction, D);
+  // 奥の列と同じ距離に置く(大きさが盤面の駒と比べやすい)
+  const back = new THREE.Vector3((tileX(0) + tileX(NCOLS - 1))/2, TOP_Y, tileZ(0));
+  return _ray.ray.origin.clone().addScaledVector(_ray.ray.direction, camera.position.distanceTo(back));
 }
 function placeSummon(s){
   const pos = summonAnchor(s.p, s.n);
@@ -2693,8 +2702,8 @@ override('triggerNumberEffect', orig => async function(rank, playerIdx, depth){
   av.setSuit(SUIT_THEME[sk] || SUIT_THEME.H);
   const glow = new THREE.Color((SUIT_THEME[sk]||SUIT_THEME.H).glow).getHex();
   const s = { av, phase:Math.random()*6, blinkAt:2, p:playerIdx, n:[...summons].filter(x => x.p===playerIdx).length, dy:-0.35 };
-  s.circle = flatPlane(0.6, circleTex(['H','S','D','C'].includes(sk) ? sk : 'H'), 0xffffff, 0);
-  s.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 1, 20, 1, true), new THREE.MeshBasicMaterial({ map:pillarTex, color:glow, transparent:true, opacity:0, blending:ADD, depthWrite:false, side:THREE.DoubleSide }));
+  s.circle = flatPlane(0.45, circleTex(['H','S','D','C'].includes(sk) ? sk : 'H'), 0xffffff, 0);
+  s.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1, 20, 1, true), new THREE.MeshBasicMaterial({ map:pillarTex, color:glow, transparent:true, opacity:0, blending:ADD, depthWrite:false, side:THREE.DoubleSide }));
   s.beam.scale.y = 0.01;
   av.root.scale.setScalar(0.01);
   scene.add(av.root); scene.add(s.circle); scene.add(s.beam); summons.add(s);
