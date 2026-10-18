@@ -80,3 +80,24 @@ body.b3-hide-panels #app .floor-grid.b3{ max-width:none; width:100%; aspect-rati
   font-size:15px; line-height:1; color:#f1dfae; background:rgba(40,32,22,.85); border:1px solid rgba(201,162,75,.45); }
 #b3-cam button:hover{ background:rgba(90,70,36,.9); color:#fff3cf; }
 #b3-cam button:active{ transform:translateY(1px); }
+
+/* ===== 先読みの説明(手札・パーソナルにカーソル) ===== */
+#b3-tip{
+  position:fixed; z-index:400; max-width:340px; pointer-events:none; padding:9px 12px; border-radius:8px;
+  font-size:12.5px; line-height:1.6; color:#efe6d2;
+  background:linear-gradient(180deg, rgba(42,37,30,.97), rgba(26,22,18,.97));
+  border:1px solid rgba(212,171,82,.6); box-shadow:0 8px 24px rgba(0,0,0,.55);
+}
+#b3-tip .t-row{ display:flex; gap:8px; align-items:flex-start; }
+#b3-tip .t-row b{ flex:0 0 auto; min-width:22px; font-family:var(--b3-display, serif); color:#f3d68a; font-size:15px; }
+#b3-tip .t-suit{ margin-top:6px; padding-top:6px; border-top:1px dashed rgba(212,171,82,.35); }
+#b3-tip em{ font-style:normal; color:#a89c86; font-size:11.5px; margin-left:4px; }
+#b3-tip .t-sel{ margin-top:4px; color:#ffd27a; font-size:11.5px; }
+#b3-tip .t-head{ font-weight:700; color:#f3d68a; }
+#b3-tip .t-red{ color:#ff6a6a; font-weight:700; }
+/* 先読みで光るゲージの行 */
+.b3-gauge .g-row.pv{ outline:1px solid #ffd27a; box-shadow:0 0 10px rgba(255,210,122,.7); border-radius:4px; }
+/* 半透明(マスの選択中・ボタン・Shift) */
+.b3-gauge.ghost{ opacity:.28; pointer-events:none !important; transition:opacity .2s; }
+.b3-gauge.ghost .g-pop{ display:none !important; }
+#b3-cam button.on{ background:rgba(201,162,75,.55); color:#241a08; }

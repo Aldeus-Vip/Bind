@@ -95,13 +95,48 @@ function popContent(h){
   return null;
 }
 
-// 駒の真上ではなく横(頭上カードの反対側)に置き、奥のマスにも駒の体にも重なりにくくする
+// パーソナルの数字カード(頭上の札)の左隣に置く。札の半分の幅 + 少しの隙間だけ左へ
+const _v = new THREE.Vector3(), _r = new THREE.Vector3();
 function headPx(ch){
-  const v = ch.root.position.clone(); v.y += (ch.av ? ch.av.badgeY : 1.1)*0.78;
-  // 画面上の左・手前へずらす(カメラを回しても駒の左横に出る)
-  const yaw = K.cam ? K.cam.yaw : 0, c = Math.cos(yaw), s = Math.sin(yaw);
-  v.x += -0.5*c + 0.12*s; v.z += 0.5*s + 0.12*c;
+  if(ch.badge && ch.badge.visible){
+    ch.badge.getWorldPosition(_v);
+    _r.setFromMatrixColumn(K.camera.matrixWorld, 0).multiplyScalar(0.14).add(_v); // カメラの右方向へ札の半分
+    const a = K.boardPx(_v), b = K.boardPx(_r);
+    return { x: a.x - Math.abs(b.x - a.x) - 6, y: a.y };
+  }
+  const v = ch.root.position.clone(); v.y += (ch.av ? ch.av.badgeY : 1.1);
   return K.boardPx(v);
+}
+
+/* ---- ゲージの半透明 ----
+   マス(フロア)を選ぶ間は自動で半透明にし、カーソルにも反応しない(後ろのマスを選べる)。
+   盤面右下の「◐」ボタンで切り替え: 選択中に押すとその選択の間だけ元に戻る / 通常時に押すと常に半透明。
+   Shift キーを押している間も半透明。 */
+let ghostManual = false, ghostRestore = null, shiftHeld = false;
+const floorPick = st => !!(st.task && (st.task.type === 'move-destination' || st.task.kind === 'floor' || st.task.kind === 'floor-multi'));
+function ghostNow(st){
+  if(shiftHeld) return true;
+  if(floorPick(st)) return ghostRestore !== st.task;
+  return ghostManual;
+}
+addEventListener('keydown', e => { if(e.key === 'Shift') shiftHeld = true; });
+addEventListener('keyup', e => { if(e.key === 'Shift') shiftHeld = false; });
+addEventListener('blur', () => { shiftHeld = false; });
+let ghostBtn = null;
+function ensureGhostBtn(){
+  if(ghostBtn) return;
+  const bar = document.getElementById('b3-cam');
+  if(!bar) return;
+  ghostBtn = document.createElement('button');
+  ghostBtn.type = 'button'; ghostBtn.textContent = '◐';
+  ghostBtn.title = '頭上ゲージの半透明を切り替え(Shift を押している間も半透明)';
+  ghostBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const st = state;
+    if(st && floorPick(st)){ ghostRestore = ghostRestore === st.task ? null : st.task; }
+    else ghostManual = !ghostManual;
+  });
+  bar.insertBefore(ghostBtn, bar.firstChild);
 }
 
 let visible = false;
@@ -113,6 +148,8 @@ function frame(){
   // パネルを隠す設定: 山札をフィールドの上へ、フィールドを左いっぱいまで広げる(配置フェーズも同じ配置)
   document.body.classList.toggle('b3-hide-panels', !!(st && !st.gameOver && K.active() && opt.hidePanels));
   if(!show) return;
+  ensureGhostBtn();
+  if(ghostBtn) ghostBtn.classList.toggle('on', ghostNow(st));
   const t = performance.now()/1000;
   huds.forEach(h => {
     const ch = K.chars[h.p], pl = st.players[h.p];
@@ -133,6 +170,11 @@ function frame(){
     h.rows.hand.classList.toggle('target', !!(ht || at));
     h.rows.discard.classList.toggle('target', !!dt);
     h.box.classList.toggle('picking', !!(dt || ht));
+    // 先読み(手札にカーソル): この効果で選ぶ手札・捨て札
+    h.rows.hand.classList.toggle('pv', pvGauges.has(h.p + ':hand'));
+    h.rows.discard.classList.toggle('pv', pvGauges.has(h.p + ':discard'));
+    // 半透明: マスを選ぶ間(自動)/ ボタン / Shift を押している間。選択中のゲージは除く
+    h.box.classList.toggle('ghost', ghostNow(st) && !(dt || ht || at));
     // 選択欄・中身
     const pc = popContent(h);
     if(!pc){ if(h.popKey){ h.pop.innerHTML = ''; h.popKey = null; } }
@@ -173,51 +215,141 @@ if(typeof origSettings === 'function'){
       el('div', { class:'settings-desc' }, '画面横のプレイヤーごとの手札・捨て札の表示を隠し、パーソナル頭上のゲージだけで確認します(ゲージにカーソルを乗せると中身を表示。効果の対象選択も頭上で行えます)。'))));
   };
 }
-/* ---- 先読み: 手札のカードにカーソルを合わせると、盤面に結果を先に見せる ----
-   青緑 = そのカードを捨てたときに移動できるマス(安全なマスが無ければ赤 = 落ちるマス)
-   赤   = 相手の駒の隣(差分1で届くマス)。相手の手札は見えないので、すぐ届く範囲だけを示す
-   重なるマスは橙。自分の手番で、手札の中身が見えるときだけ。 */
-const C_MINE = 0x5fe0d0, C_LETHAL = 0xff3b3b, C_OPP = 0xd8463a, C_BOTH = 0xffa040;
-let previewIdx = null;
-function computePreview(handIdx){
-  const st = state, p = st.current, pl = st.players[p], card = pl.hand[handIdx];
-  if(!card || pl.personalIndex == null) return null;
-  let diff = Math.abs(cardValue(card) - cardValue(pl.personalCard));
-  if(pl.bound && diff >= 2) diff = 1;
-  const out = new Map();
-  if(diff > 0){
-    const reach = reachableAfterSteps(pl.personalIndex, diff, p);
-    const origin = pl.personalIndex;
-    const safe = [...reach].filter(i => i === origin ? (st.floor[i] === null || !st.floor[i].faceUp) : (st.windCells.has(i) || st.floor[i] === null || !st.floor[i].faceUp));
-    (safe.length ? safe : [...reach]).forEach(i => out.set(i, safe.length ? C_MINE : C_LETHAL));
-  }
-  // 相手がすぐ届く範囲(差分1 = 隣のマス)
-  st.players.forEach((op, q) => {
-    if(q === p || op.personalIndex == null) return;
-    const near = reachableAfterSteps(op.personalIndex, 1, q);
-    near.forEach(i => out.set(i, out.has(i) && out.get(i) === C_MINE ? C_BOTH : (out.get(i) || C_OPP)));
-  });
-  return out;
-}
-function setPreview(m){
-  K.preview.clear();
-  if(m) m.forEach((c, i) => K.preview.set(i, c));
-}
-document.addEventListener('mouseover', e => {
-  const cardEl = e.target.closest && e.target.closest('.right-column .hand-row .card');
-  let idx = null;
-  if(cardEl && typeof state !== 'undefined' && state && !state.gameOver && K.active()
-     && (state.phase === 'move' || state.phase === 'hand-effect') && viewerCanSee(state.current)
-     && !(state.task && state.task.type !== 'move-destination')){
-    idx = [...cardEl.parentNode.children].indexOf(cardEl);
-  }
-  if(idx === previewIdx) return;
-  previewIdx = idx;
-  try{ setPreview(idx != null && state.phase === 'move' ? computePreview(idx) : null); }catch(err){ setPreview(null); }
-});
-// 描き直し・手番の変化で消す
-const origRender2 = window.render;
-window.render = function(){ const r = origRender2.apply(this, arguments); if(!state || state.phase !== 'move'){ previewIdx = null; setPreview(null); } return r; };
+/* ---- カーソルを当てたときの先読み ----
+   手札のカード: 数字効果の説明と、その効果で選べるもの(マス = 効果の選択と同じ金の光、手札・捨て札 = ゲージが光る)
+   パーソナル(盤面の駒): 何回でも動けるとしたときの移動範囲。奇数回と偶数回で届くマスが違えば分けて表示し、
+     右クリックで切り替える。表向きのフロア(止まると負け)は赤。 */
+const PICK = 0xffd27a, LETHAL = 0xff4a4a, SAFE = 0x5fe0d0;
+const pvGauges = new Set();
+const tip = document.createElement('div');
+tip.id = 'b3-tip';
+tip.style.display = 'none';
+document.body.appendChild(tip);
 
-B.hud = { opt, huds, computePreview };
+const unowned = i => { const s = state.floor[i]; return s !== null && s.owner === null; };
+const faceDown = i => unowned(i) && !state.floor[i].faceUp;
+const faceUp = i => unowned(i) && state.floor[i].faceUp;
+const cellsWhere = f => { const o = []; for(let i = 0; i < state.floor.length; i++) if(f(i)) o.push(i); return o; };
+const empties = () => (typeof emptySlots === 'function' ? emptySlots() : []);
+// その効果が発動したときに最初に選ぶもの(連鎖の先は、選んだカード次第なので出さない)
+function effectTargets(card, p){
+  const op = 1 - p, key = card.suit === 'JOKER' ? 'JOKER' : card.rank, r = { cells:[], gauges:[] };
+  switch(key){
+    case 1: { const pl = state.players[p];
+      if(pl.personalIndex != null && neighbors8(pl.personalIndex).filter(faceDown).length <= 2) r.cells = empties().concat(cellsWhere(faceUp));
+      break; }
+    case 2: case 6: case 13: r.cells = cellsWhere(faceDown); break;
+    case 3: case 11: r.cells = cellsWhere(faceUp); break;
+    case 4: r.gauges.push([p, 'discard']); r.cells = empties(); break;
+    case 5: case 10: r.gauges.push([op, 'hand']); break;
+    case 7: r.cells = cellsWhere(unowned).concat(empties()); break;
+    case 8: r.cells = state.players.map(q => q.personalIndex).filter(i => i != null); break;
+    case 9: r.gauges.push([p, 'discard']); break;
+    case 12: r.gauges.push([0, 'hand'], [1, 'hand']); break;
+    case 'JOKER': r.cells = cellsWhere(unowned); r.gauges.push([op, 'hand']); break;
+  }
+  return r;
+}
+const effectOf = (list, key) => (Array.isArray(list) ? list.find(e => String(e.key) === String(key)) : null);
+// 手札のカードの説明は扇の横(盤面の光を隠さない)、駒の説明はマスの上に出す
+function showTip(html, anchor){
+  tip.innerHTML = html; tip.style.display = '';
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  const fan = anchor.closest && anchor.closest('.b3-fan');
+  if(fan){
+    const f = fan.getBoundingClientRect();
+    let x = f.right + 12;
+    if(x + w > innerWidth - 8) x = f.left - w - 12;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.max(8, innerHeight - h - 12) + 'px';
+    return;
+  }
+  const r = anchor.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width/2 - w/2)) + 'px';
+  tip.style.top = Math.max(8, r.top - h - 14) + 'px';
+}
+const esc = t => String(t).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+
+let pvKey = null, range = null, parity = 1;
+function clearPreview(){
+  pvKey = null; range = null;
+  K.preview.clear(); pvGauges.clear(); tip.style.display = 'none';
+}
+function cardPreview(card, p, anchor){
+  const t = effectTargets(card, p);
+  K.preview.clear(); pvGauges.clear();
+  t.cells.forEach(i => K.preview.set(i, PICK));
+  t.gauges.forEach(([q, part]) => pvGauges.add(q + ':' + part));
+  const num = effectOf(window.NUMBER_EFFECT_LIST || (typeof NUMBER_EFFECT_LIST !== 'undefined' ? NUMBER_EFFECT_LIST : null), card.suit === 'JOKER' ? 'JOKER' : card.rank);
+  const suit = card.suit === 'JOKER' ? null : effectOf(typeof SUIT_EFFECT_LIST !== 'undefined' ? SUIT_EFFECT_LIST : null, card.suit);
+  let html = '';
+  if(num) html += `<div class="t-row"><b>${esc(num.label)}</b><span>${esc(num.text)}</span></div>` + (num.target ? `<div class="t-sel">選ぶもの: ${esc(num.target)}</div>` : '');
+  if(suit) html += `<div class="t-row t-suit"><b>${esc(suit.label)}</b><span>${esc(suit.text)}<em>(パーソナルになったとき)</em></span></div>`;
+  if(html) showTip(html, anchor);
+}
+// 何回でも動けるとしたときの移動範囲(奇数回 / 偶数回)
+function rangeOf(p){
+  const pl = state.players[p], o = pl.personalIndex, odd = new Set(), even = new Set();
+  for(let k = 1; k <= 2*state.floor.length; k++) reachableAfterSteps(o, k, p).forEach(i => (k % 2 ? odd : even).add(i));
+  const same = odd.size === even.size && [...odd].every(i => even.has(i));
+  return { p, odd, even, same };
+}
+function lethalCell(i){
+  const s = state.floor[i];
+  return !!(s && s.faceUp && !(state.windCells && state.windCells.has(i)));
+}
+function showRange(anchor){
+  const cells = range.same || parity ? range.odd : range.even;
+  K.preview.clear(); pvGauges.clear();
+  cells.forEach(i => K.preview.set(i, lethalCell(i) ? LETHAL : SAFE));
+  const who = state.players[range.p].name;
+  const head = range.same ? `${esc(who)} の移動範囲` : `${esc(who)} の${parity ? '奇数' : '偶数'}移動範囲<em>(右クリックで${parity ? '偶数' : '奇数'}に切り替え)</em>`;
+  showTip(`<div class="t-head">${head}</div><div class="t-sel">何回でも動けるとしたときに届くマス。<span class="t-red">赤</span>は表向きのフロア(止まると負け)。</div>`, anchor);
+}
+
+document.addEventListener('mouseover', e => {
+  if(typeof state === 'undefined' || !state || state.gameOver || !state.players) return;
+  const t = e.target;
+  // 手札のカード
+  const cardEl = t.closest && t.closest('.b3-fan .hand-row .card');
+  if(cardEl && !cardEl.classList.contains('back-only')){
+    const idx = [...cardEl.parentNode.children].indexOf(cardEl);
+    const me = window.B3UI && window.B3UI.myIndex ? window.B3UI.myIndex() : null;
+    const p = me != null ? me : (typeof selectedHandTab === 'number' ? selectedHandTab : state.current);
+    const card = state.players[p] && state.players[p].hand[idx];
+    const key = 'c' + p + ':' + idx + ':' + (card && card.id);
+    if(key === pvKey) return;
+    clearPreview(); pvKey = key;
+    if(card) try{ cardPreview(card, p, cardEl); }catch(err){ clearPreview(); }
+    return;
+  }
+  // パーソナルのいるマス
+  const cell = t.closest && t.closest('.floor-cell');
+  const ci = cell ? Number(String(cell.id).replace('floor-cell-', '')) : -1;
+  const p = ci >= 0 ? state.players.findIndex(q => q.personalIndex === ci) : -1;
+  if(p >= 0 && K.active()){
+    const key = 'p' + p + ':' + ci;
+    if(key === pvKey) return;
+    clearPreview(); pvKey = key; parity = 1;
+    try{ range = rangeOf(p); showRange(cell); }catch(err){ clearPreview(); }
+    return;
+  }
+  if(pvKey) clearPreview();
+});
+// 右クリック(ドラッグしていないとき)で奇数 / 偶数を切り替える
+let rdown = null;
+document.addEventListener('pointerdown', e => { if(e.button === 2) rdown = { x:e.clientX, y:e.clientY }; }, true);
+document.addEventListener('contextmenu', e => {
+  if(!range || range.same) return;
+  if(rdown && Math.hypot(e.clientX - rdown.x, e.clientY - rdown.y) > 6) return;
+  e.preventDefault();
+  parity = 1 - parity;
+  const cell = document.getElementById('floor-cell-' + state.players[range.p].personalIndex);
+  if(cell) showRange(cell);
+});
+// 描き直したら消す(カーソルを動かせば出し直す)
+const origRender2 = window.render;
+window.render = function(){ const r = origRender2.apply(this, arguments); clearPreview(); return r; };
+
+B.hud = { opt, huds, effectTargets, rangeOf };
 })();

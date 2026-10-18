@@ -1832,8 +1832,14 @@ function sync(dt){
       else if(cl.contains('reachable')){ gc = 0xffd27a; go = 0.5 + Math.sin(t*4)*0.25; }
     }
     // 先読み表示(hud.js): 手札のカードにカーソルを合わせたときの移動先・相手が届くマス
-    const domPick = gc !== null;
-    if(gc===null && preview.has(i)){ gc = preview.get(i); go = 0.6 + Math.sin(t*3)*0.2; }
+    // 金(0xffd27a)は効果で選べるマスと同じ光り方、赤(0xff4a4a)は止まると負けのマスと同じ点滅
+    let domPick = gc !== null;
+    if(gc===null && preview.has(i)){
+      gc = preview.get(i);
+      if(gc === 0xffd27a){ go = 0.5 + Math.sin(t*4)*0.25; domPick = true; }
+      else if(gc === 0xff4a4a){ go = 0.55 + Math.sin(t*6)*0.35; }
+      else go = 0.6 + Math.sin(t*3)*0.2;
+    }
     const hov = (hoverIdx===i && cl && cl.contains('clickable')) ? 1 : 0;
     if(hov && gc===null){ gc = 0xffd27a; }
     if(hov) go = 1;
@@ -1847,6 +1853,10 @@ function sync(dt){
     // 選べるマス(移動先・効果の対象)は、裏向きなら封印の紋章が明るく光る
     const pick = lava ? 0 : domPick ? 1.7 + Math.sin(t*4)*0.5 : preview.has(i) ? 0.45 : 0; // 先読みは控えめに
     T.topMat.emissiveIntensity = (lava ? (0.75 + Math.sin(t*3 + i)*0.15) * (1 - 0.5*T.dim) : 0.22*(1-0.6*T.dim) + pick) + T.flash;
+    // 先読みで「止まると負け」の表向きフロアは、絵柄ごと赤く脈打つ
+    const redWarn = lava && !domPick && preview.get(i) === 0xff4a4a;
+    T.topMat.emissive.setHex(redWarn ? 0xff2a2a : 0xffffff);
+    if(redWarn) T.topMat.emissiveIntensity = 0.6 + Math.sin(t*6)*0.35 + T.flash;
     // 解放された大地からは術式の色の光の粒が立ち昇る
     if(lava && T.shown && T.theme && Math.random() < dt*0.9) ember(T);
     T.inlayMat.opacity = 1 - 0.45*T.dim;
