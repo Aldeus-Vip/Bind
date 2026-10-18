@@ -138,3 +138,4 @@ html body{
   background: var(--sw); border: 2px solid rgba(0,0,0,.5); box-shadow: 0 0 0 1px rgba(255,240,210,.25), 0 2px 6px rgba(0,0,0,.5); transition: transform .12s; }
 .b3-swatch:hover{ transform: scale(1.12); }
 .b3-swatch.on{ box-shadow: 0 0 0 2px #f3d68a, 0 0 12px var(--sw); transform: scale(1.12); }
+.floor-grid.b3.b3-spec-hover{ cursor: pointer; }

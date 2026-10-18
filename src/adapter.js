@@ -1640,7 +1640,8 @@ const polys = [];
 // プレイヤーが操作できるカメラ(回転 yaw・見下ろし角 pitch・ズーム)。0 / PITCH / 1 が初期位置
 const CAM0 = { yaw:0, pitch:PITCH, zoom:1 };
 const cam = Object.assign({}, CAM0);
-const viewInset = { top:0, bottom:0 }; // ui.js が効果フレーム・手札の高さを入れる
+const viewInset = { top:0, bottom:0 }; // 上下に重なる UI の分(いまは使っていない。0 のまま)
+const fitExtra = []; // カメラの画角に収めたい追加の点
 try{ const sv = JSON.parse(localStorage.getItem('b3-cam') || 'null'); if(sv) ['yaw','pitch','zoom'].forEach(k => { if(typeof sv[k]==='number' && isFinite(sv[k])) cam[k] = sv[k]; }); }catch(e){}
 const CAM_LIM = { pitch:[0.55, 1.5], zoom:[0.6, 2.2] };
 function camPlace(d){
@@ -1655,6 +1656,7 @@ function fitCamera(){
     pts.push(new THREE.Vector3(tileX(i), topY(i)+(document.body.classList.contains("b3-hide-panels") ? 2.2 : 1.68), tileZ(i))); // 頭上ゲージの分も上に空ける
     if(Math.floor(i/NCOLS)===NROWS-1) pts.push(new THREE.Vector3(tileX(i), -0.85, tileZ(i)+0.2));
   }
+  fitExtra.forEach(p => pts.push(p)); // 盤面の外で見せたいもの(spectators.js の観客など)
   // 上下に重なる UI(効果フレーム・手札)の分だけ、盤面を収める帯を狭め、画面の中で上下にずらす
   const H = lastH || 1, ins = viewInset;
   const top = 0.97 - 2*Math.min(0.4, (ins.top||0)/H), bot = -0.97 + 2*Math.min(0.4, (ins.bottom||0)/H);
@@ -2144,22 +2146,30 @@ override('triggerDualRiftTeleport', () => function(originIdx, destIdx, playerIdx
   return trackAnimation(resolve => {
     resolve = once(resolve);
     if(!settings.effectAnim){ resolve(); return; }
-    const originEl = document.getElementById(`floor-cell-${originIdx}`);
-    const destEl = document.getElementById(`floor-cell-${destIdx}`);
     const layer = fxLayer();
-    if(!originEl || !destEl || !layer){ resolve(); return; }
-    const oR = originEl.getBoundingClientRect(), dR = destEl.getBoundingClientRect();
-    const ocx = oR.left+oR.width/2, ocy = oR.top+oR.height/2, dcx = dR.left+dR.width/2, dcy = dR.top+dR.height/2;
+    if(!layer){ resolve(); return; }
     const ch = chars[playerIdx];
     driving[playerIdx] = true;
     ensureAt(ch, originIdx);
     travelingOriginIndex = originIdx;
     render();
+    // 位置は描き直しの後に測る(描き直しでスクロール位置やマスの要素が変わると、先に測った位置がずれる)。
+    // 中心は 3D のマスの位置を画面に投影したもの、大きさはマスの要素から
+    layout(true);
+    const sizeOf = i => { const e = document.getElementById(`floor-cell-${i}`); const r = e ? e.getBoundingClientRect() : null; return r && r.width ? r : { width:90, height:70 }; };
+    const oS = screenOf(originIdx), dS = screenOf(destIdx), oR = sizeOf(originIdx), dR = sizeOf(destIdx);
+    const ocx = oS.x, ocy = oS.y, dcx = dS.x, dcy = dS.y;
     const mk = (x,y,w,h) => el('img', { src: ASSETS.rift4, class:'rift4-fx b3-flat',
       style:`left:${x.toFixed(1)}px; top:${y.toFixed(1)}px; width:${w.toFixed(1)}px; height:${h.toFixed(1)}px;` });
     const rO = mk(ocx, ocy, oR.width, oR.height), rD = mk(dcx, dcy, dR.width, dR.height);
     layer.appendChild(rO); layer.appendChild(rD);
     setTimeout(()=>{ rO.classList.add('rift4-show'); rD.classList.add('rift4-show'); }, 20);
+    // 演出の途中でカメラ・スクロール・画面の大きさが変わっても、裂け目がマスについていくように毎フレーム置き直す
+    (function follow(){
+      if(!rO.isConnected && !rD.isConnected) return;
+      [[rO, originIdx], [rD, destIdx]].forEach(([im, i]) => { const q = screenOf(i); im.style.left = q.x.toFixed(1) + 'px'; im.style.top = q.y.toFixed(1) + 'px'; });
+      requestAnimationFrame(follow);
+    })();
     (async () => {
       await wait(0.48);
       const y0 = ch.root.position.y;
@@ -3244,7 +3254,7 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
-  preview, cam, CAM0, setCam, viewInset, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  preview, cam, CAM0, setCam, viewInset, fitExtra, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
