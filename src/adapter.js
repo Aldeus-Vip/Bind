@@ -1835,18 +1835,6 @@ function sync(dt){
     const T = tiles[i], slot = st.floor[i];
     const exists = !!(slot && slot.card!==null);
     const want = exists && !wh.has(i);
-    if(!T.anim){
-      if(want && !T.shown){
-        T.shown = true;
-        if(T.destroyed && !reset) riseTile(T); else T.g.visible = true;
-        T.destroyed = false;
-      } else if(!want && T.shown){
-        T.shown = false;
-        if(!exists && !reset && T.gone){ T.destroyed = true; T.g.visible = false; T.gone = false; } // 専用演出で既に消えている
-        else if(!exists && !reset){ T.destroyed = true; (T.dropFx ? T.dropFx(T) : dropTile(T)); T.dropFx = null; }
-        else { T.g.visible = false; T.destroyed = !exists; }
-      }
-    }
     // マスの見た目
     let key = null, card = null, ov = null;
     if(exists){
@@ -1858,6 +1846,21 @@ function sync(dt){
           if(slot.debuff==='lightning') ov = 'debuff';
           else if(slot.buff==='sun') ov = 'sun';
         }
+      }
+    }
+    if(!T.anim){
+      if(want && !T.shown){
+        T.shown = true;
+        // 空きマスに新しく置かれたフロア: せり上がる前に今のカード(多くは裏向き)の絵柄へ替える。
+        // せり上がり中は絵柄の更新を止めるので、先に替えないと前にあったカードの表が見えてしまう
+        if(key && key !== T.key) setTop(T, key, card);
+        if(T.destroyed && !reset) riseTile(T); else T.g.visible = true;
+        T.destroyed = false;
+      } else if(!want && T.shown){
+        T.shown = false;
+        if(!exists && !reset && T.gone){ T.destroyed = true; T.g.visible = false; T.gone = false; } // 専用演出で既に消えている
+        else if(!exists && !reset){ T.destroyed = true; (T.dropFx ? T.dropFx(T) : dropTile(T)); T.dropFx = null; }
+        else { T.g.visible = false; T.destroyed = !exists; }
       }
     }
     if(key && key !== T.key && !T.anim){
