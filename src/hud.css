@@ -71,3 +71,12 @@ body.b3-hide-panels #app .floor-grid.b3{ max-width:none; width:100%; aspect-rati
   content:''; position:absolute; inset:0; z-index:4; background:linear-gradient(transparent 35%, rgba(20,12,4,.45)); box-shadow:inset 0 0 0 2px #ffd36a; border-radius:inherit; pointer-events:none;
 }
 @keyframes b3-sel-pop{ from{ transform:translate(-50%, 0) scale(.3); opacity:0; } to{ transform:translate(-50%, 0) scale(1); opacity:1; } }
+
+/* ===== カメラ操作ボタン(src/camera.js) ===== */
+.floor-grid.b3{ touch-action:none; }
+#b3-cam{ position:fixed; z-index:140; display:flex; gap:4px; transform:translate(-100%,-100%);
+  padding:4px; border-radius:10px; background:rgba(12,10,8,.55); border:1px solid rgba(201,162,75,.35); backdrop-filter:blur(3px); }
+#b3-cam button{ width:28px; height:28px; padding:0; border-radius:7px; cursor:pointer;
+  font-size:15px; line-height:1; color:#f1dfae; background:rgba(40,32,22,.85); border:1px solid rgba(201,162,75,.45); }
+#b3-cam button:hover{ background:rgba(90,70,36,.9); color:#fff3cf; }
+#b3-cam button:active{ transform:translateY(1px); }

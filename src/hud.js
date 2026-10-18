@@ -96,7 +96,10 @@ function popContent(h){
 
 // 駒の真上ではなく横(頭上カードの反対側)に置き、奥のマスにも駒の体にも重なりにくくする
 function headPx(ch){
-  const v = ch.root.position.clone(); v.y += (ch.av ? ch.av.badgeY : 1.1)*0.78; v.x -= 0.5; v.z += 0.12;
+  const v = ch.root.position.clone(); v.y += (ch.av ? ch.av.badgeY : 1.1)*0.78;
+  // 画面上の左・手前へずらす(カメラを回しても駒の左横に出る)
+  const yaw = K.cam ? K.cam.yaw : 0, c = Math.cos(yaw), s = Math.sin(yaw);
+  v.x += -0.5*c + 0.12*s; v.z += 0.5*s + 0.12*c;
   return K.boardPx(v);
 }
 

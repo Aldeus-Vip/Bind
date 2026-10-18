@@ -1593,6 +1593,16 @@ async function hopTo(ch, dest, dur, height){
 /* ---------------- camera fit / DOM cell overlay ---------------- */
 let lastW = 0, lastH = 0;
 const polys = [];
+// プレイヤーが操作できるカメラ(回転 yaw・見下ろし角 pitch・ズーム)。0 / PITCH / 1 が初期位置
+const CAM0 = { yaw:0, pitch:PITCH, zoom:1 };
+const cam = Object.assign({}, CAM0);
+try{ const sv = JSON.parse(localStorage.getItem('b3-cam') || 'null'); if(sv) ['yaw','pitch','zoom'].forEach(k => { if(typeof sv[k]==='number' && isFinite(sv[k])) cam[k] = sv[k]; }); }catch(e){}
+const CAM_LIM = { pitch:[0.55, 1.5], zoom:[0.6, 2.2] };
+function camPlace(d){
+  const c = Math.cos(cam.pitch);
+  camera.position.set(TARGET.x + Math.sin(cam.yaw)*c*d, TARGET.y + Math.sin(cam.pitch)*d, TARGET.z + Math.cos(cam.yaw)*c*d);
+  camera.lookAt(TARGET); camera.updateMatrixWorld();
+}
 function fitCamera(){
   const pts = [];
   for(let i=0;i<NCELLS;i++){
@@ -1603,15 +1613,21 @@ function fitCamera(){
   let lo = 4, hi = 40;
   for(let k=0;k<26;k++){
     const d = (lo+hi)/2;
-    camera.position.set(TARGET.x, TARGET.y + Math.sin(PITCH)*d, TARGET.z + Math.cos(PITCH)*d);
-    camera.lookAt(TARGET); camera.updateMatrixWorld();
+    camPlace(d);
     let fits = true;
     for(const p of pts){ const v = p.clone().project(camera); if(Math.abs(v.x)>0.97 || Math.abs(v.y)>0.97){ fits = false; break; } }
     if(fits) hi = d; else lo = d;
   }
-  const d = hi;
-  camera.position.set(TARGET.x, TARGET.y + Math.sin(PITCH)*d, TARGET.z + Math.cos(PITCH)*d);
-  camera.lookAt(TARGET); camera.updateMatrixWorld();
+  camPlace(hi / cam.zoom);
+}
+let camSaveT = 0;
+function setCam(o){
+  if(o.yaw!=null){ cam.yaw = Math.atan2(Math.sin(o.yaw), Math.cos(o.yaw)); }
+  if(o.pitch!=null) cam.pitch = Math.min(CAM_LIM.pitch[1], Math.max(CAM_LIM.pitch[0], o.pitch));
+  if(o.zoom!=null) cam.zoom = Math.min(CAM_LIM.zoom[1], Math.max(CAM_LIM.zoom[0], o.zoom));
+  if(lastW) layout(true);
+  clearTimeout(camSaveT);
+  camSaveT = setTimeout(() => { try{ localStorage.setItem('b3-cam', JSON.stringify(cam)); }catch(e){} }, 300);
 }
 function computePolys(){
   for(let i=0;i<NCELLS;i++){
@@ -1631,9 +1647,11 @@ function layout(force){
   const w = grid.clientWidth, h = grid.clientHeight;
   if(!w || !h) return;
   if(force || w!==lastW || h!==lastH){
-    lastW = w; lastH = h;
-    renderer.setSize(w, h, false);
-    camera.aspect = w/h; camera.updateProjectionMatrix();
+    if(w!==lastW || h!==lastH){
+      lastW = w; lastH = h;
+      renderer.setSize(w, h, false);
+      camera.aspect = w/h; camera.updateProjectionMatrix();
+    }
     fitCamera(); computePolys();
     force = true;
   }
@@ -1927,9 +1945,9 @@ function loop(){
     if(!ch.busy){
       ch.av.idle(t, ch.phase);
       // 待機中はカメラの方を向く。効果の対象があるときはしばらくそちらを向く(faceTo)
-      const want = (ch.faceYaw!=null && performance.now() < ch.faceUntil) ? ch.faceYaw : 0;
+      const facing = ch.faceYaw!=null && performance.now() < ch.faceUntil, want = facing ? ch.faceYaw : cam.yaw;
       let dy = want - ch.root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-      ch.root.rotation.y += dy*(want ? 0.12 : 0.06);
+      ch.root.rotation.y += dy*(facing ? 0.12 : 0.06);
       // ウィンドマスでは軽く浮遊する(以前は += で毎フレーム足し込んでいたため高さがずれて残っていた)
       const st = curState();
       const floatY = (st && st.windCells && ch.idx!=null && st.windCells.has(ch.idx)) ? Math.sin(t*2.2 + ch.phase)*0.025 : 0;
@@ -3065,7 +3083,7 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
-  preview, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  preview, cam, CAM0, setCam, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
