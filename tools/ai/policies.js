@@ -44,5 +44,5 @@ function aiPolicy(level, opt = {}){
 addPolicy('strong1', () => aiPolicy('strong'));
 addPolicy('oracle1', () => aiPolicy('oracle'));
 addPolicy('strong', () => aiPolicy('strong', { ply2:true, worlds:4, topMoves:10, handTop:3, oppHand:2, exactTasks:true }));
-addPolicy('oracle', () => aiPolicy('oracle', { ply2:true, topMoves:16, handTop:5, oppHand:5, exactTasks:true }));
+addPolicy('oracle', () => aiPolicy('oracle', { ply2:true, topMoves:40, handTop:9, oppHand:10, exactTasks:true }));
 module.exports = { aiPolicy };

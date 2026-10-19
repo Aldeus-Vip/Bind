@@ -25,7 +25,7 @@ const brains = {
   // 設定は自己対戦の比較で決めた: 相手のハンド効果まで読む(60.5%)・効果の中の選択も評価関数で確かめる(60.5%)・
   // 候補を広げる(53.5%)が効いた。見えないカードの並べ方を 4→8 通りに増やしても変わらず、3手目まで読むとかえって弱くなった
   strong: AI.createAI(F, { level:'strong', ply2:true, worlds:4, topMoves:10, handTop:3, oppHand:2, exactTasks:true, timeBudget:2000, yield: yieldUI }),
-  oracle: AI.createAI(F, { level:'oracle', ply2:true, topMoves:16, handTop:5, oppHand:5, exactTasks:true, timeBudget:2000, yield: yieldUI }),
+  oracle: AI.createAI(F, { level:'oracle', ply2:true, topMoves:40, handTop:9, oppHand:10, exactTasks:true, timeBudget:2500, yield: yieldUI }),
 };
 const level = () => (typeof state !== 'undefined' && state && state.vsCPU ? state.cpuLevel : null);
 const brain = () => brains[level()] || null;
