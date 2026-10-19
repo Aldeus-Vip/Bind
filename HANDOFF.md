@@ -302,7 +302,7 @@ node tests/play.js                # 例
 
 - `fx:true` のモデルは生物として登録せず、`B3.gltfOf[key]` に入れるだけ。
 | ウィンドマス | `assets/textures/wind_ring.png` | `IM.wind`(マスの上でゆっくり回る) |
-| 雷撃フロア | `assets/textures/lightning_floor.png`(黒を透過) | `IM.lightningFloor`。加算で重ね、マスを暗く沈めて稲妻が脈打ち・ときどき閃く |
+| 雷撃フロア | `assets/textures/lightning_bolt.png`(稲妻)・`lightning_glow.png`(下地の光) | 稲妻は明滅し、ときどき強く閃く(閃くたびに向きが変わる)。下地の光は常に出してゆっくり脈打つ。マスは暗く沈める |
 
 ## 17. スマホ向け軽量版(2026-10-19)
 

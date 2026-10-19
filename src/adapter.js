@@ -94,7 +94,8 @@ function loadImg(src){
 }
 const IM = {
   magma: loadImg(A.magmaTexture),
-  lightningFloor: loadImg((window.BIND_TEX || {}).lightning_floor || A.lightningFloorNew), // 雷撃フロア(黒を透過した稲妻の絵)
+  lightningFloor: loadImg((window.BIND_TEX || {}).lightning_bolt || A.lightningFloorNew), // 雷撃フロアの稲妻(黒を透過。明滅させる)
+  lightningGlow: loadImg((window.BIND_TEX || {}).lightning_glow), // 雷撃フロアの下地の光(常に表示し、ゆっくり脈打つ)
   sun: loadImg((window.BIND_TEX || {}).sun_emblem || A.sunEmblem), // A の太陽の紋章(聖獣の意匠に合わせた新しい絵)
   wind: loadImg((window.BIND_TEX || {}).wind_ring || A.windRing7), // ウィンドマス(透過した風の渦の絵)
   // フロアの大地と封印の紋章(assets/textures、build.mjs が BIND_TEX に入れる)
@@ -368,6 +369,9 @@ function topTex(key, card, i){
   topTexCache.set(ck, pair);
   return pair;
 }
+// 雷撃フロアの下地の光(稲妻の下に敷く。加算で重ねる)
+const boltGlowTex = canvasTex(256, 256, g => { if(ready(IM.lightningGlow)) g.drawImage(IM.lightningGlow, 0, 0, 256, 256); });
+const boltGlowGeo = new THREE.PlaneGeometry(1.15, 1.15);
 // 太陽の強化・雷のデバフはマスの上に重ねる
 const overlayCache = new Map();
 function overlayTex(key){
@@ -1782,10 +1786,17 @@ function setTop(T, key, card){
 }
 function setOverlay(T, ov){
   T.ov = ov;
+  if(T.boltGlow) T.boltGlow.visible = ov === 'debuff';
+  if(ov !== 'debuff') T.inlay.rotation.z = 0;
   if(!ov){ T.inlay.visible = false; return; }
+  if(ov === 'debuff' && !T.boltGlow){
+    T.boltGlow = new THREE.Mesh(boltGlowGeo, new THREE.MeshBasicMaterial({ map:boltGlowTex, color:new THREE.Color(1.9, 1.7, 2.4), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending }));
+    T.boltGlow.rotation.x = -Math.PI/2; T.boltGlow.position.copy(T.inlay.position); T.boltGlow.position.y -= 0.002; T.boltGlow.renderOrder = 4;
+    T.inlay.parent.add(T.boltGlow); T.boltFlash = 0;
+  }
   T.inlayMat.map = overlayTex(ov);
   T.inlayMat.blending = ov === 'debuff' ? THREE.AdditiveBlending : THREE.NormalBlending; // 雷撃は光として重ねる
-  if(ov === 'debuff') T.inlayMat.color.setRGB(2.2, 2.0, 3.2); else T.inlayMat.color.setRGB(1, 1, 1); // 加算で稲妻の線を青紫のままはっきり光らせる
+  if(ov === 'debuff') T.inlayMat.color.setRGB(1.6, 1.5, 2.2); else T.inlayMat.color.setRGB(1, 1, 1); // 加算で稲妻の線を青紫のままはっきり光らせる
   T.inlayMat.needsUpdate = true; T.inlay.visible = true;
 }
 // 封印が解かれる: 亀裂が光り、揺れ、光が噴き出して表向きの大地に変わる
@@ -1923,10 +1934,14 @@ function sync(dt){
     if(lava && T.shown && T.theme && Math.random() < dt*0.9) ember(T);
     T.inlayMat.opacity = 1 - 0.45*T.dim;
     if(T.ov === 'debuff'){
-      // 雷撃フロア: 稲妻がゆっくり脈打ち、ときどき強く閃く
-      const zap = Math.random() < 0.035 ? 0.6 : 0;
-      T.inlayMat.opacity = Math.min(1.2, 0.62 + 0.25*Math.sin(t*4.2 + i*1.7) + zap)*(1 - 0.45*T.dim);
-      T.inlay.scale.setScalar(1 + 0.025*Math.sin(t*6.3 + i) + zap*0.05);
+      // 雷撃フロア: 下地の光は常に出してゆっくり脈打つ。稲妻は明滅し、ときどき強く閃く(閃くたびに向きが変わる)
+      const fade = 1 - 0.45*T.dim, step = Math.min(0.1, dt || 0.016);
+      if(Math.random() < step*2.2){ T.boltFlash = 1; T.inlay.rotation.z = Math.random()*Math.PI*2; }
+      T.boltFlash = (T.boltFlash || 0)*Math.pow(0.015, step);
+      const flicker = Math.random() < 0.25 ? Math.random()*0.25 : 0;
+      T.inlayMat.opacity = Math.min(1, 0.22 + 0.78*T.boltFlash + flicker)*fade;
+      T.inlay.scale.setScalar(1 + 0.06*T.boltFlash);
+      if(T.boltGlow){ T.boltGlow.material.opacity = (0.6 + 0.3*Math.sin(t*1.6 + i*1.3) + 0.3*T.boltFlash)*fade; T.boltGlow.scale.setScalar(1 + 0.05*Math.sin(t*1.6 + i*1.3)); }
     } else if(T.inlay.scale.x !== 1) T.inlay.scale.setScalar(1);
     // 揺れ(既存演出の impact-shake / zap-shake を検知)
     const shaking = cl && (cl.contains('impact-shake') || cl.contains('zap-shake'));
