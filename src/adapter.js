@@ -396,33 +396,58 @@ function badgeTex(p, card, name){
   if(badgeCache.has(key)) return badgeCache.get(key);
   const col = PCOL[p] || '#888';
   const t = canvasTex(160,224,g=>{
-    // パーソナルが持っているカード(公開情報)を頭上に表示。暗い石の札に古い金の縁、持ち主の色は上の宝石と名前の光で示す
+    // パーソナルが持っているカード(公開情報)を頭上に表示。
+    // 札の模様は白黒で描き(白い所ほど明るく)、あとから持ち主の色を掛けて、札全体をプレイヤーカラーの石板にする
     const cut = (x,y,w,h,c) => { g.beginPath(); g.moveTo(x+c,y); g.lineTo(x+w-c,y); g.lineTo(x+w,y+c); g.lineTo(x+w,y+h-c); g.lineTo(x+w-c,y+h); g.lineTo(x+c,y+h); g.lineTo(x,y+h-c); g.lineTo(x,y+c); g.closePath(); };
-    let gr = g.createLinearGradient(0,0,0,224); gr.addColorStop(0,'#332b23'); gr.addColorStop(1,'#110e0b');
-    cut(3,3,154,218,16); g.fillStyle = gr; g.fill();
-    // 石の斑
-    for(let k=0;k<70;k++){ const x=6+((k*53)%148), y=6+((k*97)%212); g.fillStyle = k%3 ? 'rgba(0,0,0,0.18)' : 'rgba(255,235,200,0.05)'; g.fillRect(x,y,2+(k%3),2+(k%2)); }
-    g.lineWidth = 3; g.strokeStyle = '#b8913f'; cut(4.5,4.5,151,215,15); g.stroke();
-    g.lineWidth = 1; g.strokeStyle = 'rgba(243,214,138,0.55)'; cut(10,10,140,204,11); g.stroke();
-    // 名前(持ち主の色で光る)
+    g.save(); cut(3,3,154,218,16); g.clip();
+    // 白黒の模様: 地(明るい灰)・彫り込んだ縁の帯(白)・溝と四隅の飾り(黒)・石の斑
+    let gr = g.createLinearGradient(0,0,0,224); gr.addColorStop(0,'#e6e6e6'); gr.addColorStop(1,'#8c8c8c');
+    g.fillStyle = gr; g.fillRect(0,0,160,224);
+    for(let k=0;k<90;k++){ const x=6+((k*53)%148), y=6+((k*97)%212); g.fillStyle = k%3 ? 'rgba(0,0,0,0.16)' : 'rgba(255,255,255,0.25)'; g.fillRect(x,y,2+(k%3),2+(k%2)); }
+    g.lineWidth = 8; g.strokeStyle = '#ffffff'; cut(9,9,142,206,12); g.stroke();          // 縁の帯
+    g.lineWidth = 1.5; g.strokeStyle = 'rgba(0,0,0,0.75)'; cut(5,5,150,214,14); g.stroke(); cut(13,13,134,198,9); g.stroke(); // 帯の両側の溝
+    // 四隅の飾り(彫った菱形と弧)
+    [[18,18,1,1],[142,18,-1,1],[18,206,1,-1],[142,206,-1,-1]].forEach(([x,y,sx,sy]) => {
+      g.fillStyle = 'rgba(0,0,0,0.7)';
+      g.beginPath(); g.moveTo(x,y-4*sy); g.lineTo(x+4*sx,y); g.lineTo(x,y+4*sy); g.lineTo(x-4*sx,y); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(x,y,9,sx>0?(sy>0?0:-Math.PI/2):(sy>0?Math.PI/2:Math.PI),sx>0?(sy>0?Math.PI/2:0):(sy>0?Math.PI:Math.PI*1.5)); g.stroke();
+    });
+    // 名前の下に刻まれた横線(ルーンの刻み)
+    g.fillStyle = 'rgba(0,0,0,0.55)'; for(let x=28;x<=132;x+=8){ g.fillRect(x,40,4,1.5); g.fillRect(x,206,4,1.5); }
+    // 窓の両脇に彫った縦の溝(色の面に模様を付ける)
+    g.fillStyle = 'rgba(0,0,0,0.35)'; [22,136].forEach(x => { for(let y=60;y<=190;y+=10) g.fillRect(x,y,2,6); });
+    // 端ほど暗く
+    gr = g.createRadialGradient(80,112,50,80,112,150); gr.addColorStop(0,'rgba(0,0,0,0)'); gr.addColorStop(1,'rgba(0,0,0,0.5)');
+    g.fillStyle = gr; g.fillRect(0,0,160,224);
+    // 持ち主の色を掛ける(白い所 = プレイヤーカラー、黒い所 = 暗い彫り)
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = col; g.fillRect(0,0,160,224);
+    g.globalCompositeOperation = 'source-over';
+    // 上からの淡い艶
+    gr = g.createLinearGradient(0,0,0,110); gr.addColorStop(0,'rgba(255,245,225,0.22)'); gr.addColorStop(1,'rgba(255,245,225,0)');
+    g.fillStyle = gr; g.fillRect(0,0,160,224);
+    g.restore();
+    g.lineWidth = 3; g.strokeStyle = '#b8913f'; cut(4.5,4.5,151,215,15); g.stroke();   // 外の金縁
+    // 名前
     g.textAlign='center'; g.textBaseline='middle';
     g.font = '700 22px Cinzel, "Shippori Mincho", serif';
-    g.shadowColor = col; g.shadowBlur = 10; g.fillStyle = '#f3e6c4'; g.fillText(name,80,27); g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0.9)'; g.shadowBlur = 4; g.fillStyle = '#fbf2dc'; g.fillText(name,80,26); g.shadowBlur = 0;
     // 窓: 古い羊皮紙
-    gr = g.createRadialGradient(80,124,20,80,124,110); gr.addColorStop(0,'#eadcbc'); gr.addColorStop(1,'#a8916a');
-    cut(20,44,120,160,10); g.fillStyle = gr; g.fill();
-    g.lineWidth = 2; g.strokeStyle = '#6e5424'; cut(20,44,120,160,10); g.stroke();
-    // 上の宝石(持ち主の色)
-    g.save(); g.translate(80,44); g.rotate(Math.PI/4);
-    g.shadowColor = col; g.shadowBlur = 12; g.fillStyle = col; g.fillRect(-7,-7,14,14); g.shadowBlur = 0;
-    g.lineWidth = 2; g.strokeStyle = '#d4ab52'; g.strokeRect(-7,-7,14,14);
+    // 窓は小さめにして、まわりのプレイヤーカラーの面を広く取る
+    gr = g.createRadialGradient(80,128,16,80,128,90); gr.addColorStop(0,'#eadcbc'); gr.addColorStop(1,'#a8916a');
+    cut(34,56,92,138,9); g.fillStyle = gr; g.fill();
+    g.lineWidth = 2; g.strokeStyle = '#4a3814'; cut(34,56,92,138,9); g.stroke();
+    // 上の金の留め石
+    g.save(); g.translate(80,56); g.rotate(Math.PI/4);
+    g.shadowColor = 'rgba(255,220,150,0.8)'; g.shadowBlur = 8; g.fillStyle = '#e8c870'; g.fillRect(-7,-7,14,14); g.shadowBlur = 0;
+    g.lineWidth = 2; g.strokeStyle = '#6e5424'; g.strokeRect(-7,-7,14,14);
     g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(-5,-5,5,5); g.restore();
     if(card){
       const red = card.suit==='H'||card.suit==='D';
       g.fillStyle = card.suit==='JOKER' ? '#3a2a5a' : red ? '#8e1f24' : '#1d1915';
-      g.font = card.suit==='JOKER' ? '900 34px Cinzel, "Shippori Mincho", serif' : '900 70px Cinzel, "Shippori Mincho", serif';
-      g.fillText(rankText(card),80,106);
-      g.font='58px serif'; g.fillText(SUITSYM[card.suit]||'',80,166);
+      g.font = card.suit==='JOKER' ? '900 26px Cinzel, "Shippori Mincho", serif' : '900 60px Cinzel, "Shippori Mincho", serif';
+      g.fillText(rankText(card),80,108);
+      g.font='48px serif'; g.fillText(SUITSYM[card.suit]||'',80,162);
     }
   });
   badgeCache.set(key, t);
