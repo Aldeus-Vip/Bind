@@ -23,38 +23,45 @@
     80%{ opacity:1; transform:translate(-50%,-80%) scale(1); }
     100%{ opacity:0; transform:translate(-50%,-100%) scale(1); }
   }
-  /* ===== Bind 3D: 手札デザイン ===== */
+  /* ===== Bind 3D: 手札デザイン(黒い地にスート色の光の線) ===== */
   .card.b3card{
-    position:relative; overflow:hidden; padding:0;
-    justify-content:flex-start; align-items:flex-start;
-    background: radial-gradient(circle at 30% 20%, #f7f0de 0%, #e9dcc0 100%);
-  }
-  .card.b3card::after{
-    content:""; position:absolute; inset:3px; border:1.5px solid var(--b3s); border-radius:4px;
-    pointer-events:none; z-index:2; opacity:.9;
+    position:relative; overflow:hidden; padding:0; container-type:inline-size;
+    justify-content:flex-start; align-items:flex-start; border-radius:7px;
+    background: var(--b3bg, #0b0a0a) !important; color: var(--b3s) !important;
   }
   .card.b3card .b3-art{
-    position:absolute; inset:15% 9% 15% 9%; border-radius:3px; z-index:1;
-    background-size: contain, cover; background-position: center 60%, center; background-repeat:no-repeat;
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.35), inset 0 0 10px rgba(0,0,0,.45);
+    position:absolute; inset:0; z-index:1;
+    background-repeat:no-repeat;
+    background-size: 84% auto, 100% 100%, cover, 100% 100%;
+    background-position: center 66%, center, center, center;
   }
   .card.b3card .b3-art.b3-art-white{ filter: invert(1) hue-rotate(180deg) brightness(1.15); }
-  .card.b3card > .rank{ position:absolute; top:2px; left:5px; z-index:3; font-size:13px; line-height:1; }
-  .card.b3card > .suit-icon{ position:absolute; top:15px; left:4px; width:10px; height:10px; margin:0; z-index:3; }
-  .card.b3card > .joker-rank, .card.b3card .b3-corner .joker-rank{ font-size:7px !important; letter-spacing:0; }
-  .card.b3card .b3-corner{
-    position:absolute; right:5px; bottom:2px; z-index:3; transform: rotate(180deg);
-    display:flex; flex-direction:column; align-items:center; gap:1px;
+  .card.b3card .b3-frame-wrap{ position:absolute; inset:0; z-index:2; pointer-events:none; }
+  .card.b3card .b3-frame-wrap svg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+  .card.b3card .b3-cframe{ filter: drop-shadow(0 0 2px var(--b3s)); }
+  .card.b3card .b3-deco{ opacity:.85; filter: drop-shadow(0 0 1.5px var(--b3s)); }
+  /* ランク: 光の線の数字(左上の切り欠きに収める) */
+  .card.b3card > .rank, .card.b3card .b3-corner .rank{
+    font-family:'Cinzel','Shippori Mincho',serif !important; font-weight:900; font-size:17cqw !important; line-height:1; letter-spacing:-.06em;
+    color: var(--b3core, #fff) !important; text-shadow: 0 0 2px var(--b3s), 0 0 5px var(--b3s), 0 0 9px var(--b3s);
   }
-  .card.b3card .b3-corner .rank{ font-size:13px; line-height:1; }
-  .card.b3card .b3-corner .suit-icon{ width:10px; height:10px; margin:0; }
-  .card.b3card.mini .b3-art, .card.b3card.mini .b3-corner{ display:none; }
-  .card.b3card.mini{ justify-content:center; align-items:center; }
-  .card.b3card.mini > .rank, .card.b3card.mini > .suit-icon{ position:static; }
+  .card.b3card > .rank{ position:absolute; top:7.5cqw; left:7cqw; width:21cqw; text-align:center; z-index:3; }
+  .card.b3card > .suit-icon{ position:absolute; top:26cqw; left:9cqw; width:17cqw; height:17cqw; margin:0; z-index:3; }
+  .card.b3card .b3-mark svg{ width:100%; height:100%; display:block; overflow:visible; filter: drop-shadow(0 0 2px var(--b3s)); }
+  .card.b3card > .joker-rank, .card.b3card .b3-corner .joker-rank{ font-size:6.5cqw !important; letter-spacing:0; writing-mode: vertical-rl; text-orientation: upright; top:6cqw !important; }
+  .card.b3card .b3-corner{
+    position:absolute; right:7cqw; bottom:7.5cqw; width:21cqw; z-index:3; transform: rotate(180deg);
+    display:flex; flex-direction:column; align-items:center; gap:2cqw;
+  }
+  .card.b3card .b3-corner .suit-icon{ width:17cqw; height:17cqw; margin:0; position:static; }
+  /* 小さなカード(ゲージの中身など): 絵と飾りは出さず、黒い地に光の数字とスートだけ */
+  .card.b3card.mini .b3-art, .card.b3card.mini .b3-corner, .card.b3card.mini .b3-frame-wrap{ display:none; }
+  .card.b3card.mini{ justify-content:center; align-items:center; box-shadow: inset 0 0 0 1px var(--b3s), 0 0 5px color-mix(in srgb, var(--b3s) 55%, transparent) !important; }
+  .card.b3card.mini > .rank, .card.b3card.mini > .suit-icon{ position:static; width:auto; }
+  .card.b3card.mini > .rank{ font-size:13px !important; }
   .card.b3card.mini > .suit-icon{ width:12px; height:12px; }
+  .card.b3card.mini > .joker-rank{ font-size:7px !important; writing-mode: horizontal-tb; }
   .card-back.b3back{ background-size: cover !important; background-position: center !important; }
-  .card.b3card > .rank, .card.b3card .b3-corner .rank{ text-shadow: 0 0 2px #f4ecd8, 0 0 2px #f4ecd8, 0 0 4px #f4ecd8; }
-  .card.b3card > .suit-icon, .card.b3card .b3-corner .suit-icon{ filter: drop-shadow(0 0 1.5px #f4ecd8) drop-shadow(0 0 1px #f4ecd8); }
   /* =====================================================================
      Bind UI テーマ: 封印された大地 / 石版 / 金の縁 / 亀裂から漏れる光
      背景・パネル・ボタン・文字・ウィンドウを盤面と同じ世界観に揃える。
@@ -212,7 +219,7 @@
 
   /* ---- 手札のエリア ---- */
   .hand-mini-row.hand-area-active{ box-shadow: 0 0 0 1px var(--b3-gold-hi), 0 0 16px var(--b3-glow) !important; background: rgba(212,171,82,.08) !important; }
-  .card.b3card{ box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 3px 8px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.35) !important; }
+  .card.b3card{ box-shadow: 0 3px 8px rgba(0,0,0,.6), 0 0 7px color-mix(in srgb, var(--b3s) 35%, transparent) !important; }
   .hand-row .card.b3card:not(.static):hover{ transform: translateY(-4px); box-shadow: 0 0 0 1px var(--b3s), 0 0 16px var(--b3s), 0 6px 12px rgba(0,0,0,.6) !important; }
   .card-back.b3back{ box-shadow: 0 0 0 1px rgba(212,171,82,.45), 0 3px 8px rgba(0,0,0,.5) !important; border-radius:5px; }
 

@@ -3095,10 +3095,13 @@ function renderPortrait(card, neutral){
   return url;
 }
 function artBackground(card, url){
-  const th = themeOf(card);
-  const grad = `radial-gradient(circle at 50% 64%, ${th.glow} 0%, ${th.dark} 72%)`;
-  if(url && url.startsWith('data:image/jpeg')) return `url(${url})`; // コンセプトアートは全面に
-  return url ? `url(${url}), ${grad}` : grad;
+  const th = themeOf(card), bg = CARD_BG[cardSuitKey(card)] || th.dark;
+  // 黒に近い地に、足元から淡くスートの光。上部にスートの紋章を光の線で浮かべる
+  // 層は常に4枚(大きさの指定を揃えるため): 生物 / 紋章 / 足元の光(またはコンセプトアート) / 地
+  const em = `url("${emblemURL(card)}")`, base = `radial-gradient(circle at 50% 40%, ${th.dark} 0%, ${bg} 75%)`;
+  if(url && url.startsWith('data:image/jpeg')) return `none, ${em}, url(${url}), ${base}`; // コンセプトアートは窓いっぱいに
+  const foot = `radial-gradient(ellipse 70% 45% at 50% 82%, ${th.glow}55 0%, transparent 70%)`;
+  return `${url ? `url(${url})` : 'none'}, ${em}, ${foot}, ${base}`;
 }
 function applyPortrait(key){
   const url = portraitCache.get(key);
@@ -3130,20 +3133,123 @@ function requestPortrait(card){
   if(!portraitQueued.has(key)){ portraitQueued.add(key); portraitQueue.push(card); if(portraitQueue.length===1) setTimeout(pumpPortraits, 0); }
   return null;
 }
+/* ---------- カードの顔: 黒い地にスート色の光の線で描く(Riku さんの案) ----------
+   ・カード全体をスートの色をわずかに含んだ黒にし、外周と絵の窓をスート色の光の線で囲む
+   ・左上と右下は窓を切り欠いて、ランクとスートを光の線で描く
+   ・窓の両脇にスートの模様(♥ 鎖 / ♠ 黒曜石の刃 / ♦ 結晶 / ♣ 星 / JOKER 亀裂・光輪)
+   ・窓の角に、その生物の印(A 太陽 / 2 召喚陣 / … / K 槌)
+   ・絵の上部にスートの紋章を光の線で浮かべる(添付のカードのように、スートを絵の中に入れる) */
+const CARD_BG = { H:'#120406', S:'#0b0612', D:'#120c03', C:'#040a15', JB:'#070303', JW:'#0b0f13' };
+// 光の線で描く形(24×24)。fill はあとで地の色で塗り、外側の線だけを残す
+const SUIT_PATH = {
+  H: 'M12 20.5C12 20.5 3.2 14.6 3.2 8.9A4.6 4.6 0 0 1 12 6.6A4.6 4.6 0 0 1 20.8 8.9C20.8 14.6 12 20.5 12 20.5Z',
+  D: 'M12 2.6L19.4 12L12 21.4L4.6 12Z',
+  S: 'M12 2.8C12 2.8 3.4 9.6 3.4 14A4 4 0 0 0 10.6 16.3L9.3 21.2H14.7L13.4 16.3A4 4 0 0 0 20.6 14C20.6 9.6 12 2.8 12 2.8Z',
+  C: 'M12 3.2A3.9 3.9 0 1 1 12 11A3.9 3.9 0 1 1 12 3.2ZM7.4 9.4A3.9 3.9 0 1 1 7.4 17.2A3.9 3.9 0 1 1 7.4 9.4ZM16.6 9.4A3.9 3.9 0 1 1 16.6 17.2A3.9 3.9 0 1 1 16.6 9.4ZM10.9 13.5H13.1L14.2 21H9.8Z',
+  JB: 'M5 21.5L14.5 4.5M14.5 4.5C19 4.2 21.6 7 21 12.5C19.4 9 16.6 7.6 12.6 8',
+  JW: 'M12 5.5A2.6 2.6 0 1 1 12 10.7A2.6 2.6 0 1 1 12 5.5ZM12 12.5C9 12.5 7 15 7 18.5M12 12.5C15 12.5 17 15 17 18.5M3.5 11C6 8 8 10 9.6 12.2M20.5 11C18 8 16 10 14.4 12.2',
+};
+// 生物ごとの印(数字ごと)
+const RANK_GLYPH = {
+  1: 'M12 8.2A3.8 3.8 0 1 1 12 15.8A3.8 3.8 0 1 1 12 8.2ZM12 2.5V5.5M12 18.5V21.5M2.5 12H5.5M18.5 12H21.5M5.3 5.3L7.4 7.4M16.6 16.6L18.7 18.7M5.3 18.7L7.4 16.6M16.6 7.4L18.7 5.3',
+  2: 'M12 4A8 8 0 1 1 12 20A8 8 0 1 1 12 4ZM12 6.5L18 16.5H6Z',
+  3: 'M8.5 10.5A3.5 3.5 0 1 1 8.5 17.5A3.5 3.5 0 1 1 8.5 10.5ZM15.5 5A2.3 2.3 0 1 1 15.5 9.6A2.3 2.3 0 1 1 15.5 5ZM17 13.5A1.6 1.6 0 1 1 17 16.7A1.6 1.6 0 1 1 17 13.5Z',
+  4: 'M12.5 2.5L9 9L14.5 12.2L9.8 17.4L12.4 21.5',
+  5: 'M5.5 5.5C18.5 5 18.5 12 12 12C5.5 12 5.5 19 18.5 18.5M18.5 18.5L16.5 16.8',
+  6: 'M3 10Q7.5 5 12 10T21 10M3 15.5Q7.5 10.5 12 15.5T21 15.5',
+  7: 'M4 5.5H20M6 9.5H18M8 13.5H16M10 17.5H14M11.5 21H12.5',
+  8: 'M13.6 2.5L6.5 13.2H11.6L9.6 21.5L17.6 9.6H12.6Z',
+  9: 'M8.2 20.5V6.5M15.8 20.5V6.5M5.5 5H18.5M5.5 20.5H18.5M12 3V5',
+  10: 'M6 7.5A1.2 1.2 0 1 1 6 9.9A1.2 1.2 0 1 1 6 7.5ZM12 4A1.2 1.2 0 1 1 12 6.4A1.2 1.2 0 1 1 12 4ZM18 8A1.2 1.2 0 1 1 18 10.4A1.2 1.2 0 1 1 18 8ZM9 13A1.2 1.2 0 1 1 9 15.4A1.2 1.2 0 1 1 9 13ZM15.5 14A1.2 1.2 0 1 1 15.5 16.4A1.2 1.2 0 1 1 15.5 14ZM12 18.5A1.2 1.2 0 1 1 12 20.9A1.2 1.2 0 1 1 12 18.5Z',
+  11: 'M2.8 12Q12 3.5 21.2 12Q12 20.5 2.8 12ZM12 9.2A2.8 2.8 0 1 1 12 14.8A2.8 2.8 0 1 1 12 9.2Z',
+  12: 'M4 18.5L5 7.5L9 12L12 5.5L15 12L19 7.5L20 18.5Z',
+  13: 'M5 5H14.5V10.5H5ZM10.5 10.5L16.5 21.5M14.5 7.7H19',
+};
+// スートの模様(窓の両脇に並べる小さな印)
+const SUIT_MOTIF = {
+  H: 'M8 9A4 3 0 1 1 16 9A4 3 0 1 1 8 9ZM8 15A4 3 0 1 1 16 15A4 3 0 1 1 8 15Z',           // 鎖
+  S: 'M12 3L15 12L12 21L9 12Z',                                                          // 黒曜石の刃
+  D: 'M12 4L18 12L12 20L6 12ZM6 12H18M12 4V20',                                           // 結晶
+  C: 'M12 4L13.6 10.4L20 12L13.6 13.6L12 20L10.4 13.6L4 12L10.4 10.4Z',                    // 星
+  JB: 'M6 4L11 11L8 14L14 20M11 11L17 7',                                                  // 亀裂
+  JW: 'M12 6A6 6 0 1 1 12 18A6 6 0 1 1 12 6Z',                                             // 光輪
+};
+const cardSuitKey = card => card.suit==='JOKER' ? (String(card.id).endsWith('2') ? 'JW' : 'JB') : card.suit;
+// 絵の窓(100×140 の座標)。左上と右下を切り欠いて、ランクとスートの場所にする
+const WIN = { l:7, t:7, r:93, b:133, nw:21, nh:41 };
+const WIN_POLY = `polygon(${[[WIN.l+WIN.nw, WIN.t], [WIN.r, WIN.t], [WIN.r, WIN.b-WIN.nh], [WIN.r-WIN.nw, WIN.b-WIN.nh], [WIN.r-WIN.nw, WIN.b], [WIN.l, WIN.b], [WIN.l, WIN.t+WIN.nh], [WIN.l+WIN.nw, WIN.t+WIN.nh]].map(([x, y]) => `${x}% ${(y/140*100).toFixed(2)}%`).join(',')})`;
+function glyph(d, x, y, size, color, bg, w){
+  const k = size/24;
+  return `<g transform="translate(${x - size/2} ${y - size/2}) scale(${k})" fill="none" stroke-linecap="round" stroke-linejoin="round">` +
+    `<path d="${d}" stroke="${color}" stroke-width="${((w || 1.6)*2/k).toFixed(2)}"/>` +
+    (bg ? `<path d="${d}" fill="${bg}" stroke="none"/>` : '') + `</g>`;
+}
+const frameCache = new Map();
+function cardFrameSVG(card){
+  const sk = cardSuitKey(card), key = sk + ':' + (card.rank || 'J');
+  if(frameCache.has(key)) return frameCache.get(key);
+  const th = themeOf(card), c = th.glow, bg = CARD_BG[sk] || '#0b0a0a';
+  const { l, t, r, b, nw, nh } = WIN;
+  const win = `M${l+nw} ${t}H${r}V${b-nh}H${r-nw}V${b}H${l}V${t+nh}H${l+nw}Z`;
+  let svg = `<svg class="b3-cframe" viewBox="0 0 100 140" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<rect x="1.6" y="1.6" width="96.8" height="136.8" rx="6.5" fill="none" stroke="${c}" stroke-width="1.1" vector-effect="non-scaling-stroke"/>`;
+  svg += `<path d="${win}" fill="none" stroke="${c}" stroke-width="1.3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  svg += `<path d="${win}" fill="none" stroke="${c}" stroke-opacity=".3" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  svg += `</svg>`;
+  // 形が歪まないよう、模様・印・紋章は縦横比を保つ別の SVG に描く
+  let deco = `<svg class="b3-deco" viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg">`;
+  const motif = SUIT_MOTIF[sk];
+  for(let k = 0; k < 4; k++){
+    deco += glyph(motif, 3.8, 52 + k*19, 4.4, c, null, 0.32);          // 左の縁(切り欠きの下)
+    deco += glyph(motif, 96.2, 88 - k*19, 4.4, c, null, 0.32);         // 右の縁(切り欠きの上)
+  }
+  const rg = card.suit==='JOKER' ? SUIT_PATH[sk] : RANK_GLYPH[card.rank];
+  if(rg){ deco += glyph(rg, r - 7.5, t + 7.5, 9, c, null, 0.42); deco += glyph(rg, l + 7.5, b - 7.5, 9, c, null, 0.42); }
+  deco += `</svg>`;
+  const out = { svg, deco, bg, color: c };
+  frameCache.set(key, out);
+  return out;
+}
+// 絵の上部に浮かぶスートの紋章(光の線)
+const emblemCache = new Map();
+function emblemURL(card){
+  const sk = cardSuitKey(card);
+  if(emblemCache.has(sk)) return emblemCache.get(sk);
+  const th = themeOf(card), c = th.glow, bg = CARD_BG[sk];
+  const d = SUIT_PATH[sk];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140"><defs><filter id="g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>` +
+    `<g opacity=".9"><g filter="url(#g)">${glyph(d, 50, 32, 30, c, null, 1.8)}</g>${glyph(d, 50, 32, 30, c, bg, 0.9)}</g>` +
+    `<line x1="50" y1="48" x2="50" y2="70" stroke="${c}" stroke-opacity=".35" stroke-width=".8"/></svg>`;
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  emblemCache.set(sk, url);
+  return url;
+}
+function suitMarkHTML(card){
+  const sk = cardSuitKey(card), th = themeOf(card);
+  return `<svg class="b3-suit" viewBox="0 0 24 24">${glyph(SUIT_PATH[sk], 12, 12, 24, th.glow, card.suit === 'JOKER' ? null : (CARD_BG[sk] || '#000'), 1.3)}</svg>`;
+}
 function decorateCard(elx, card){
   if(!elx || !card || elx.classList.contains('b3card')) return;
-  const th = themeOf(card), key = cardKey(card);
+  const th = themeOf(card), key = cardKey(card), f = cardFrameSVG(card);
   elx.classList.add('b3card');
   elx.dataset.b3card = key;
   elx.style.setProperty('--b3s', th.glow);
+  elx.style.setProperty('--b3bg', f.bg);
+  elx.style.setProperty('--b3core', th.core);
   const art = document.createElement('div'); art.className = 'b3-art'; art._card = card;
   art.style.backgroundImage = artBackground(card, requestPortrait(card));
+  art.style.clipPath = WIN_POLY;
   elx.insertBefore(art, elx.firstChild);
-  // 右下: 上下反転したランクとスート
+  const frame = document.createElement('div'); frame.className = 'b3-frame-wrap';
+  frame.innerHTML = f.svg + f.deco;
+  elx.appendChild(frame);
+  // 左上と右下(上下反転)のランクとスート。スートは光の線で描き直す
+  const si = elx.querySelector(':scope > .suit-icon');
+  if(si){ const m = document.createElement('span'); m.className = 'suit-icon b3-mark'; m.innerHTML = suitMarkHTML(card); si.replaceWith(m); }
   const corner = document.createElement('div'); corner.className = 'b3-corner';
-  const rk = elx.querySelector('.rank'), si = elx.querySelector('.suit-icon');
+  const rk = elx.querySelector(':scope > .rank'), mk = elx.querySelector(':scope > .b3-mark');
   if(rk) corner.appendChild(rk.cloneNode(true));
-  if(si) corner.appendChild(si.cloneNode(true));
+  if(mk) corner.appendChild(mk.cloneNode(true));
   elx.appendChild(corner);
 }
 ['cardButton','cardStatic'].forEach(n => {
@@ -3299,12 +3405,59 @@ function panelPx(p, part){
 const texLoader = new THREE.TextureLoader();
 const artTexCache = new Map();
 function artTex(url){ if(!url) return null; if(!artTexCache.has(url)){ const t = texLoader.load(url); artTexCache.set(url, t); } return artTexCache.get(url); }
+// 3D のカードの表: 手札と同じデザイン(黒い地・光の線・絵・紋章)を絵にする
+const faceTexCache = new Map();
+function loadImgP(src){ return new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; }); }
+function cardFaceTex(card){
+  const key = cardKey(card);
+  if(faceTexCache.has(key)) return faceTexCache.get(key);
+  const W = 256, H = 358, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const tex = new THREE.CanvasTexture(cv);
+  if(requestPortrait(card)) faceTexCache.set(key, tex); // 生物の絵ができてから覚える(まだなら次回描き直す)
+  const th = themeOf(card), f = cardFrameSVG(card), g = cv.getContext('2d');
+  const sx = W/100, sy = H/140;
+  (async () => {
+    g.fillStyle = f.bg; g.fillRect(0, 0, W, H);
+    // 絵の窓
+    g.save();
+    const { l, t, r, b, nw, nh } = WIN;
+    g.beginPath(); [[l+nw, t], [r, t], [r, b-nh], [r-nw, b-nh], [r-nw, b], [l, b], [l, t+nh], [l+nw, t+nh]].forEach(([x, y], k) => k ? g.lineTo(x*sx, y*sy) : g.moveTo(x*sx, y*sy)); g.closePath(); g.clip();
+    let gr = g.createRadialGradient(W/2, H*0.4, 0, W/2, H*0.4, W*0.8); gr.addColorStop(0, th.dark); gr.addColorStop(0.75, f.bg); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    gr = g.createRadialGradient(W/2, H*0.82, 0, W/2, H*0.82, W*0.45); gr.addColorStop(0, th.glow + '66'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    const em = await loadImgP(emblemURL(card)); if(em) g.drawImage(em, 0, 0, W, H);
+    const art = cardArtFor(card), im = art ? await loadImgP(art) : null;
+    if(im){
+      if(art.startsWith('data:image/jpeg')){ g.drawImage(im, 0, 0, W, H); }
+      else { const w = W*0.84, h = w*im.height/im.width; g.drawImage(im, (W - w)/2, H*0.66 - h/2 + (H*0.66 > h/2 ? 0 : 0), w, h); }
+    }
+    g.restore();
+    // 線と飾り(SVG を絵にする)
+    const svg = s => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s.replace('<svg ', '<svg width="' + W + '" height="' + H + '" '));
+    g.shadowColor = th.glow; g.shadowBlur = 6;
+    const fr = await loadImgP(svg(f.svg)), de = await loadImgP(svg(f.deco));
+    if(fr) g.drawImage(fr, 0, 0, W, H);
+    if(de) g.drawImage(de, 0, 0, W, H);
+    // ランクとスート(左上・右下)
+    const rk = rankText(card), mark = await loadImgP(svg(`<svg xmlns="http://www.w3.org/2000/svg" ${suitMarkHTML(card).slice(5)}`.replace('class="b3-suit" ', '')));
+    const corner = () => {
+      g.textAlign = 'center'; g.textBaseline = 'top'; g.fillStyle = th.core; g.shadowColor = th.glow; g.shadowBlur = 10;
+      g.font = card.suit === 'JOKER' ? `900 ${W*0.07}px Cinzel, serif` : `900 ${W*0.17}px Cinzel, "Shippori Mincho", serif`;
+      g.fillText(card.suit === 'JOKER' ? 'JK' : rk, (7 + 10.5)*sx, 7.5*sy*0.75);
+      if(mark) g.drawImage(mark, 9*sx, 26*sx, 17*sx, 17*sx);
+    };
+    corner();
+    g.save(); g.translate(W, H); g.rotate(Math.PI); corner(); g.restore();
+    tex.needsUpdate = true;
+  })().catch(e => console.warn('[Bind3D] カードの表', e));
+  return tex;
+}
 // 3Dのカード(厚みあり、表にアート、縁は金)
 function card3D(card, faceUp, scale){
   const s = scale || 1, w = 46*s, h = 64*s;
-  const edge = new THREE.MeshLambertMaterial({ color:0xd4ab52, emissive:0x3a2a08 });
-  const frontUrl = faceUp && card ? cardArtFor(card) : cardBackURL();
-  const front = new THREE.MeshBasicMaterial({ map: artTex(frontUrl) });
+  // 縁: 表はカードの黒い地にスートの光、裏は金
+  const edge = faceUp && card ? new THREE.MeshLambertMaterial({ color:0x121012, emissive:new THREE.Color(themeOf(card).glow).multiplyScalar(0.35) })
+                              : new THREE.MeshLambertMaterial({ color:0xd4ab52, emissive:0x3a2a08 });
+  const front = new THREE.MeshBasicMaterial({ map: faceUp && card ? cardFaceTex(card) : artTex(cardBackURL()) });
   const back = new THREE.MeshBasicMaterial({ map: artTex(cardBackURL()) });
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 3*s), [edge, edge, edge, edge, front, back]);
   const g = new THREE.Group(); g.add(m);
