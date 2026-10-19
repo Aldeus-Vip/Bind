@@ -11,20 +11,20 @@ if(process.env.TUNE_WORKER){
   const { match, addPolicy } = require('./arena');
   const { aiPolicy } = require('./policies');
   process.on('message', async job => {
-    addPolicy('A', () => aiPolicy('strong', Object.assign({}, job.optA, { W: job.A })));
-    addPolicy('B', () => aiPolicy('strong', Object.assign({}, job.optB, { W: job.B })));
+    addPolicy('A', () => job.baseA ? require('./arena').POLICIES[job.baseA]() : aiPolicy(job.levelA || 'strong', Object.assign({}, job.optA, job.A ? { W: job.A } : {})));
+    addPolicy('B', () => job.baseB ? require('./arena').POLICIES[job.baseB]() : aiPolicy(job.levelB || 'strong', Object.assign({}, job.optB, job.B ? { W: job.B } : {})));
     const r = await match('A', 'B', job.games, { offset: job.offset });
     process.send(r);
   });
   return;
 }
 
-function runParallel(A, B, games, optA = {}, optB = {}){
+function runParallel(A, B, games, optA = {}, optB = {}, extra = {}){
   const per = Math.ceil(games/WORKERS);
   return Promise.all([...Array(WORKERS)].map((_, k) => new Promise(res => {
     const w = fork(__filename, [], { env: Object.assign({}, process.env, { TUNE_WORKER: '1' }) });
     w.on('message', r => { w.kill(); res(r); });
-    w.send({ A, B, games: per, optA, optB, offset: k });
+    w.send(Object.assign({ A, B, games: per, optA, optB, offset: k }, extra));
   }))).then(rs => rs.reduce((s, r) => ({ a: s.a + r.a, b: s.b + r.b, draw: s.draw + r.draw, stall: s.stall + r.stall }), { a:0, b:0, draw:0, stall:0 }));
 }
 module.exports = { runParallel };
