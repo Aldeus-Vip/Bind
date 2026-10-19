@@ -3,3 +3,4 @@ dist/
 tools/out/
 *.log
 .cache/
+tools/ai/weights.json
