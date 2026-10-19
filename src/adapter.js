@@ -2728,26 +2728,36 @@ function placeSummon(s){
   if(s.circle){ s.circle.position.set(pos.x, pos.y + 0.02, pos.z); }
   if(s.beam){ s.beam.position.set(pos.x, pos.y + s.beam.scale.y/2, pos.z); }
 }
-override('triggerNumberEffect', orig => async function(rank, playerIdx, depth){
-  const ch = chars[playerIdx], st = state;
-  const card = { suit:(st.players[playerIdx].personalCard||{}).suit || 'H', rank };
+// 呼び出されたカード: 2・9・10・J の連鎖やハンド効果は triggerCardNumberEffect(card, …) を通るので、そこでカードを覚える。
+// パーソナル効果(runPersonalEffects)は数字だけで呼ぶので、そのときはパーソナルのカードを使う。
+let summonCardHint = null;
+function cardForEffect(rank, playerIdx){
+  const h = summonCardHint;
+  if(h && (h.suit === 'JOKER' ? rank === 'JOKER' : h.rank === rank)){ summonCardHint = null; return { card:h, chained:true }; }
+  const pc = state.players[playerIdx] && state.players[playerIdx].personalCard;
+  if(pc && pc.suit !== 'JOKER' && pc.rank === rank) return { card:pc, chained:false };
+  return { card:{ suit:(pc && pc.suit !== 'JOKER') ? pc.suit : 'H', rank, id:'?' + rank }, chained:true };
+}
+// 生物の召喚つきで効果を実行する。chained(連鎖・ハンド効果)は、パーソナルと同じ生物でも別に召喚する。
+// パーソナル効果のときだけ、パーソナル本人が構える。生物の色は呼び出したカードのスートに合わせる
+async function withSummon(card, chained, playerIdx, run){
+  const ch = chars[playerIdx];
   const key = creatureKeyFor(card);
-  if(!settings.effectAnim || !ch || !ch.shown || key==='caster') return orig.apply(this, arguments);
-  // 術者自身がその生物なら、本人が構える
-  if(ch.avKey === key){
+  if(!settings.effectAnim || !ch || !ch.shown || key==='caster') return run();
+  if(!chained && ch.avKey === key){
     await trackAnimation(res => { res = once(res); tween(0.4, t => ch.av.pose('raise', ease.out(t))).then(res, res); });
-    try{ return await orig.apply(this, arguments); }
+    try{ return await run(); }
     finally{ tween(0.35, t => ch.av.pose('raise', 1-t)).then(() => ch.av.pose('rest', 0)); }
   }
   // フィールドの上側に召喚する(召喚陣から上へ光が伸び、生物がせり上がる)
   const cache = summonCache[playerIdx];
   if(!cache[key] || [...summons].some(s => s.av === cache[key])) cache[key] = (AVATARS[key])(playerIdx);
   const av = cache[key];
-  const sk = ch.suitKey || 'H';
-  av.setSuit(SUIT_THEME[sk] || SUIT_THEME.H);
-  const glow = new THREE.Color((SUIT_THEME[sk]||SUIT_THEME.H).glow).getHex();
+  const th = themeOf(card), sk = card.suit === 'JOKER' ? 'H' : card.suit;
+  av.setSuit(th);
+  const glow = new THREE.Color(th.glow).getHex();
   const s = { av, phase:Math.random()*6, blinkAt:2, p:playerIdx, n:[...summons].filter(x => x.p===playerIdx).length, dy:-0.35 };
-  s.circle = flatPlane(0.45, circleTex(['H','S','D','C'].includes(sk) ? sk : 'H'), 0xffffff, 0);
+  s.circle = flatPlane(0.45, circleTex(sk), card.suit === 'JOKER' ? glow : 0xffffff, 0);
   s.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1, 20, 1, true), new THREE.MeshBasicMaterial({ map:pillarTex, color:glow, transparent:true, opacity:0, blending:ADD, depthWrite:false, side:THREE.DoubleSide }));
   s.beam.scale.y = 0.01;
   av.root.scale.setScalar(0.01);
@@ -2765,11 +2775,23 @@ override('triggerNumberEffect', orig => async function(rank, playerIdx, depth){
       res();
     })().catch(e => failSafe(e, null, res));
   });
-  try{ return await orig.apply(this, arguments); }
+  try{ return await run(); }
   finally{
     tween(0.45, t => { av.root.scale.setScalar(Math.max(0.01, SUMMON_SCALE*(1-ease.inOut(t)))); s.dy = -0.35*t; s.circle.material.opacity = 1-t; })
       .then(() => { scene.remove(av.root); summons.delete(s); av.pose('rest', 0); disposeObj(s.circle); disposeObj(s.beam); });
   }
+}
+override('triggerNumberEffect', orig => async function(rank, playerIdx, depth){
+  const args = arguments, self = this;
+  const { card, chained } = cardForEffect(rank, playerIdx);
+  return withSummon(card, chained, playerIdx, () => orig.apply(self, args));
+});
+// JOKER は数字効果を通らない(effectJoker を直接呼ぶ)ので、ここで召喚する。ほかのカードは triggerNumberEffect へ
+override('triggerCardNumberEffect', orig => async function(card, playerIdx, depth){
+  const args = arguments, self = this;
+  if(card && card.suit === 'JOKER') return withSummon(card, true, playerIdx, () => orig.apply(self, args));
+  summonCardHint = card || null;
+  try{ return await orig.apply(self, args); } finally{ if(summonCardHint === card) summonCardHint = null; }
 });
 
 /* ---------- 8: 落雷 ---------- */

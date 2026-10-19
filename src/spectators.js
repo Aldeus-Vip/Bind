@@ -1,6 +1,6 @@
 /* =====================================================================
    観客の生物(3D表示のときだけ)
-   - 盤面の左に 7 体(A・2〜7)、右に 6 体(8〜K)。色を変える前の元の色のまま、岩の台の上で盤面を見守る。
+   - 盤面の左に 8 体(A・2〜7・黒JOKER)、右に 7 体(8〜K・白JOKER)。色を変える前の元の色のまま、岩の台の上で盤面を見守る。
    - ふだんは待機の動き。その数字の効果が発動したとき、またはクリックしたときに反応する(身構えて跳ねる)。
    - 生物のモデルが読み込まれる前は手作りの体で置き、モデルが届いたら差し替える。
    ===================================================================== */
@@ -9,8 +9,8 @@
 if(!window.B3 || !window.B3.K) return;
 if(window.B3.K.LITE) return; // 軽量モード(スマホ)では観客を出さない
 const B = window.B3, K = B.K;
-const LEFT = ['beast-A', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'];
-const RIGHT = ['c8', 'c9', 'c10', 'c11', 'c12', 'c13'];
+const LEFT = ['beast-A', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'jb'];
+const RIGHT = ['c8', 'c9', 'c10', 'c11', 'c12', 'c13', 'jw'];
 const SCALE = 0.8;
 const group = new THREE.Group(); group.visible = false;
 K.scene.add(group);
@@ -87,7 +87,8 @@ function watchEffect(){
   const sig = ae ? ae.kind + ':' + ae.key : null;
   if(sig === lastEffect) return;
   lastEffect = sig;
-  if(!ae || ae.kind !== 'number' || ae.key === 'JOKER') return;
+  if(!ae || ae.kind !== 'number') return;
+  if(ae.key === 'JOKER'){ ['jb', 'jw'].forEach(k => { const s = byKey(k); if(s) react(s); }); return; } // どちらの JOKER かは分からないので両方
   const s = byKey(ae.key === 1 ? 'beast-A' : 'c' + ae.key);
   if(s) react(s);
 }
