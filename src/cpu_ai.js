@@ -480,31 +480,62 @@ function createAI(F, opt){
     const r = await guard(eng.doDraw());
     if(r === 'timeout') return evaluate(S2, me, kn, W);
     if(S3.gameOver || S3.phase !== 'move') return evaluate(S3, me, kn, W);
-    const moves = legalMoves(S3, o);
     let worst = Infinity;
-    const after = [];
-    for(const m of moves){
+    const leaves = [], mids = [];
+    for(const m of legalMoves(S3, o)){
       const S4 = await simMove(clone(S3), o, m.cardIdx, m.dest);
-      if(!S4){ continue; }
-      let v;
-      if(S4.gameOver || S4.phase !== 'hand-effect') v = evaluate(S4, me, kn, W);
-      else { const S5 = await simHand(clone(S4), o, null); v = S5 ? evaluate(S5, me, kn, W) : 0; after.push({ S4, v }); }
+      if(!S4) continue;
+      if(S4.gameOver || S4.phase !== 'hand-effect'){ const v = evaluate(S4, me, kn, W); if(v < worst) worst = v; continue; }
+      const S5 = await simHand(clone(S4), o, null);
+      if(!S5) continue;
+      const v = evaluate(S5, me, kn, W);
+      leaves.push({ S: S5, v }); mids.push({ S4, v });
       if(v < worst) worst = v;
     }
     // 特に危ない数手は、相手のハンド効果まで試す
     if(opt.oppHand){
-      after.sort((a, b) => a.v - b.v);
-      for(const a of after.slice(0, opt.oppHand)){
-        for(const h of handOptions(a.S4, o)){
+      mids.sort((a, b) => a.v - b.v);
+      for(const m of mids.slice(0, opt.oppHand)){
+        for(const h of handOptions(m.S4, o)){
           if(h === null) continue;
-          const S5 = await simHand(clone(a.S4), o, h);
+          const S5 = await simHand(clone(m.S4), o, h);
           if(!S5) continue;
           const v = evaluate(S5, me, kn, W);
+          leaves.push({ S: S5, v });
           if(v < worst) worst = v;
         }
       }
     }
-    return worst === Infinity ? evaluate(S3, me, kn, W) : worst;
+    if(worst === Infinity) return evaluate(S3, me, kn, W);
+    // 3手目: 相手の応手のうち特に危ないものは、こちらの次の一手(移動だけ)まで読んで確かめる
+    if(opt.ply3 && leaves.length){
+      leaves.sort((a, b) => a.v - b.v);
+      let worst3 = Infinity;
+      for(const l of leaves.slice(0, opt.ply3)){
+        const v = l.S.gameOver ? l.v : await myNext(l.S, me, kn);
+        if(v < worst3) worst3 = v;
+      }
+      if(worst3 !== Infinity) return worst3;
+    }
+    return worst;
+  }
+  // こちらの次の手番(ドローと移動だけ)の最善
+  async function myNext(S, me, kn){
+    if(S.gameOver || S.current !== me) return evaluate(S, me, kn, W);
+    const T = clone(S);
+    eng.state = T; eng.known = {};
+    const r = await guard(eng.doDraw());
+    if(r === 'timeout' || T.gameOver || T.phase !== 'move') return evaluate(T, me, kn, W);
+    let bs = -Infinity;
+    for(const m of legalMoves(T, me)){
+      const S1 = await simMove(clone(T), me, m.cardIdx, m.dest);
+      if(!S1) continue;
+      let v;
+      if(S1.gameOver || S1.phase !== 'hand-effect') v = evaluate(S1, me, kn, W);
+      else { const S2 = await simHand(clone(S1), me, null); v = S2 ? evaluate(S2, me, kn, W) : -1e5; }
+      if(v > bs) bs = v;
+    }
+    return bs === -Infinity ? evaluate(T, me, kn, W) : bs;
   }
 
   async function bestAfterHand(S1, me, kn){
