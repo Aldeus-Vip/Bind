@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const single = process.argv.includes('--single');
@@ -42,8 +43,13 @@ const VENDOR_SRC = {
 };
 
 let s = read('src/original/bind_prototype.html');
+// CPU(つよい・最強AI)の先読み用に、元のルール部分を画面なしで動く独立したエンジンとして取り出す(tools/ai/engine.js と同じ方法)
+function engineJs(){
+  const { engineSource, factorySource } = createRequire(import.meta.url)('./ai/engine.js');
+  return 'window.BindEngineFactory = ' + factorySource(engineSource(s)) + ';';
+}
 const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css') + '\n' + read('src/ui.css');
-const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js')];
+const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js'), engineJs(), read('src/cpu_ai.js'), read('src/cpu.js')];
 
 s = s.replace('<title>Bind — プロトタイプ</title>', '<title>Bind 3D</title>');
 s = s.replace('</head>',
