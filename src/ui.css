@@ -114,10 +114,20 @@ body.b3-ui.b3-hide-panels #app .floor-grid.b3{ height: max(440px, calc(100vh - 1
 /* 2D 表示: フィールドは元の大きさのまま中央に */
 body.b3-ui .floor-grid:not(.b3){ max-width: 560px; }
 @media (max-width: 860px){
-  body.b3-ui #app{ padding-left: 12px; }
-  body.b3-ui .game-screen > .phase-sequence{ top: auto; bottom: 150px; transform: none; width: 112px; opacity: .92; }
+  /* スマホ: ターンの流れは今のフェーズだけを左上に小さく。上のボタンも小さく、カメラのボタンは隠す(指でドラッグ・ピンチで操作) */
+  body.b3-ui #app{ padding: 92px 6px 0; }
+  body.b3-ui .game-screen > .phase-sequence{ top: 10px; left: 8px; bottom: auto; transform: none; width: auto; padding: 4px; opacity: 1; }
+  body.b3-ui .game-screen > .phase-sequence .phase-step:not(.active), body.b3-ui .game-screen > .phase-sequence .phase-arrow{ display: none; }
+  body.b3-ui .game-screen > .phase-sequence .phase-step.active{ padding: 4px 8px; font-size: 11px; }
+  #top-buttons-bar{ top: 8px; right: 8px; gap: 4px; max-width: calc(100vw - 120px); }
+  #top-buttons-bar button{ padding: 5px 8px !important; font-size: 11px !important; }
+  #b3-cam{ display: none !important; }
   body.b3-ui .game-screen{ grid-template-columns: minmax(0, 1fr); grid-template-areas: "field" "left"; }
+  body.b3-ui .floor-grid.b3{ height: max(360px, calc(100vh - 250px)); }
+  .b3-frame{ max-width: 98vw; }
+  .b3-frame-bar .phase-tag{ font-size: 11px; padding: 3px 8px; }
 }
+
 
 /* ===== サイトの背景: 封じられた生き物たちの力で、自然がまだらに交じる大地 ===== */
 html body{

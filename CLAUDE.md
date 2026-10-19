@@ -19,6 +19,8 @@
 npm install
 npm run build                 # → dist/web/(Web 公開用。http で配信して確認: npm run serve)
 npm run build:single          # → dist/bind_3d_game.html(1ファイル版)
+npm run build:lite            # → dist/web/lite/(スマホ向け軽量版。先に npm run build)
+npm run build:single:lite     # → dist/bind_3d_game_lite.html(軽量版の1ファイル版)
 npm run test:online           # 2タブでオンライン対戦(同期ずれ検出)
 npm run test:play             # CPU 同士の自動対戦(エラーと進行停止の検出)
 npm run test:models           # glTF モデル差し替えの確認

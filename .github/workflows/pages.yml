@@ -1,4 +1,5 @@
-# main(または今の作業ブランチ)に push すると、Web 版をビルドして GitHub Pages に公開する。
+# main(または今の作業ブランチ)に push すると、Web 版とスマホ向けの軽量版(/lite/)をビルドして GitHub Pages に公開する。
+# スマホで通常版の URL を開くと、自動で軽量版へ移る(?full=1 を付けると通常版のまま)。
 # 初回だけ: リポジトリの Settings → Pages → Source を「GitHub Actions」にする。
 name: Deploy to GitHub Pages
 
@@ -29,6 +30,7 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: node tools/build.mjs
+      - run: node tools/build.mjs --lite
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/web

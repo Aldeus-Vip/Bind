@@ -7,6 +7,7 @@
 (function(){
 'use strict';
 if(!window.B3 || !window.B3.K) return;
+if(window.B3.K.LITE) return; // 軽量モード(スマホ)では観客を出さない
 const B = window.B3, K = B.K;
 const LEFT = ['beast-A', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'];
 const RIGHT = ['c8', 'c9', 'c10', 'c11', 'c12', 'c13'];

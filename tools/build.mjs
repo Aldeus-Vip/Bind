@@ -4,6 +4,11 @@
    使い方(リポジトリのルートで):
      node tools/build.mjs            → dist/web/   Web 公開用(画像は別ファイル、three.js / PeerJS は同梱)
      node tools/build.mjs --single   → dist/bind_3d_game.html  1ファイル版(画像は data URI、ライブラリは CDN)
+     node tools/build.mjs --lite     → dist/web/lite/  スマホ向けの軽量版(先に通常版を作ってから。通常版をスマホで開くとここへ移る)
+     node tools/build.mjs --single --lite → dist/bind_3d_game_lite.html  軽量版の1ファイル版
+
+   軽量版: モデルのポリゴン 4 割・テクスチャ 512px、カード絵などの画像は WebP に縮小、
+           描画は解像度を抑えて影・観客・背景の光の粒を止める(window.BIND_LITE)。2 回目以降はオフラインでも起動(sw.js)。
 
    Web 版は http(s) で配信すること(file:// では WebGL がテクスチャを読めない)。 */
 import fs from 'node:fs';
@@ -13,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const single = process.argv.includes('--single');
+const lite = process.argv.includes('--lite');
+const LITE_MODELS = { textureSize:512, simplify:0.4 };
 const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 
 const CDN = {
@@ -54,6 +61,11 @@ if(fs.existsSync(favDir)){
     `<link rel="apple-touch-icon" href="${fav('apple-touch-icon.png')}">\n` +
     '<meta name="theme-color" content="#1e1816">\n</head>');
 }
+// 通常の Web 版をスマホで開いたら軽量版(lite/)へ移る(?full=1 で通常版のまま)
+if(!single && !lite){
+  s = s.replace('<head>', `<head>\n<script>(function(){try{var q=location.search;if(/[?&]full=1/.test(q))return;
+  if(matchMedia('(pointer: coarse)').matches&&Math.min(screen.width,screen.height)<820)location.replace('lite/'+q+location.hash);}catch(e){}})();</script>`);
+}
 const i = s.indexOf('</head>'), j = s.lastIndexOf('</style>', i);
 s = s.slice(0, j) + css + s.slice(j);
 
@@ -65,7 +77,7 @@ if(single && fs.existsSync(path.join(modelsSrc, 'manifest.json'))){
   const { optimizeModels } = await import('./optimize_models.mjs');
   const tmp = path.join(root, '.cache', 'single-models');
   fs.rmSync(tmp, { recursive: true, force: true });
-  (await optimizeModels(modelsSrc, tmp, path.join(root, '.cache', 'models'))).forEach(r => console.log('model ' + r));
+  (await optimizeModels(modelsSrc, tmp, path.join(root, '.cache', 'models'), lite ? LITE_MODELS : {})).forEach(r => console.log('model ' + r));
   const manifest = JSON.parse(fs.readFileSync(path.join(tmp, 'manifest.json'), 'utf8'));
   const files = {};
   for(const f of fs.readdirSync(tmp)) if(f.endsWith('.glb'))
@@ -73,24 +85,50 @@ if(single && fs.existsSync(path.join(modelsSrc, 'manifest.json'))){
   embedded = `<script>window.BIND_EMBEDDED_MODELS = ${JSON.stringify({ manifest, files })};</script>\n`;
 }
 // フロアなどのテクスチャ(assets/textures): Web 版は textures/ に置き、1ファイル版は data URI で埋め込む
-const texDir = path.join(root, 'assets', 'textures');
+let texDir = path.join(root, 'assets', 'textures');
+const sharpLib = lite ? (await import('sharp')).default : null;
+if(lite && fs.existsSync(texDir)){
+  // 軽量版: テクスチャを縮小した複製を使う(大地の絵は 768px、ほかは 512px)
+  const liteTex = path.join(root, '.cache', 'lite-textures');
+  fs.rmSync(liteTex, { recursive: true, force: true }); fs.mkdirSync(liteTex, { recursive: true });
+  for(const f of fs.readdirSync(texDir)){
+    const max = /^ground/.test(f) ? 768 : 512;
+    let img = sharpLib(path.join(texDir, f)).resize({ width:max, height:max, fit:'inside', withoutEnlargement:true });
+    img = /\.jpe?g$/i.test(f) ? img.jpeg({ quality:80 }) : img.png({ compressionLevel:9, palette:false });
+    await img.toFile(path.join(liteTex, f));
+  }
+  texDir = liteTex;
+}
 const texMap = {};
 if(fs.existsSync(texDir)) for(const f of fs.readdirSync(texDir)){
   const key = f.replace(/\.[^.]+$/, ''), ext = path.extname(f).slice(1).toLowerCase();
   texMap[key] = single ? `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,` + fs.readFileSync(path.join(texDir, f)).toString('base64') : 'textures/' + f;
 }
-const texScript = `<script>window.BIND_TEX = ${JSON.stringify(texMap)};</script>\n`;
+const texScript = `<script>window.BIND_TEX = ${JSON.stringify(texMap)};</script>\n` + (lite ? '<script>window.BIND_LITE = true;</script>\n' : '');
 const tags = texScript + embedded +
   `<script src="${src.three}"></script>\n` +
   `<script src="${src.gltf}"></script>\n` +
   `<script src="${src.skel}"></script>\n` +
   `<script src="${src.peer}"></script>\n` +
   js.map(code => `<script>\n${code}\n</script>\n`).join('');
+// 軽量版: 元のファイルに埋め込まれた大きな画像(カード絵など)を WebP に縮小する
+if(lite){
+  const re = /data:(image\/(?:png|jpe?g));base64,([A-Za-z0-9+/=]+)/g, found = new Map();
+  for(const m of s.matchAll(re)) if(m[2].length >= 2048 && !found.has(m[0])) found.set(m[0], m[2]);
+  let before = 0, after = 0;
+  for(const [whole, b64] of found){
+    const buf = Buffer.from(b64, 'base64');
+    const out = await sharpLib(buf).resize({ width:640, height:640, fit:'inside', withoutEnlargement:true }).webp({ quality:72 }).toBuffer();
+    before += buf.length; after += out.length;
+    if(out.length < buf.length) s = s.split(whole).join('data:image/webp;base64,' + out.toString('base64'));
+  }
+  console.log(`lite: images ${(before/1e6).toFixed(1)}MB → ${(after/1e6).toFixed(1)}MB (WebP)`);
+}
 const k = s.lastIndexOf('</body>');
 s = s.slice(0, k) + tags + s.slice(k);
 
 if(single){
-  const out = path.join(root, 'dist', 'bind_3d_game.html');
+  const out = path.join(root, 'dist', lite ? 'bind_3d_game_lite.html' : 'bind_3d_game.html');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, s);
   const size = Buffer.byteLength(s);
@@ -100,7 +138,7 @@ if(single){
 }
 
 /* ---- Web 版: data URI を assets/media/ のファイルへ ---- */
-const outDir = path.join(root, 'dist', 'web');
+const outDir = path.join(root, 'dist', 'web', lite ? 'lite' : '');
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(path.join(outDir, 'assets', 'media'), { recursive: true });
 fs.mkdirSync(path.join(outDir, 'vendor'), { recursive: true });
@@ -129,10 +167,31 @@ if(fs.existsSync(favDir)) for(const f of fs.readdirSync(favDir)) fs.copyFileSync
 const modelsDir = path.join(root, 'assets', 'models');
 if(fs.existsSync(modelsDir)){
   const { optimizeModels } = await import('./optimize_models.mjs');
-  const report = await optimizeModels(modelsDir, path.join(outDir, 'models'), path.join(root, '.cache', 'models'));
+  const report = await optimizeModels(modelsDir, path.join(outDir, 'models'), path.join(root, '.cache', 'models'), lite ? LITE_MODELS : {});
   report.forEach(r => console.log('model ' + r));
 }
 
+// 軽量版: 2 回目以降はオフラインでも起動できるよう、全ファイルを端末に保存する(Service Worker)
+if(lite){
+  const files = [];
+  const walk = (d, rel) => { for(const f of fs.readdirSync(d)){ const p = path.join(d, f), r = rel ? rel + '/' + f : f; if(fs.statSync(p).isDirectory()) walk(p, r); else files.push(r); } };
+  walk(outDir, '');
+  const ver = crypto.createHash('sha1').update(s).update(files.join('|')).digest('hex').slice(0, 10);
+  fs.writeFileSync(path.join(outDir, 'sw.js'), `/* Bind 3D 軽量版: 一度読み込んだファイルを端末に保存して、次から速く・オフラインでも開く */
+const CACHE = 'bind3d-lite-${ver}';
+const FILES = ${JSON.stringify(['./', ...files.filter(f => f !== 'index.html')])};
+self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('fetch', e => {
+  const u = new URL(e.request.url);
+  if(e.request.method !== 'GET' || u.origin !== location.origin) return;
+  // ページ本体は新しいものを優先(オフラインなら保存分)、ほかは保存分を優先
+  if(e.request.mode === 'navigate'){ e.respondWith(fetch(e.request).then(r => { const c = r.clone(); caches.open(CACHE).then(x => x.put('./', c)); return r; }).catch(() => caches.match('./'))); return; }
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+});
+`);
+  s = s.replace('</body>', `<script>if('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));</script>\n</body>`);
+}
 fs.writeFileSync(path.join(outDir, 'index.html'), s);
 fs.writeFileSync(path.join(outDir, '.nojekyll'), '');
-console.log(`built dist/web/index.html  ${(Buffer.byteLength(s)/1e6).toFixed(2)} MB  + ${count} media files (${(bytes/1e6).toFixed(1)} MB)`);
+console.log(`built ${path.relative(root, path.join(outDir, 'index.html'))}  ${(Buffer.byteLength(s)/1e6).toFixed(2)} MB  + ${count} media files (${(bytes/1e6).toFixed(1)} MB)`);

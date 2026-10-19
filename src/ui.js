@@ -24,7 +24,8 @@ if(TEX.logo){
    フロアと同じ大地の絵を暗く敷き、その上に自然の色の霞と、ゆっくり漂う光の粒(花粉・水の粒・火の粉・術の光)を重ねる */
 if(TEX.ground) document.documentElement.style.setProperty('--b3-ground', `url("${TEX.ground}")`);
 (function motes(){
-  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const lite = !!(window.B3 && window.B3.K && window.B3.K.LITE);
+  const reduce = lite || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); // 軽量モードでは光の粒を止める
   const cv = document.createElement('canvas');
   cv.id = 'b3-motes';
   document.body.insertBefore(cv, document.body.firstChild);

@@ -303,3 +303,12 @@ node tests/play.js                # 例
 - `fx:true` のモデルは生物として登録せず、`B3.gltfOf[key]` に入れるだけ。
 | ウィンドマス | `assets/textures/wind_ring.png` | `IM.wind`(マスの上でゆっくり回る) |
 | 雷撃フロア | `assets/textures/lightning_floor.png`(黒を透過) | `IM.lightningFloor`。加算で重ね、マスを暗く沈めて稲妻が脈打ち・ときどき閃く |
+
+## 17. スマホ向け軽量版(2026-10-19)
+
+- `node tools/build.mjs --lite` → `dist/web/lite/`(通常版のビルドの後に。Pages では両方を公開し、スマホで通常版を開くと `lite/` へ移る。`?full=1` で通常版のまま)
+- 中身: モデルのポリゴン 4 割・テクスチャ 512px(`optimize_models.mjs` の `simplify`)、埋め込み画像を WebP 640px に、テクスチャ縮小、`window.BIND_LITE`
+- 実行時の軽量モード(`K.LITE`。軽量版、または指操作で画面の短辺 < 820px): 解像度 1.25 倍まで・アンチエイリアスと影なし・観客なし・背景の光の粒なし
+- `sw.js`(軽量版のみ): 全ファイルを端末に保存し、2 回目以降は速く・オフラインでも起動
+- サイズ: 通常版 約 35MB / 軽量版 約 13MB(1ファイル版は 40MB / 15.7MB)
+- 1ファイル版のワークフロー(build-html.yml)は「種類」で通常版・軽量版・両方を選べる

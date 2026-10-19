@@ -1,10 +1,17 @@
 # 手動で実行して、モデル入りの1ファイル版(bind_3d_game.html)を作る。
 # 使い方: GitHub の Actions タブ → 「Build HTML (1ファイル版)」→ Run workflow
+#         → 「種類」で 通常版 / スマホ向け軽量版 / 両方 を選ぶ
 #         → 終わったら実行結果のページ下部「Artifacts」から bind_3d_game をダウンロード(zip の中に html)
 name: Build HTML (1ファイル版)
 
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: '種類(full = 通常版 / lite = スマホ向け軽量版 / both = 両方)'
+        type: choice
+        options: [both, full, lite]
+        default: both
 
 permissions:
   contents: read
@@ -21,17 +28,21 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - run: node tools/build.mjs --single
+      - if: inputs.variant != 'lite'
+        run: node tools/build.mjs --single
+      - if: inputs.variant != 'full'
+        run: node tools/build.mjs --single --lite
       - name: ファイル名に日時を付ける
         id: name
         run: echo "stamp=$(TZ=Asia/Tokyo date +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: bind_3d_game-${{ steps.name.outputs.stamp }}
-          path: dist/bind_3d_game.html
+          path: dist/bind_3d_game*.html
           retention-days: 30
       - name: 結果の表示
         run: |
-          echo "### bind_3d_game.html を作りました" >> "$GITHUB_STEP_SUMMARY"
-          echo "- サイズ: $(du -h dist/bind_3d_game.html | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 1ファイル版を作りました" >> "$GITHUB_STEP_SUMMARY"
+          for f in dist/bind_3d_game*.html; do echo "- $(basename "$f"): $(du -h "$f" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"; done
+          echo "- bind_3d_game_lite.html はスマホ向けの軽量版です" >> "$GITHUB_STEP_SUMMARY"
           echo "- このページ下部の **Artifacts** からダウンロードしてください(zip を展開すると html が入っています)" >> "$GITHUB_STEP_SUMMARY"

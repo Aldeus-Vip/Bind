@@ -14,7 +14,9 @@
     "test:hand": "node tools/tests/hfx.js",
     "test:creatures": "node tools/tests/zoo2.js",
     "test:ui": "node tools/tests/ui.js",
-    "test": "npm run build && npm run test:online && npm run test:play"
+    "test": "npm run build && npm run test:online && npm run test:play",
+    "build:lite": "node tools/build.mjs --lite",
+    "build:single:lite": "node tools/build.mjs --single --lite"
   },
   "dependencies": {
     "peerjs": "1.5.5",

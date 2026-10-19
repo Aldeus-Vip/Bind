@@ -14,13 +14,17 @@ const LS_KEY = 'bind3d-enabled';
 let enabled = true;
 try{ if(localStorage.getItem(LS_KEY)==='0') enabled = false; }catch(e){}
 
+// 軽量モード: 軽量版のビルド(window.BIND_LITE)か、スマホなど指で操作する小さな画面。
+// 解像度を抑え、アンチエイリアス・影・観客の生物・背景の光の粒を止めて描画を軽くする
+const LITE = !!window.BIND_LITE || /[?&]lite=1/.test(location.search) ||
+  (!!window.matchMedia && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820);
 let renderer;
 try{
-  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+  renderer = new THREE.WebGLRenderer({ antialias:!LITE, alpha:true, powerPreference: LITE ? 'low-power' : 'default' });
 }catch(e){ console.warn('[Bind3D] WebGL が使えないため2D表示のままです', e); return; }
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, LITE ? 1.25 : 2));
 renderer.setClearColor(0x000000, 0);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !LITE;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const canvas = renderer.domElement;
 canvas.className = 'b3-canvas';
@@ -3140,8 +3144,8 @@ document.addEventListener('DOMContentLoaded', () => {
    ===================================================================== */
 const ui = (() => {
   let r = null;
-  try{ r = new THREE.WebGLRenderer({ antialias:true, alpha:true }); }catch(e){ return null; }
-  r.setPixelRatio(Math.min(window.devicePixelRatio||1, 2)); r.setClearColor(0x000000, 0);
+  try{ r = new THREE.WebGLRenderer({ antialias:!LITE, alpha:true }); }catch(e){ return null; }
+  r.setPixelRatio(Math.min(window.devicePixelRatio||1, LITE ? 1.25 : 2)); r.setClearColor(0x000000, 0);
   const cv = r.domElement; cv.className = 'b3-ui-layer';
   Object.assign(cv.style, { position:'fixed', inset:'0', width:'100vw', height:'100vh', pointerEvents:'none', zIndex:'160' });
   const sc = new THREE.Scene();
@@ -3376,7 +3380,7 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, sunTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
-  preview, cam, CAM0, setCam, viewInset, fitExtra, focus, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  preview, cam, CAM0, setCam, viewInset, fitExtra, focus, LITE, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };

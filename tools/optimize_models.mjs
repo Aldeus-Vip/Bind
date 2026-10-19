@@ -13,7 +13,9 @@ import sharp from 'sharp';
 
 const DEFAULT_SIZE = 1024;
 
-export async function optimizeModels(srcDir, outDir, cacheDir){
+// opt.textureSize: テクスチャの上限(既定 1024。軽量版は 512)
+// opt.simplify: ポリゴンを減らす割合(0〜1。例 0.4 = 4 割に。軽量版で使う)
+export async function optimizeModels(srcDir, outDir, cacheDir, opt = {}){
   fs.mkdirSync(outDir, { recursive: true });
   fs.mkdirSync(cacheDir, { recursive: true });
   const manifestPath = path.join(srcDir, 'manifest.json');
@@ -29,20 +31,22 @@ export async function optimizeModels(srcDir, outDir, cacheDir){
   for(const name of fs.readdirSync(srcDir)){
     const src = path.join(srcDir, name), dst = path.join(outDir, name);
     if(!name.endsWith('.glb')){ if(name==='manifest.json') fs.copyFileSync(src, dst); continue; }
-    const size = sizeOf[name] || DEFAULT_SIZE;
+    const size = Math.min(sizeOf[name] || DEFAULT_SIZE, opt.textureSize || Infinity);
+    const simp = opt.simplify || 0;
     const buf = fs.readFileSync(src);
-    const key = crypto.createHash('sha1').update(buf).update(String(size)).update('v1').digest('hex').slice(0, 16);
+    const key = crypto.createHash('sha1').update(buf).update(String(size)).update(simp ? 'v1-s' + simp : 'v1').digest('hex').slice(0, 16);
     const cached = path.join(cacheDir, `${name}.${key}.glb`);
     if(!fs.existsSync(cached)){
       const doc = await io.readBinary(new Uint8Array(buf));
+      if(simp){ await MeshoptSimplifier.ready; await doc.transform(weld(), simplifyMesh(simp)); }
       await doc.transform(
         dedup(), prune(),
-        textureCompress({ encoder: sharp, resize: [size, size], quality: 85 }),
+        textureCompress({ encoder: sharp, resize: [size, size], quality: simp ? 78 : 85 }),
       );
       fs.writeFileSync(cached, await io.writeBinary(doc));
     }
     fs.copyFileSync(cached, dst);
-    report.push(`${name} ${(buf.length/1e6).toFixed(1)}MB → ${(fs.statSync(dst).size/1e6).toFixed(1)}MB (textures ≤${size}px)`);
+    report.push(`${name} ${(buf.length/1e6).toFixed(1)}MB → ${(fs.statSync(dst).size/1e6).toFixed(1)}MB (textures ≤${size}px${simp ? `, ポリゴン ${Math.round(simp*100)}%` : ''})`);
     if(miniOf[name]){
       const ratio = miniOf[name].lod || 0.08, msize = miniOf[name].textureSize || 128;
       const mname = name.replace(/\.glb$/, '.mini.glb');
@@ -74,6 +78,21 @@ function sloppySimplify(ratio){
       const indices = new Uint32Array(idx.getArray());
       const target = Math.max(300, Math.floor(indices.length * ratio / 3) * 3);
       const [out] = MeshoptSimplifier.simplifySloppy(indices, new Float32Array(pos.getArray()), 3, null, target, 1);
+      idx.setArray(new Uint32Array(out));
+      compactPrimitive(prim);
+    }
+  };
+}
+
+// 軽量版: 形を保ったままポリゴンを減らす(simplify。骨の重みなどの属性はそのまま残る)
+function simplifyMesh(ratio){
+  return async doc => {
+    for(const mesh of doc.getRoot().listMeshes()) for(const prim of mesh.listPrimitives()){
+      const idx = prim.getIndices(), pos = prim.getAttribute('POSITION');
+      if(!idx || !pos) continue;
+      const indices = new Uint32Array(idx.getArray());
+      const target = Math.max(600, Math.floor(indices.length * ratio / 3) * 3);
+      const [out] = MeshoptSimplifier.simplify(indices, new Float32Array(pos.getArray()), 3, target, 0.02);
       idx.setArray(new Uint32Array(out));
       compactPrimitive(prim);
     }
