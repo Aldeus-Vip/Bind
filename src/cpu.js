@@ -14,7 +14,13 @@ const AI = window.BindAI, F = window.BindEngineFactory;
 if(!AI || !F || typeof cpuDoMove !== 'function') return;
 
 const LABEL = { easy:'かんたん', hard:'ふつう', strong:'つよい', oracle:'最強AI' };
-const yieldUI = () => new Promise(r => setTimeout(r, 0)); // 考えている間も画面(3D)を止めない
+// 考えている間も画面(3D)を止めない。ただし 40ms 続けて考えたときだけ一息つく(毎回だと描画待ちで遅くなる)
+let lastYield = 0;
+const yieldUI = () => {
+  const t = performance.now();
+  if(t - lastYield < 40) return Promise.resolve();
+  return new Promise(r => setTimeout(() => { lastYield = performance.now(); r(); }, 0));
+};
 const brains = {
   strong: AI.createAI(F, { level:'strong', ply2:true, worlds:4, topMoves:6, handTop:2, timeBudget:1200, yield: yieldUI }),
   oracle: AI.createAI(F, { level:'oracle', ply2:true, topMoves:10, handTop:3, oppHand:3, timeBudget:1500, yield: yieldUI }),
