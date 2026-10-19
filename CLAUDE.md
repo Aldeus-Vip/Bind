@@ -29,6 +29,8 @@ npm run test:models           # glTF モデル差し替えの確認
 - テストのスクリーンショットはカレントディレクトリに出る。`tools/out/` で実行すること。
 - オンライン対戦は `src/online.js`。元の操作関数(resolveTask など8つ)をラップして相手へ送る。
   元のロジックの操作関数の名前・引数が変わったら、`READY` の表を直すこと。
+- CPU(つよい・最強AI)は `src/cpu_ai.js`(頭脳)+ `src/cpu.js`(画面への接続)。強さの確認・学習は `tools/ai/`(HANDOFF.md 18章)。
+  元のルールを変えたら `node tools/ai/arena.js strong hard 100` で動くか確かめること(ルールの写しはビルド時に自動で作り直される)。
 - glTF モデルは `src/models.js` + `assets/models/manifest.json`(docs/MODELS.md)。ビルド時に `tools/optimize_models.mjs` がテクスチャを縮小する(結果は `.cache/models/` に保存)。
 
 ## ユーザーについて
