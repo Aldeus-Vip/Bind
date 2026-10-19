@@ -1,34 +1,56 @@
 /* ===== 頭上ゲージ(hud.js) ===== */
 #b3-hud{ position:fixed; left:0; top:0; width:0; height:0; z-index:150; pointer-events:none; }
+/* 石の札: 暗い石の地に古い金の縁。持ち主の色は左端の宝石(光る細い帯)で示す */
 .b3-gauge{
   position:absolute; left:0; top:0; pointer-events:auto;
-  padding:3px 6px 4px 9px; border-radius:7px; min-width:74px;
-  background:rgba(14,10,8,.8); border:2px solid var(--pc, rgba(201,162,75,.55));
-  background-image:linear-gradient(90deg, var(--pc, #c9a24b) 0 4px, transparent 4px); /* 左端に持ち主の色の帯 */
-  box-shadow:0 2px 8px rgba(0,0,0,.5); font:700 11px/1.25 system-ui, sans-serif; color:#f3e6c4;
+  padding:4px 8px 5px 13px; border-radius:3px; min-width:78px;
+  background:
+    radial-gradient(120% 140% at 25% 0%, rgba(255,226,170,.09), transparent 60%),
+    linear-gradient(180deg, rgba(40,34,28,.94), rgba(17,14,12,.95));
+  border:1px solid rgba(212,171,82,.55);
+  box-shadow: inset 0 1px 0 rgba(255,240,210,.1), inset 0 0 0 1px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.6), 0 3px 10px rgba(0,0,0,.6);
+  font:700 11px/1.25 'Cinzel', 'Shippori Mincho', serif; color:#efe6d2;
 }
-.b3-gauge .g-row{ display:flex; align-items:center; gap:4px; padding:1px 0; cursor:default; border-radius:4px; }
-.b3-gauge .g-ic{ width:15px; height:15px; display:inline-flex; }
-.b3-gauge .g-hand .g-ic{ color:#7dff9a; }
-.b3-gauge .g-hand.low .g-ic{ color:#ff6b6b; }
-.b3-gauge .g-disc .g-ic{ color:#ff9be0; }
-.b3-gauge .g-num{ width:16px; text-align:right; font-variant-numeric:tabular-nums; }
-.b3-gauge .g-bar{ flex:1; height:6px; min-width:38px; border-radius:3px; background:rgba(255,255,255,.12); overflow:hidden; }
-.b3-gauge .g-bar i{ display:block; height:100%; border-radius:3px; transition:width .25s; }
-.b3-gauge .g-hand .g-bar i{ background:#45d16a; box-shadow:0 0 6px #45d16a; }
-.b3-gauge .g-hand .g-num{ color:#7dff9a; }
-.b3-gauge .g-hand.low .g-bar i{ background:#ff3b3b; box-shadow:0 0 6px #ff3b3b; }
-.b3-gauge .g-hand.low .g-num{ color:#ff6b6b; }
-.b3-gauge .g-disc .g-bar i{ background:#ff6fcf; box-shadow:0 0 6px #ff6fcf; }
-.b3-gauge .g-disc .g-num{ color:#ff9be0; }
+.b3-gauge::before{ /* 持ち主の色の宝石 */
+  content:""; position:absolute; left:4px; top:5px; bottom:5px; width:3px; border-radius:2px;
+  background:linear-gradient(180deg, rgba(255,255,255,.55), var(--pc, #c9a24b) 30%, var(--pc, #c9a24b) 70%, rgba(0,0,0,.4));
+  box-shadow:0 0 6px var(--pc, #c9a24b);
+}
+.b3-gauge::after{ /* 角の金の留め具 */
+  content:""; position:absolute; inset:-3px; pointer-events:none;
+  background:
+    linear-gradient(135deg, #d4ab52 0 4px, transparent 4px) top left / 7px 7px no-repeat,
+    linear-gradient(225deg, #d4ab52 0 4px, transparent 4px) top right / 7px 7px no-repeat,
+    linear-gradient(45deg, #d4ab52 0 4px, transparent 4px) bottom left / 7px 7px no-repeat,
+    linear-gradient(315deg, #d4ab52 0 4px, transparent 4px) bottom right / 7px 7px no-repeat;
+  opacity:.75;
+}
+.b3-gauge .g-row{ display:flex; align-items:center; gap:5px; padding:1px 0; cursor:default; border-radius:2px; }
+.b3-gauge .g-disc{ border-top:1px solid transparent; border-image:linear-gradient(90deg, transparent, rgba(212,171,82,.35), transparent) 1; padding-top:2px; margin-top:1px; }
+.b3-gauge .g-ic{ width:15px; height:15px; display:inline-flex; filter:drop-shadow(0 0 3px currentColor); opacity:.9; }
+.b3-gauge .g-hand .g-ic{ color:#8fe3c8; }
+.b3-gauge .g-hand.low .g-ic{ color:#ff8a66; }
+.b3-gauge .g-disc .g-ic{ color:#c7a6ff; }
+.b3-gauge .g-num{ width:16px; text-align:right; font-variant-numeric:tabular-nums; font-size:12px; text-shadow:0 1px 0 #000, 0 0 6px currentColor; }
+/* 石に彫った溝に、霊気が満ちるバー */
+.b3-gauge .g-bar{ flex:1; height:5px; min-width:38px; border-radius:1px; background:rgba(0,0,0,.6); overflow:hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.9), 0 1px 0 rgba(255,240,210,.07); }
+.b3-gauge .g-bar i{ display:block; height:100%; border-radius:1px; transition:width .25s; }
+.b3-gauge .g-hand .g-bar i{ background:linear-gradient(90deg, #1f5f52, #4fb59a 60%, #b6f2dc); box-shadow:0 0 6px rgba(110,220,185,.6); }
+.b3-gauge .g-hand .g-num{ color:#a6ecd4; }
+.b3-gauge .g-hand.low .g-bar i{ background:linear-gradient(90deg, #5a1410, #c8402a 60%, #ffb07a); box-shadow:0 0 6px rgba(255,110,60,.7); }
+.b3-gauge .g-hand.low .g-num{ color:#ff9a76; }
+.b3-gauge .g-disc .g-bar i{ background:linear-gradient(90deg, #3a2266, #8a5ad0 60%, #e2ccff); box-shadow:0 0 6px rgba(170,120,255,.6); }
+.b3-gauge .g-disc .g-num{ color:#d6c0ff; }
 /* 効果の対象: 点滅 */
 .b3-gauge .g-row.target{ animation:b3-gauge-blink .6s ease-in-out infinite alternate; cursor:pointer; }
 @keyframes b3-gauge-blink{ from{ background:rgba(255,255,255,0); box-shadow:none; } to{ background:rgba(255,230,140,.35); box-shadow:0 0 10px rgba(255,220,120,.9); } }
 /* 中身・選択欄 */
 .b3-gauge .g-pop{
   position:absolute; left:50%; bottom:calc(100% + 6px); transform:translateX(calc(-50% + var(--dx, 0px)));
-  width:max-content; max-width:min(440px, calc(100vw - 16px)); padding:6px 8px; border-radius:8px;
-  background:rgba(14,10,8,.93); border:1px solid rgba(201,162,75,.7); box-shadow:0 6px 18px rgba(0,0,0,.6);
+  width:max-content; max-width:min(440px, calc(100vw - 16px)); padding:6px 8px; border-radius:3px;
+  background:linear-gradient(180deg, rgba(36,30,25,.96), rgba(15,12,10,.97)); border:1px solid rgba(212,171,82,.6);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5), 0 6px 18px rgba(0,0,0,.65); font-family:'Shippori Mincho', serif;
 }
 .b3-gauge .g-pop:empty{ display:none !important; }
 .b3-gauge .g-title{ font-size:11px; margin-bottom:4px; white-space:nowrap; color:#e9cf8a; }

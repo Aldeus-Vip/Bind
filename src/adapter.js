@@ -396,19 +396,33 @@ function badgeTex(p, card, name){
   if(badgeCache.has(key)) return badgeCache.get(key);
   const col = PCOL[p] || '#888';
   const t = canvasTex(160,224,g=>{
-    // パーソナルが持っているカード(公開情報)を頭上に表示
-    g.fillStyle = col;
-    rr(g,4,4,152,216,18); g.fill();
-    g.lineWidth = 4; g.strokeStyle='rgba(20,14,10,0.85)'; rr(g,4,4,152,216,18); g.stroke();
-    g.fillStyle = '#f1e9d8'; rr(g,16,40,128,168,12); g.fill();
-    g.fillStyle = '#20201c'; g.font='700 24px "Zen Kaku Gothic New", sans-serif'; g.textAlign='center'; g.textBaseline='middle';
-    g.fillText(name,80,22);
+    // パーソナルが持っているカード(公開情報)を頭上に表示。暗い石の札に古い金の縁、持ち主の色は上の宝石と名前の光で示す
+    const cut = (x,y,w,h,c) => { g.beginPath(); g.moveTo(x+c,y); g.lineTo(x+w-c,y); g.lineTo(x+w,y+c); g.lineTo(x+w,y+h-c); g.lineTo(x+w-c,y+h); g.lineTo(x+c,y+h); g.lineTo(x,y+h-c); g.lineTo(x,y+c); g.closePath(); };
+    let gr = g.createLinearGradient(0,0,0,224); gr.addColorStop(0,'#332b23'); gr.addColorStop(1,'#110e0b');
+    cut(3,3,154,218,16); g.fillStyle = gr; g.fill();
+    // 石の斑
+    for(let k=0;k<70;k++){ const x=6+((k*53)%148), y=6+((k*97)%212); g.fillStyle = k%3 ? 'rgba(0,0,0,0.18)' : 'rgba(255,235,200,0.05)'; g.fillRect(x,y,2+(k%3),2+(k%2)); }
+    g.lineWidth = 3; g.strokeStyle = '#b8913f'; cut(4.5,4.5,151,215,15); g.stroke();
+    g.lineWidth = 1; g.strokeStyle = 'rgba(243,214,138,0.55)'; cut(10,10,140,204,11); g.stroke();
+    // 名前(持ち主の色で光る)
+    g.textAlign='center'; g.textBaseline='middle';
+    g.font = '700 22px Cinzel, "Shippori Mincho", serif';
+    g.shadowColor = col; g.shadowBlur = 10; g.fillStyle = '#f3e6c4'; g.fillText(name,80,27); g.shadowBlur = 0;
+    // 窓: 古い羊皮紙
+    gr = g.createRadialGradient(80,124,20,80,124,110); gr.addColorStop(0,'#eadcbc'); gr.addColorStop(1,'#a8916a');
+    cut(20,44,120,160,10); g.fillStyle = gr; g.fill();
+    g.lineWidth = 2; g.strokeStyle = '#6e5424'; cut(20,44,120,160,10); g.stroke();
+    // 上の宝石(持ち主の色)
+    g.save(); g.translate(80,44); g.rotate(Math.PI/4);
+    g.shadowColor = col; g.shadowBlur = 12; g.fillStyle = col; g.fillRect(-7,-7,14,14); g.shadowBlur = 0;
+    g.lineWidth = 2; g.strokeStyle = '#d4ab52'; g.strokeRect(-7,-7,14,14);
+    g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(-5,-5,5,5); g.restore();
     if(card){
       const red = card.suit==='H'||card.suit==='D';
-      g.fillStyle = red ? '#b2454a' : '#20201c';
-      g.font = card.suit==='JOKER' ? '800 52px "Shippori Mincho", serif' : '800 72px "Shippori Mincho", serif';
-      g.fillText(rankText(card),80,98);
-      g.font='64px serif'; g.fillText(SUITSYM[card.suit]||'',80,166);
+      g.fillStyle = card.suit==='JOKER' ? '#3a2a5a' : red ? '#8e1f24' : '#1d1915';
+      g.font = card.suit==='JOKER' ? '900 34px Cinzel, "Shippori Mincho", serif' : '900 70px Cinzel, "Shippori Mincho", serif';
+      g.fillText(rankText(card),80,106);
+      g.font='58px serif'; g.fillText(SUITSYM[card.suit]||'',80,166);
     }
   });
   badgeCache.set(key, t);
@@ -3436,7 +3450,7 @@ const K = { scene, camera, canvas, renderer, chars, tiles, tween, wait, ease, bu
   circleTex, starTex, pillarTex, sunTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
   preview, cam, CAM0, setCam, viewInset, fitExtra, focus, LITE, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
-  summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
+  summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, sideMat: rockMat, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
 window.B3 = { ui, chars, tiles, layout, sync, K, get enabled(){ return enabled; },
   // models.js(glTF モデルの差し替え)から使う

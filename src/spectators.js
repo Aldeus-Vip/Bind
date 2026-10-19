@@ -14,8 +14,65 @@ const RIGHT = ['c8', 'c9', 'c10', 'c11', 'c12', 'c13', 'jw'];
 const SCALE = 0.8;
 const group = new THREE.Group(); group.visible = false;
 K.scene.add(group);
-const rockMat = new THREE.MeshStandardMaterial({ color:0x2c2620, roughness:0.95, metalness:0 });
-const rockGeo = new THREE.CylinderGeometry(0.42, 0.26, 1.4, 6);
+// 台の岩: 1つずつ形を崩し(角ばった不規則な面)、色も岩ごと・面ごとに濃淡を付ける。ところどころに淡く光る結晶
+const rockMat = new THREE.MeshStandardMaterial({ vertexColors:true, flatShading:true, roughness:0.95, metalness:0 });
+const shardMats = [0x6fd6ff, 0xb48cff, 0x7dffc8].map(c => new THREE.MeshStandardMaterial({ color:0x1a1a22, emissive:c, emissiveIntensity:0.6, roughness:0.3, flatShading:true, transparent:true, opacity:0.8 }));
+// 盤面の側面と同じ大地の絵を貼り(読み込み後に共有)、頂点色で岩ごとの色味と濃淡を掛ける
+const ROCK_TONES = [0xb0a898, 0x9c9ca6, 0xbaa282, 0x8f989e, 0xac9488, 0xa2a290];
+function rnd(seed){ let a = seed*2654435761 >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0)/4294967296; }; }
+// 同じ位置の頂点は同じだけ動かす(継ぎ目が割れないよう、位置から決まる値を使う)
+function hash3(x, y, z, s){ const v = Math.sin(x*127.1 + y*311.7 + z*74.7 + s*19.3)*43758.5453; return v - Math.floor(v); }
+function makeRock(seed){
+  const R = rnd(seed + 1);
+  const h = 1.4*(0.92 + R()*0.3), rt = 0.4 + R()*0.08, rb = 0.22 + R()*0.1;
+  const geo = new THREE.CylinderGeometry(rt, rb, h, 7 + Math.floor(R()*3), 4);
+  geo.translate(0, -h/2, 0); // 上面を y=0 に(生物はここに立つ)
+  const pos = geo.attributes.position, n = pos.count, col = new Float32Array(n*3);
+  const base = new THREE.Color(ROCK_TONES[Math.floor(R()*ROCK_TONES.length)]);
+  const hsl = {}; base.getHSL(hsl); base.setHSL(hsl.h + (R() - 0.5)*0.04, hsl.s*(0.8 + R()*0.5), hsl.l*(0.9 + R()*0.25));
+  const tmp = new THREE.Color();
+  for(let i = 0; i < n; i++){
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const r = Math.hypot(x, z), top = y > -0.001;
+    const k1 = hash3(x, y, z, seed), k2 = hash3(z, x, y, seed + 7);
+    if(r > 1e-4){
+      // 横へ不規則にふくらませ・削る(上の縁は控えめに)
+      const f = 1 + (k1 - 0.5)*(top ? 0.18 : 0.42);
+      pos.setX(i, x*f + (k2 - 0.5)*0.06); pos.setZ(i, z*f + (k1 - 0.5)*0.06);
+      if(!top) pos.setY(i, y + (k2 - 0.5)*0.12);
+      else pos.setY(i, (k2 - 0.5)*0.035);
+    }
+    // 下ほど暗く沈む。面ごとの濃淡と、ときどき苔や鉄錆の色
+    const depth = Math.min(1, -y/h);
+    tmp.copy(base).multiplyScalar((1.0 + k1*1.1)*(1 - depth*0.65));
+    if(k2 > 0.86) tmp.lerp(new THREE.Color(0x2f3a26), 0.45);
+    else if(k2 < 0.08) tmp.lerp(new THREE.Color(0x4a3020), 0.4);
+    if(top) tmp.multiplyScalar(1.2);
+    col[i*3] = tmp.r; col[i*3 + 1] = tmp.g; col[i*3 + 2] = tmp.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  // 絵の切り出し位置を岩ごとにずらす
+  const uv = geo.attributes.uv, ou = R(), ov = R(), su = 0.6 + R()*0.6;
+  for(let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i)*su + ou, uv.getY(i)*su*0.8 + ov);
+  geo.computeVertexNormals();
+  const g = new THREE.Group();
+  const rock = new THREE.Mesh(geo, rockMat); rock.receiveShadow = true; rock.castShadow = true;
+  rock.rotation.y = R()*Math.PI*2;
+  g.add(rock);
+  // 結晶(3つに1つくらい)
+  if(R() < 0.4){
+    const m = shardMats[Math.floor(R()*shardMats.length)], cnt = 1 + Math.floor(R()*2);
+    for(let k = 0; k < cnt; k++){
+      const sh = new THREE.Mesh(new THREE.OctahedronGeometry(0.045, 0), m);
+      sh.scale.set(0.8, 2.2 + R()*1.2, 0.8);
+      const a = R()*Math.PI*2, yy = -0.15 - R()*0.45;
+      sh.position.set(Math.cos(a)*(rt*0.8), yy, Math.sin(a)*(rt*0.8));
+      sh.rotation.set((R() - 0.5)*0.6, a, (Math.cos(a) > 0 ? -1 : 1)*(0.5 + R()*0.5));
+      g.add(sh);
+    }
+  }
+  return g;
+}
 const specs = [];
 
 // 盤面の左右に、手前から奥へずらしながら並べる(内側と外側を交互に)
@@ -31,12 +88,13 @@ function slots(keys, side){
 }
 function build(slot){
   const old = specs.find(s => s.key === slot.key);
-  if(old){ group.remove(old.root); K.disposeObj && old.av && old.av.root && K.disposeObj(old.av.root); specs.splice(specs.indexOf(old), 1); }
+  if(old){ group.remove(old.root); old.root.children[0].traverse(o => { if(o.geometry) o.geometry.dispose(); }); K.disposeObj && old.av && old.av.root && K.disposeObj(old.av.root); specs.splice(specs.indexOf(old), 1); }
   let av = null;
   try{ av = K.AVATARS[slot.key] ? K.AVATARS[slot.key]() : null; }catch(e){ av = null; }
   if(!av || !av.root) return;
   const root = new THREE.Group();
-  const rock = new THREE.Mesh(rockGeo, rockMat); rock.position.y = -0.7; rock.receiveShadow = true; root.add(rock);
+  const seed = [...slot.key].reduce((a, c) => a*31 + c.charCodeAt(0), 7) % 100000;
+  root.add(makeRock(seed));
   av.root.visible = true;
   // 色を変える前の元の色。足元の紋章・術のオーラ・待機エフェクト(加算の光)は出さない
   if(B.applyTint) B.applyTint(av.root, null, 0);
@@ -133,7 +191,10 @@ let last = performance.now();
     if(ready || now - loop.t0 > 4000) placeAll();
     return;
   }
-  if(!loop.r || now - loop.r > 2000){ loop.r = now; refresh(); }
+  if(!loop.r || now - loop.r > 2000){
+    loop.r = now; refresh();
+    if(!rockMat.map && K.sideMat && K.sideMat.map){ rockMat.map = K.sideMat.map; rockMat.needsUpdate = true; }
+  }
   watchEffect();
   const t = now/1000, dt = Math.min(0.05, (now - last)/1000); last = now;
   specs.forEach(s => {
