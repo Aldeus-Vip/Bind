@@ -34,8 +34,10 @@ BTN.forEach(([label, title, fn]) => {
 });
 document.body.appendChild(bar);
 
+let placeN = 0;
 (function place(){
   requestAnimationFrame(place);
+  if(K.LITE && (++placeN % 4)) return; // 軽量モードはたまに置き直すだけで十分
   const g = grid();
   const st = (typeof state !== 'undefined') ? state : null;
   const show = !!(g && K.active() && st && !st.gameOver);

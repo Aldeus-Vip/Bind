@@ -241,14 +241,16 @@ function effectIcon(){
   return node;
 }
 function hoverTip(node, html){
-  node.addEventListener('mouseenter', () => {
+  const show = () => {
     const tip = document.getElementById('b3-tip'); if(!tip) return;
     tip.innerHTML = html(); tip.style.display = '';
     const r = node.getBoundingClientRect(), w = tip.offsetWidth;
     tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width/2 - w/2)) + 'px';
     const h = tip.offsetHeight;
     tip.style.top = (r.top - h - 10 > 8 ? r.top - h - 10 : r.bottom + 10) + 'px'; // 画面の下にあるので、ふつうは上に出す
-  });
+  };
+  node.addEventListener('mouseenter', show);
+  node.addEventListener('b3-longpress', show); // スマホ: 長押しで説明
   node.addEventListener('mouseleave', () => { const tip = document.getElementById('b3-tip'); if(tip) tip.style.display = 'none'; });
 }
 const origRender = window.render;
@@ -295,8 +297,11 @@ function applyFocus(){
 }
 
 // 扇はフィールドの列の真ん中に合わせる(画面の下端に固定)。効果フレームと扇はフィールドに重ねるだけで、盤面の大きさは変えない
+let placeN = 0;
 (function place(){
   requestAnimationFrame(place);
+  const K0 = window.B3 && window.B3.K;
+  if(K0 && K0.LITE && (++placeN % 3)) return; // 軽量モードは 3 フレームに 1 回で十分
   const fan = document.querySelector('.b3-fan');
   const col = document.querySelector('#app > .game-screen > .center-column');
   if(fan && col){ const r = col.getBoundingClientRect(); fan.style.left = (r.left + r.width/2).toFixed(0) + 'px'; }
@@ -308,6 +313,32 @@ function applyFocus(){
     if(Math.abs(lift - (K.viewInset.lift || 0)) > 2){ K.viewInset.lift = lift; B.layout(true); }
   }
 })();
-window.B3UI = { opt, arrange, myIndex };
+/* ---- タッチ操作: タップ = 選ぶ(クリック)/ 長押し = 説明・範囲を見る(マウスのカーソルを当てる操作の代わり) ----
+   長押し(約 0.42 秒、指をほとんど動かさない)で、押した要素に 'b3-longpress' イベントを送る(hud.js などが受け取る)。
+   長押しのあとに指を離して出るクリックは捨てる(選んだことにならない)。タップで出るマウスのまねのイベントは
+   hud.js 側で無視する(lastTouch を見る)。 */
+const touch = { lastTouch: 0, fired: false };
+(function longPress(){
+  let timer = null, sx = 0, sy = 0;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+  document.addEventListener('pointerdown', e => {
+    if(e.pointerType !== 'touch') return;
+    touch.lastTouch = performance.now(); touch.fired = false;
+    cancel(); sx = e.clientX; sy = e.clientY;
+    const target = e.target;
+    timer = setTimeout(() => {
+      timer = null; touch.fired = true;
+      target.dispatchEvent(new CustomEvent('b3-longpress', { bubbles:true, detail:{ x:sx, y:sy } }));
+      if(navigator.vibrate) try{ navigator.vibrate(12); }catch(err){}
+    }, 420);
+  }, true);
+  document.addEventListener('pointermove', e => { if(timer && e.pointerType === 'touch' && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) cancel(); }, true);
+  ['pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, e => { if(e.pointerType === 'touch'){ cancel(); touch.lastTouch = performance.now(); } }, true));
+  document.addEventListener('click', e => { if(touch.fired){ touch.fired = false; e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('contextmenu', e => { if(performance.now() - touch.lastTouch < 1500) e.preventDefault(); }, true); // 長押しのメニューを出さない
+})();
+const touchRecent = () => performance.now() - touch.lastTouch < 1200;
+
+window.B3UI = { opt, arrange, myIndex, touch, touchRecent };
 if(typeof render === 'function' && document.getElementById('app')) try{ arrange(); }catch(e){}
 })();

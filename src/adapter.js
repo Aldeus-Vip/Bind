@@ -65,6 +65,7 @@ const GRAD = gradientTex([90, 170, 255]);
 const toon = (color, extra) => new THREE.MeshToonMaterial(Object.assign({ color, gradientMap:GRAD }, extra||{}));
 const OUTLINE = new THREE.MeshBasicMaterial({ color:0x120c0a, side:THREE.BackSide });
 function withOutline(mesh, s){
+  if(LITE){ mesh.castShadow = true; return mesh; } // 軽量モードは縁取り(同じ形をもう一度描く)を省く
   const o = new THREE.Mesh(mesh.geometry, OUTLINE);
   o.scale.setScalar(s||1.07);
   o.userData.outline = true;
@@ -2032,9 +2033,24 @@ function updateBolts(ch, t, dt){
     line.material.opacity = on ? 0.6 + Math.random()*0.4 : 0;
   });
 }
+// 軽量モード: 描画は 30fps まで。重い端末では解像度を段階的に下げる(1.25 → 1.0 → 0.8 倍)
+let lastFrameAt = 0, slowFrames = 0, fastFrames = 0, liteRatio = Math.min(window.devicePixelRatio||1, 1.25);
+function adaptResolution(ms){
+  if(ms > 48){ slowFrames++; fastFrames = 0; } else if(ms < 36){ fastFrames++; slowFrames = Math.max(0, slowFrames - 1); }
+  if(slowFrames > 45 && liteRatio > 0.8){ // 約 1.5 秒続けて 20fps を下回る
+    liteRatio = Math.max(0.8, +(liteRatio - 0.2).toFixed(2)); slowFrames = 0;
+    renderer.setPixelRatio(liteRatio); layout(true);
+  }
+}
 function loop(){
   requestAnimationFrame(loop);
-  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  if(LITE){
+    const now = performance.now();
+    if(now - lastFrameAt < 31) return;
+    if(lastFrameAt && active()) adaptResolution(now - lastFrameAt);
+    lastFrameAt = now;
+  }
+  const dt = Math.min(clock.getDelta(), LITE ? 0.1 : 0.05), t = clock.elapsedTime;
   for(let k=tweens.length-1; k>=0; k--){
     const tw = tweens[k]; tw.t += dt;
     const p = Math.min(1, tw.t/tw.dur);
@@ -2044,6 +2060,7 @@ function loop(){
   if(!active()) return;
   const grid = canvas.parentNode;
   if(grid && (grid.clientWidth!==lastW || grid.clientHeight!==lastH)) layout(true);
+  else { const c0 = document.getElementById('floor-cell-0'); if(c0 && !c0.dataset.b3) layout(false); } // 描き直した直後に大きさが 0 で置けなかったマスを置く
   try{ sync(dt); }catch(e){ console.error('[Bind3D]', e); }
   for(let k=parts.length-1; k>=0; k--){
     const m = parts[k], u = m.userData; u.life += dt;

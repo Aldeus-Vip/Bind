@@ -140,8 +140,10 @@ function ensureGhostBtn(){
 }
 
 let visible = false;
+let frameN = 0;
 function frame(){
   requestAnimationFrame(frame);
+  if(K.LITE && (++frameN % 2)) return; // 軽量モードは 1 フレームおき(30fps)
   const st = (typeof state !== 'undefined') ? state : null;
   const show = !!(st && st.players && !st.gameOver && st.phase !== 'setup-personal' && K.active());
   if(show !== visible){ visible = show; root.style.display = show ? '' : 'none'; }
@@ -159,10 +161,9 @@ function frame(){
     const q = headPx(ch);
     h.box.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px) translate(-100%, -50%)`;
     const nh = pl.hand.length, nd = pl.discard.length;
-    h.rows.hand.querySelector('.g-num').textContent = nh;
-    h.rows.discard.querySelector('.g-num').textContent = nd;
-    h.rows.hand.querySelector('i').style.width = Math.min(100, nh / MAXBAR * 100) + '%';
-    h.rows.discard.querySelector('i').style.width = Math.min(100, nd / MAXBAR * 100) + '%';
+    // 数が変わったときだけ書き換える(毎フレーム書くと、スマホでは画面の再計算が重い)
+    if(h.nh !== nh){ h.nh = nh; h.rows.hand.querySelector('.g-num').textContent = nh; h.rows.hand.querySelector('i').style.width = Math.min(100, nh / MAXBAR * 100) + '%'; }
+    if(h.nd !== nd){ h.nd = nd; h.rows.discard.querySelector('.g-num').textContent = nd; h.rows.discard.querySelector('i').style.width = Math.min(100, nd / MAXBAR * 100) + '%'; }
     h.rows.hand.classList.toggle('low', nh <= 1);
     // 効果の対象なら点滅
     const dt = typeof discardTaskFor === 'function' && discardTaskFor(h.p);
@@ -308,9 +309,9 @@ function showRange(anchor){
   showTip(`<div class="t-head">${head}</div><div class="t-sel">何回でも動けるとしたときに届くマス。<span class="t-red">赤</span>は表向きのフロア(止まると負け)。</div>`, anchor);
 }
 
-document.addEventListener('mouseover', e => {
+// 先読みを出す(マウス: カーソルを当てる / スマホ: 長押し)。touch のときは同じ駒を長押しし直すと奇数 / 偶数を切り替える
+function previewAt(t, touch){
   if(typeof state === 'undefined' || !state || state.gameOver || !state.players) return;
-  const t = e.target;
   // 手札のカード
   const cardEl = t.closest && t.closest('.b3-fan .hand-row .card');
   if(cardEl && !cardEl.classList.contains('back-only')){
@@ -330,13 +331,22 @@ document.addEventListener('mouseover', e => {
   const p = ci >= 0 ? state.players.findIndex(q => q.personalIndex === ci) : -1;
   if(p >= 0 && K.active()){
     const key = 'p' + p + ':' + ci;
-    if(key === pvKey) return;
+    if(key === pvKey){
+      if(touch && range && !range.same){ parity = 1 - parity; showRange(cell); }
+      return;
+    }
     clearPreview(); pvKey = key; parity = 1;
     try{ range = rangeOf(p); showRange(cell); }catch(err){ clearPreview(); }
     return;
   }
   if(pvKey) clearPreview();
-});
+}
+const touchRecent = () => !!(window.B3UI && window.B3UI.touchRecent && window.B3UI.touchRecent());
+// マウス: カーソルを当てる。指で触ったときに出るマウスのまねのイベントは無視する(タップ = 選ぶだけ)
+document.addEventListener('mouseover', e => { if(!touchRecent()) previewAt(e.target, false); });
+// スマホ: 長押しで先読み。次に指で触れたら消す(長押しし直したときは出し直す)
+document.addEventListener('b3-longpress', e => previewAt(e.target, true));
+document.addEventListener('pointerdown', e => { if(e.pointerType === 'touch' && pvKey && !(range && e.target.closest && e.target.closest('.floor-cell'))) clearPreview(); }, true);
 // 右クリック(ドラッグしていないとき)で奇数 / 偶数を切り替える
 let rdown = null;
 document.addEventListener('pointerdown', e => { if(e.button === 2) rdown = { x:e.clientX, y:e.clientY }; }, true);
