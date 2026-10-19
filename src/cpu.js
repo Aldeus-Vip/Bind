@@ -22,7 +22,8 @@ const yieldUI = () => {
   return new Promise(r => setTimeout(() => { lastYield = performance.now(); r(); }, 0));
 };
 const brains = {
-  strong: AI.createAI(F, { level:'strong', ply2:true, worlds:4, topMoves:6, handTop:2, timeBudget:1200, yield: yieldUI }),
+  // 設定は自己対戦の比較で決めた(相手のハンド効果まで読む・候補を10手まで広げる、が効いた。世界の数を8に増やしても変わらない)
+  strong: AI.createAI(F, { level:'strong', ply2:true, worlds:4, topMoves:10, handTop:3, oppHand:2, timeBudget:1500, yield: yieldUI }),
   oracle: AI.createAI(F, { level:'oracle', ply2:true, topMoves:10, handTop:3, oppHand:3, timeBudget:1500, yield: yieldUI }),
 };
 const level = () => (typeof state !== 'undefined' && state && state.vsCPU ? state.cpuLevel : null);
