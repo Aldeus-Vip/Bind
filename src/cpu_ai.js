@@ -402,7 +402,7 @@ function createAI(F, opt){
       const S = eng.state, t = S.task;
       if(!t || !t.resolve) return;
       let a;
-      try{ a = answer(S, t, S.current, simKn, true); }catch(e){ a = defaultAnswer(S, t); }
+      try{ a = answer(S, t, S.current, simKn, !opt.exactTasks); }catch(e){ a = defaultAnswer(S, t); }
       if(a === undefined) a = defaultAnswer(S, t);
       eng.resolveTask(a);
     });
