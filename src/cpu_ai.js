@@ -148,6 +148,8 @@ const DEFAULT_W = {
   known: 0,    // 自分が踏みに行ける「中身の分かっている裏向きフロア」(4 で置いた強いカードなど)の価値
   v4: 1,       // 4 で置くカードを「次のパーソナルとしての強さ」で選ぶ
   v7: 0,       // 7 の(動かすフロア, 置き先)をすべて評価で確かめる
+  aceKeep: 0,  // 手札3枚以下で A を持っている(次のムーブ → A で手札1枚以下 → 5枚ドローの筋)
+  handOwn: 0,  // 自分の手札 = ハンド効果の選択肢。相手の手札より重く数える分
 };
 // パーソナルにしたときの強さ(4 で置く・取りに行く価値)
 const PERS = [2.0, 1.6, 1.0, 0.8, 0.6, 0.6, 0.7, 0.7, 1.3, 1.0, 0.8, 1.2, 1.4, 1.6];
@@ -177,6 +179,8 @@ function evaluate(S, me, kn, W){
   const hm = S.players[me].hand, ho = S.players[o].hand;
   s += W.hand*(handVal(hm.length, W.handCap) - handVal(ho.length, W.handCap));
   if(ho.length === 0) s += W.oppZero;
+  if(W.handOwn) s += W.handOwn*handVal(hm.length, W.handCap);
+  if(W.aceKeep && hm.length <= 3 && hm.some(c => val(c) === 1)) s += W.aceKeep;
   if(W.starve) s += W.starve*(ho.length === 0 ? 1 : ho.length === 1 ? 0.6 : ho.length === 2 ? 0.25 : 0);
   if(W.known && kn) s += W.known*(knownReach(S, M, kn) - knownReach(S, O, kn));
   let hold = 0;
