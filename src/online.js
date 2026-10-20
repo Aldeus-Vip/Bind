@@ -420,8 +420,11 @@ function updateBar(){
   const turn = state && !state.gameOver ? (actor()===NET.me ? 'あなたの手番' : '相手の手番') : '';
   bar.innerHTML = '';
   bar.appendChild(el('span', { class:'online-dot ' + (NET.connected ? 'ok' : 'ng') }));
-  bar.appendChild(el('span', {}, `ルーム ${NET.code||''} ・ ${NET.me===0 ? '先攻' : '後攻'}${turn ? ' ・ ' + turn : ''}`));
-  bar.appendChild(el('button', { class:'online-leave', onclick: () => { if(confirm('対戦から退出しますか?')) leave(false); } }, '退出'));
+  // スマホは手番だけを小さく出し、タップでルーム番号・先攻後攻・退出を開く(device.js の b3-phone)
+  bar.appendChild(el('span', { class:'ob-turn' }, turn || (NET.connected ? '接続中' : '切断')));
+  bar.appendChild(el('span', { class:'ob-detail' }, `ルーム ${NET.code||''} ・ ${NET.me===0 ? '先攻' : '後攻'}`));
+  bar.appendChild(el('button', { class:'online-leave ob-detail', onclick: e => { e.stopPropagation(); if(confirm('対戦から退出しますか?')) leave(false); } }, '退出'));
+  if(!bar.dataset.tap){ bar.dataset.tap = '1'; bar.addEventListener('click', () => bar.classList.toggle('open')); }
 }
 function showBanner(msg, withLeave){
   hideBanner();

@@ -16,8 +16,9 @@
 .online-status{ min-height:1.4em; font-size:14px; color:#e8dcc0; }
 .online-share{ display:flex; gap:8px; }
 
+/* 手札(画面下)と重ならないよう、上に置く。PC は左上、スマホは上部に手番だけ小さく(タップで詳細) */
 #online-bar{
-  position:fixed; left:50%; bottom:10px; transform:translateX(-50%); z-index:900;
+  position:fixed; left:10px; top:10px; z-index:900;
   display:flex; align-items:center; gap:10px; padding:5px 12px;
   border-radius:999px; background:rgba(14,10,8,.85); border:1px solid rgba(201,162,75,.6);
   color:#f3e6c4; font-size:13px; white-space:nowrap;
@@ -28,7 +29,7 @@
 .online-leave{ font-size:12px; padding:2px 10px; border-radius:999px; border:1px solid rgba(201,162,75,.6); background:transparent; color:inherit; cursor:pointer; }
 
 #online-banner{
-  position:fixed; left:50%; bottom:56px; transform:translateX(-50%); z-index:950;
+  position:fixed; left:50%; top:56px; transform:translateX(-50%); z-index:950;
   display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center;
   max-width:calc(100vw - 32px); padding:10px 16px; border-radius:10px;
   background:rgba(40,12,10,.92); border:1px solid #c9a24b; color:#fff3d6;
@@ -36,3 +37,8 @@
 
 /* オンライン中は手札タブ(相手の手札を見る切り替え)を出さない */
 body.online .hand-tabs{ display:none; }
+
+body.b3-phone #online-bar{ left:auto; right:96px; top:8px; padding:5px 10px; gap:6px; font-size:12px; cursor:pointer; }
+body.b3-phone #online-bar .ob-detail{ display:none; }
+body.b3-phone #online-bar.open{ flex-wrap:wrap; max-width:calc(100vw - 16px); right:8px; top:46px; white-space:normal; border-radius:10px; }
+body.b3-phone #online-bar.open .ob-detail{ display:inline-block; }

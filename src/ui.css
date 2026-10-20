@@ -260,3 +260,9 @@ body.b3-landscape .b3-fan .hand-row > .card{ bottom: 6px !important; }
 body.b3-landscape .b3-fan .hand-row{ height: 100px; }
 body.b3-landscape .b3-frame-bar .phase-tag{ display: none !important; } /* 今のフェーズは左上に出ている */
 body.b3-landscape #b3-hint{ top: 50px; bottom: auto; }
+/* スマホ: 上のボタンは記号だけ(ルーム表示・フェーズ表示と並べても収まるように) */
+body.b3-phone #b3-plates-btn, body.b3-phone #b3-menu-btn{ font-size:0 !important; padding:6px 10px !important; min-width:38px; }
+body.b3-phone #b3-plates-btn::after{ content:"▣"; font-size:15px; }
+body.b3-phone #b3-plates-btn.off::after{ content:"▢"; }
+body.b3-phone #b3-menu-btn::after{ content:"☰"; font-size:16px; }
+body.b3-phone #b3-plates-btn::before, body.b3-phone #b3-menu-btn::before{ display:none !important; }
