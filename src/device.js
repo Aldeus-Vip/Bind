@@ -14,9 +14,11 @@ const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform 
 const standalone = () => matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true;
 
 // b3-phone: スマホ / b3-portrait: スマホの縦向き(盤面を上に詰め、山札をそのすぐ下に置く)
+// b3-landscape: スマホの横向き(盤面を左、山札・効果欄・手札を右に並べる)
 const markPhone = () => {
   const ph = isPhone(), por = ph && innerHeight > innerWidth;
   document.body.classList.toggle('b3-phone', ph);
+  document.body.classList.toggle('b3-landscape', ph && !por);
   const was = document.body.classList.contains('b3-portrait');
   document.body.classList.toggle('b3-portrait', por);
   const K = window.B3 && window.B3.K;
@@ -70,9 +72,9 @@ applyPlates();
 let landHintShown = false;
 function landscapeHint(){
   const st = typeof state !== 'undefined' ? state : null;
-  if(landHintShown || !document.body.classList.contains('b3-phone') || innerHeight > innerWidth || !st || !st.players || st.gameOver) return;
+  if(landHintShown || orient !== 'portrait' || !document.body.classList.contains('b3-phone') || innerHeight > innerWidth || !st || !st.players || st.gameOver) return;
   landHintShown = true;
-  hint('スマホは縦向きにすると、盤面・効果欄・手札が重ならず遊びやすくなります。');
+  hint('横向きでは、盤面を左・手札を右に並べます。縦向きにすると手札を大きく表示できます(メニューの全画面で向きを選べます)。');
 }
 addEventListener('resize', landscapeHint);
 setInterval(landscapeHint, 3000);
@@ -87,8 +89,29 @@ function hint(text){
   n.textContent = text;
   clearTimeout(hint.t); hint.t = setTimeout(() => n.remove(), 7000);
 }
-function toggleFullscreen(){
-  if(document.fullscreenElement || document.webkitFullscreenElement){
+// 全画面の向き(スマホ): portrait = 縦 / landscape = 横 / any = 固定しない。localStorage 'bind3d.orient'
+let orient = 'portrait';
+try{ orient = localStorage.getItem('bind3d.orient') || 'portrait'; }catch(e){}
+const ORIENT_LABEL = { portrait:'縦', landscape:'横', any:'固定しない' };
+function lockOrientation(){
+  try{
+    if(!isPhone() || !screen.orientation || !screen.orientation.lock) return;
+    if(orient === 'any'){ if(screen.orientation.unlock) screen.orientation.unlock(); return; }
+    screen.orientation.lock(orient).catch(() => {});
+  }catch(e){}
+}
+function setOrient(o){
+  orient = o;
+  try{ localStorage.setItem('bind3d.orient', o); }catch(e){}
+  if(document.fullscreenElement || document.webkitFullscreenElement) lockOrientation();
+  refreshFsLabels();
+}
+// o を渡すと、その向きで全画面にする(全画面中なら向きだけ変える)
+function toggleFullscreen(o){
+  if(o) setOrient(o);
+  const inside = document.fullscreenElement || document.webkitFullscreenElement;
+  if(inside){
+    if(o) return; // 向きだけ変えた
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
     return;
   }
@@ -96,17 +119,27 @@ function toggleFullscreen(){
     const req = root.requestFullscreen || root.webkitRequestFullscreen;
     try{
       const r = req.call(root, { navigationUI: 'hide' });
-      // スマホは縦向きで遊ぶ前提(横向きは盤面・効果欄・手札が重なる)。縦に固定できる端末だけ固定する
-      if(r && r.then) r.then(() => { try{ if(isPhone() && screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(() => {}); }catch(e){} }).catch(() => hint('全画面にできませんでした。ブラウザのメニューからお試しください。'));
+      if(r && r.then) r.then(lockOrientation).catch(() => hint('全画面にできませんでした。ブラウザのメニューからお試しください。'));
+      else setTimeout(lockOrientation, 300);
     }catch(e){}
     return;
   }
-  if(isIOS) hint('iPhone では、Safari の共有ボタン(□↑)→「ホーム画面に追加」から開くと、全画面のアプリとして遊べます。');
+  if(isIOS) hint('iPhone では、Safari の共有ボタン(□↑)→「ホーム画面に追加」から開くと、全画面のアプリとして遊べます(向きは本体の画面の向きに合わせます)。');
   else hint('このブラウザは全画面表示に対応していません。');
 }
-const fsLabel = () => (inFS() ? '⛶ 全画面を終了' : '⛶ 全画面');
+// ボタンの文字: data-b3fs = 'portrait' | 'landscape' | 'toggle'
+function fsLabelFor(kind){
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement) || standalone();
+  if(kind === 'portrait' || kind === 'landscape'){
+    if(!on) return `⛶ 全画面(${ORIENT_LABEL[kind]})`;
+    return kind === orient ? `✓ ${ORIENT_LABEL[kind]}向き` : `↻ ${ORIENT_LABEL[kind]}向きにする`;
+  }
+  return on ? '⛶ 全画面を終了' : '⛶ 全画面';
+}
+const fsLabel = () => fsLabelFor('toggle');
+function refreshFsLabels(){ document.querySelectorAll('[data-b3fs]').forEach(b => { b.textContent = fsLabelFor(b.dataset.b3fs); }); }
 ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
-  document.querySelectorAll('[data-b3fs]').forEach(b => { b.textContent = fsLabel(); });
+  refreshFsLabels();
   setTimeout(() => { dispatchEvent(new Event('resize')); }, 200); // 盤面の大きさを合わせ直す
 }));
 
@@ -128,9 +161,15 @@ if(bar){
       it.addEventListener('click', () => { close(); b.click(); });
       panel.appendChild(it);
     });
-    const fs = document.createElement('button'); fs.type = 'button'; fs.className = 'b3-menu-item'; fs.dataset.b3fs = '1';
-    fs.textContent = fsLabel(); fs.addEventListener('click', () => { close(); toggleFullscreen(); });
-    panel.appendChild(fs);
+    // 全画面: 縦 / 横 を選んで入る。全画面中は向きの切り替えと終了
+    const inFull = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const kinds = isPhone() && fsSupported ? ['portrait', 'landscape'].concat(inFull ? ['toggle'] : []) : ['toggle'];
+    kinds.forEach(k => {
+      const fs = document.createElement('button'); fs.type = 'button'; fs.className = 'b3-menu-item'; fs.dataset.b3fs = k;
+      fs.textContent = fsLabelFor(k);
+      fs.addEventListener('click', () => { close(); toggleFullscreen(k === 'toggle' ? undefined : k); });
+      panel.appendChild(fs);
+    });
     const r = menuBtn.getBoundingClientRect();
     panel.style.top = Math.round(r.bottom + 6) + 'px';
     panel.style.right = Math.max(8, Math.round(innerWidth - r.right)) + 'px';
@@ -147,9 +186,11 @@ if(typeof origStart === 'function'){
   window.renderStartScreen = function(){
     const scr = origStart.apply(this, arguments);
     if(isPhone() && !inFS()){
-      const b = el('button', { class:'btn b3-fs-start', type:'button', 'data-b3fs':'1', onclick: () => toggleFullscreen() }, fsLabel());
+      const row = el('div', { class:'b3-fs-row' });
+      if(fsSupported) ['portrait', 'landscape'].forEach(k => row.appendChild(el('button', { class:'btn b3-fs-start', type:'button', 'data-b3fs':k, onclick: () => toggleFullscreen(k) }, fsLabelFor(k))));
+      else row.appendChild(el('button', { class:'btn b3-fs-start', type:'button', 'data-b3fs':'toggle', onclick: () => toggleFullscreen() }, fsLabel()));
       const t = scr.querySelector('.subtitle') || scr.querySelector('h1');
-      if(t && t.parentNode) t.parentNode.insertBefore(b, t.nextSibling); else scr.insertBefore(b, scr.firstChild);
+      if(t && t.parentNode) t.parentNode.insertBefore(row, t.nextSibling); else scr.insertBefore(row, scr.firstChild);
     }
     return scr;
   };
@@ -190,12 +231,15 @@ if(typeof origSettings === 'function'){
     describe();
     c.appendChild(el('div', { class:'settings-row b3-qrow' }, el('div', {},
       el('div', { class:'settings-label' }, '画質'), sel, note, apply)));
-    const fsBtn = el('button', { class:'btn', type:'button', 'data-b3fs':'1', onclick: () => toggleFullscreen() }, fsLabel());
+    const fsBtn = el('button', { class:'btn', type:'button', 'data-b3fs':'toggle', onclick: () => toggleFullscreen() }, fsLabel());
+    const osel = el('select', { class:'b3-select' });
+    ['portrait', 'landscape', 'any'].forEach(o => { const op = el('option', { value:o }, `向き: ${ORIENT_LABEL[o]}`); if(o === orient) op.selected = true; osel.appendChild(op); });
+    osel.addEventListener('change', () => setOrient(osel.value));
     c.appendChild(el('div', { class:'settings-row b3-qrow' }, el('div', {},
       el('div', { class:'settings-label' }, '全画面表示'),
-      el('div', { class:'settings-desc' }, isIOS && !fsSupported ? 'iPhone では「ホーム画面に追加」から開くと全画面になります。' : 'ブラウザのボタンやアドレスバーを隠して、画面いっぱいに表示します。'),
-      fsBtn)));
+      el('div', { class:'settings-desc' }, isIOS && !fsSupported ? 'iPhone では「ホーム画面に追加」から開くと全画面になります(向きは本体の画面の向きに合わせます)。' : 'ブラウザのボタンやアドレスバーを隠して、画面いっぱいに表示します。スマホは全画面のときの向き(縦 / 横)を選べます。'),
+      osel, el('div', {}, fsBtn))));
   };
 }
-window.BindDevice = { toggleFullscreen, isPhone };
+window.BindDevice = { toggleFullscreen, isPhone, setOrient };
 })();

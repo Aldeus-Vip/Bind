@@ -246,3 +246,17 @@ body.b3-deck-under.b3-ui #app .deck-gauge-wrap{ position:fixed !important; left:
 /* スマホ縦: 盤面の下に余る高さで、手札を大きく(読みやすく、押しやすく) */
 body.b3-portrait .b3-fan .hand-row{ --cw: 96px; height: 140px; }
 body.b3-portrait.b3-ui .floor-grid.b3{ height: calc(100dvh - 60px - 250px) !important; }
+
+/* ===== スマホ横: 盤面を左(画面の 6 割)、右に 山札 → 効果欄 → 手札 ===== */
+.b3-fs-row{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+body.b3-landscape.b3-ui #app{ padding: 46px 0 0 4px !important; }
+body.b3-landscape.b3-ui .floor-grid.b3{ width: 59vw !important; height: calc(100dvh - 50px) !important; min-height: 0 !important; margin: 0 !important; }
+body.b3-landscape.b3-ui #app .deck-gauge-wrap{ position: fixed !important; top: 50px; left: 61vw; right: 10px; margin: 0 !important; max-width: none !important; z-index: 5; }
+body.b3-landscape .b3-fan .hand-row{ --cw: 58px; height: 92px; }
+body.b3-landscape .b3-frame{ max-width: 38vw !important; }
+body.b3-landscape .b3-frame .phase-tag, body.b3-landscape .b3-frame-bar .phase-tag{ font-size: 10px !important; }
+body.b3-landscape .b3-fan .b3-fan-toggle{ display: none; }
+body.b3-landscape .b3-fan .hand-row > .card{ bottom: 6px !important; }
+body.b3-landscape .b3-fan .hand-row{ height: 100px; }
+body.b3-landscape .b3-frame-bar .phase-tag{ display: none !important; } /* 今のフェーズは左上に出ている */
+body.b3-landscape #b3-hint{ top: 50px; bottom: auto; }

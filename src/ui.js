@@ -191,11 +191,12 @@ function fanLayout(row){
   const cards = [...row.children], n = cards.length, half = Math.max(1, (n - 1)/2);
   // 扇の中心(フィールドの列の中央)から左右どちらにも画面からはみ出さない幅
   const col = document.querySelector('#app > .game-screen > .center-column');
-  const cx = col ? col.getBoundingClientRect().left + col.getBoundingClientRect().width/2 : innerWidth/2;
+  const land = document.body.classList.contains('b3-landscape');
+  const cx = land ? innerWidth*0.8 : col ? col.getBoundingClientRect().left + col.getBoundingClientRect().width/2 : innerWidth/2;
   const ang = Math.min(7, 18/half), sag = Math.min(4, 10/(half*half));
   const cw = parseFloat(getComputedStyle(row).getPropertyValue('--cw')) || 76; // カードの幅(スマホ縦は大きい)
   const swing = 2*275*(cw/76)*Math.sin(ang*half*Math.PI/180); // 傾けた端のカードが横へ張り出す分(回転の支点はカードの下 約 275px)
-  const maxW = Math.min(2*Math.min(cx, innerWidth - cx) - 40, innerWidth*(cw > 76 ? 0.86 : 0.7), 900) - cw - swing;
+  const maxW = Math.min(2*Math.min(cx, innerWidth - cx) - (land ? 16 : 40), innerWidth*(land ? 0.38 : cw > 76 ? 0.86 : 0.7), 900) - cw - swing;
   const dx = n > 1 ? Math.max(14, Math.min(58, maxW/(n - 1))) : 0;
   cards.forEach((c, i) => { c.style.setProperty('--i', i - (n - 1)/2); c.style.zIndex = i + 1; });
   row.style.setProperty('--dx', dx.toFixed(1) + 'px');
@@ -305,12 +306,12 @@ let placeN = 0;
   if(K0 && K0.LITE && (++placeN % 3)) return; // 軽量モードは 3 フレームに 1 回で十分
   const fan = document.querySelector('.b3-fan');
   const col = document.querySelector('#app > .game-screen > .center-column');
-  if(fan && col){ const r = col.getBoundingClientRect(); fan.style.left = (r.left + r.width/2).toFixed(0) + 'px'; }
+  if(fan && col){ const r = col.getBoundingClientRect(); fan.style.left = (document.body.classList.contains('b3-landscape') ? innerWidth*0.8 : r.left + r.width/2).toFixed(0) + 'px'; } // スマホ横は右側
   applyFocus();
   // 3D の盤面を、効果欄の1行分だけ上へずらす(盤面の大きさは変えない)
   const B = window.B3, K = B && B.K, frame = fan && fan.querySelector('.b3-frame');
   if(K && K.viewInset && K.active()){
-    const lift = frame && !document.body.classList.contains('b3-portrait') ? Math.round(frame.offsetHeight) : 0; // スマホ縦は盤面の下に効果欄が来るので、ずらさない
+    const lift = frame && !document.body.classList.contains('b3-phone') ? Math.round(frame.offsetHeight) : 0; // スマホは効果欄が盤面に重ならない配置(縦: 下 / 横: 右)なので、ずらさない
     if(Math.abs(lift - (K.viewInset.lift || 0)) > 2){ K.viewInset.lift = lift; B.layout(true); }
   }
 })();
