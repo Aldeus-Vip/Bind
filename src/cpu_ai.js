@@ -143,7 +143,14 @@ function deathProb(S, p, A, kn){
 const DEFAULT_W = {
   kill: 80, risk: 60, alive: 22, safeN: 1.6, union: 3, center: 3.5, hand: 1.4, handCap: 6, hold: 1, bound: 2.5, extra: 10,
   oppZero: 2,
+  // Riku さんの解説から足した項目(0 なら使わない)
+  starve: 0,   // 息切れ: 相手の手札が 0〜2 枚であること自体の価値(ハンド効果の手数を奪う)
+  known: 0,    // 自分が踏みに行ける「中身の分かっている裏向きフロア」(4 で置いた強いカードなど)の価値
+  v4: 0,       // 4 で置くカードを「次のパーソナルとしての強さ」で選ぶ
+  v7: 0,       // 7 の(動かすフロア, 置き先)をすべて評価で確かめる
 };
+// パーソナルにしたときの強さ(4 で置く・取りに行く価値)
+const PERS = [2.0, 1.6, 1.0, 0.8, 0.6, 0.6, 0.7, 0.7, 1.3, 1.0, 0.8, 1.2, 1.4, 1.6];
 // 手札として持っておく価値(とどめの8、JOKER、連鎖の9など)
 const HOLD = [1.6, 0.4, 0.7, 0.5, 0.4, 0.5, 0.5, 0.4, 1.6, 0.9, 0.6, 0.8, 0.8, 0.9];
 function handVal(h, cap){ return h <= cap ? h : cap + 0.3*(h - cap); }
@@ -170,12 +177,29 @@ function evaluate(S, me, kn, W){
   const hm = S.players[me].hand, ho = S.players[o].hand;
   s += W.hand*(handVal(hm.length, W.handCap) - handVal(ho.length, W.handCap));
   if(ho.length === 0) s += W.oppZero;
+  if(W.starve) s += W.starve*(ho.length === 0 ? 1 : ho.length === 1 ? 0.6 : ho.length === 2 ? 0.25 : 0);
+  if(W.known && kn) s += W.known*(knownReach(S, M, kn) - knownReach(S, O, kn));
   let hold = 0;
   for(const c of hm) hold += HOLD[val(c)];
   s += W.hold*hold;
   s += W.bound*((O.bound ? 1 : 0) - (M.bound ? 1 : 0));
   if(myTurnNext) s += W.extra;
   return s;
+}
+
+// 踏みに行ける(どれかの数字で安全に着地できる)裏向きフロアのうち、中身が分かっていて一番強いもの
+function knownReach(S, A, kn){
+  let reach = 0;
+  for(let v = 0; v <= 13; v++){ const d = diffOf(A, v); if(d) reach |= A.R[d] & A.safe; }
+  let bestV = 0;
+  for(const i of bitsOf(reach)){
+    const f = S.floor[i];
+    if(!f || !f.card || f.faceUp || f.owner !== null || S.windCells.has(i) || f.debuff) continue;
+    if(!kn.knows(f.card)) continue;
+    const v = PERS[val(f.card)] + (f.buff === 'sun' ? 0.8 : 0);
+    if(v > bestV) bestV = v;
+  }
+  return bestV;
 }
 
 /* ---------------- 状態の複製と、見えないカードの並べ替え ---------------- */
@@ -243,6 +267,25 @@ function applyFloorChoice(S, tag, i, me){
   return null;
 }
 
+// 7: (竜巻を起こすマス, そのまま風のマスにする / 空きマスへ動かす先) をすべて試し、評価が一番良い組を選ぶ
+function plan7(S, list, me, kn){
+  const W = plan7.W || DEFAULT_W;
+  const empties = floorList(S, i => S.floor[i] === null && !S.lockedCells.has(i));
+  let bestV = -Infinity, bestP = null;
+  const tryP = (T, p) => { const v = evaluate(T, me, kn, W); if(v > bestV){ bestV = v; bestP = p; } };
+  for(const src of list){
+    if(S.floor[src] === null){ const T = clone(S); T.windCells.add(src); tryP(T, { src, dst:null }); continue; }
+    { const T = clone(S); T.windCells.add(src); tryP(T, { src, dst:null }); }
+    for(const dst of empties){
+      if(dst === src) continue;
+      const T = clone(S); T.floor[dst] = T.floor[src]; T.floor[src] = null; T.windCells.delete(dst);
+      tryP(T, { src, dst });
+    }
+  }
+  plan7.last = bestP;
+  return bestP ? bestP.src : null;
+}
+
 function makeAnswerer(W){
   W = W || DEFAULT_W;
   // fast = 先読みの中(速さ優先)。false = 本番(候補を評価関数で確かめる)
@@ -271,6 +314,7 @@ function makeAnswerer(W){
         return best(list, i => HOLD[val(S.floor[i].card)] + 0.5*(near(O.o, i) - near(M.o, i)));
       }
       case 'ace-add-slot': case 'diamond-add-slot': case '7-dst': case '4-slot': {
+        if(tag === '7-dst' && W.v7 && plan7.last && plan7.last.dst !== null && candidatesOf(S, t).includes(plan7.last.dst)) return plan7.last.dst;
         const list = cands();
         const ev = byEval(list, tag);
         if(ev !== null) return ev;
@@ -284,6 +328,7 @@ function makeAnswerer(W){
       }
       case '7-src-or-empty': {
         const list = cands();
+        if(W.v7){ plan7.W = W; const pick = plan7(S, list, me, kn); if(pick !== null) return pick; }
         const floors = list.filter(i => S.floor[i] !== null), empties = list.filter(i => S.floor[i] === null);
         const iM = importance(M), iO = importance(O);
         const fb = best(floors, i => iO[i] - 1.2*iM[i]);
@@ -293,7 +338,7 @@ function makeAnswerer(W){
         if(fb !== null && (fs > 0.5 || eb === null || fs*1.0 >= es)) return fb;
         return eb !== null ? eb : list[0];
       }
-      case '7-move-or-skip': return 'move';
+      case '7-move-or-skip': return W.v7 && plan7.last && plan7.last.src !== undefined ? (plan7.last.dst === null ? 'skip' : 'move') : 'move';
       case '8-target-floor': {
         const list = cands();
         return list.includes(O.o) ? O.o : list[0];
@@ -340,8 +385,9 @@ function makeAnswerer(W){
       case '4-discard': {
         const d = pl.discard;
         if(!d.length) return null;
-        let bi = 0, bs = Infinity;
-        d.forEach((c, k) => { const s = HOLD[val(c)]; if(s < bs){ bs = s; bi = k; } });
+        let bi = 0, bs = -Infinity;
+        // v4: 足元に置いたカードは、離れたあと戻ってきてチェンジすれば次のパーソナルになる。強いものを置く
+        d.forEach((c, k) => { const s = W.v4 ? PERS[val(c)] : -HOLD[val(c)]; if(s > bs){ bs = s; bi = k; } });
         return bi;
       }
       case 'return-discard': {
@@ -389,6 +435,7 @@ function makeAnswerer(W){
 /* ---------------- 先読み ---------------- */
 function createAI(F, opt){
   opt = Object.assign({ level:'strong', worlds: 6, W: DEFAULT_W, timeBudget: 900 }, opt || {});
+  if(opt.Wx) opt.W = Object.assign({}, opt.W, opt.Wx); // 一部の重みだけ変える(比較実験用)
   const W = opt.W;
   const answer = makeAnswerer(W);
   let simKn = null, simMe = 0;
