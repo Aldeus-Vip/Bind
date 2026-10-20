@@ -17,10 +17,11 @@ function basePolicy(level){
 }
 
 async function playGame(pols, opt = {}){
-  let eng = null, pending = false;
+  let eng = null, pending = false, logLen = 0;
   const hooks = { render(){
     const st = eng && eng.state;
     if(st && st.players) for(const p of pols) if(p.observe) p.observe(st, eng.known);
+    if(st && opt.onLog && st.log.length > logLen){ const n = st.log.length - logLen; logLen = st.log.length; st.log.slice(0, n).reverse().forEach(l => opt.onLog(st, l)); }
     if(!st || pending || !st.task || !st.task.resolve) return;
     pending = true;
     queueMicrotask(() => {
@@ -38,7 +39,7 @@ async function playGame(pols, opt = {}){
     const sig = s.phase + ':' + s.current + ':' + s.players.map(p => p.hand.length + '/' + p.personalIndex).join(',') + ':' + s.deck.length + ':' + turns;
     if(sig === lastSig){ if(++guard > 5) return { winner:-1, turns, stall:s.phase + (s.task ? ':' + s.task.tag : '') }; } else { guard = 0; lastSig = sig; }
     if(s.phase === 'setup-personal'){ pols[s.setupPlayer].setup(eng, s.setupPlayer); continue; }
-    if(s.phase === 'draw'){ if(++turns > (opt.maxTurns || 300)) return { winner:-1, turns, draw:true }; await eng.doDraw(); continue; }
+    if(s.phase === 'draw'){ if(++turns > (opt.maxTurns || 300)) return { winner:-1, turns, draw:true }; if(opt.onTurn) opt.onTurn(s); await eng.doDraw(); continue; }
     if(s.phase === 'move'){ await pols[s.current].move(eng, s.current); continue; }
     if(s.phase === 'hand-effect'){ await pols[s.current].hand(eng, s.current); continue; }
     await new Promise(r => setImmediate(r));
