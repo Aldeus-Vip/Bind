@@ -187,3 +187,47 @@ body.b3-focus-gauge .player-card.discard-active{ animation: b3-breathe 1.6s ease
 @media (prefers-reduced-motion: reduce){
   body[class*="b3-focus-"] .b3-frame, body[class*="b3-focus-"] .card, body[class*="b3-focus-"] .b3-gauge, body[class*="b3-focus-"] .player-card, body[class*="b3-focus-"] .btn{ animation: none !important; }
 }
+
+/* ===== 端末に合わせる(device.js) ===== */
+#b3-menu-btn{ display:none; }
+body.b3-phone #top-buttons-bar > button:not(#b3-menu-btn){ display:none !important; }
+body.b3-phone #b3-menu-btn{ display:inline-block; }
+body.b3-phone #top-buttons-bar{ flex-wrap:nowrap !important; }
+#b3-menu-btn.on{ border-color: var(--b3-gold-hi) !important; }
+#b3-menu{
+  position:fixed; z-index:420; min-width:200px; max-height:calc(100dvh - 80px); overflow-y:auto;
+  display:flex; flex-direction:column; gap:4px; padding:8px; border-radius:6px;
+  background: linear-gradient(180deg, rgba(40,34,28,.97), rgba(17,14,12,.98));
+  border:1px solid rgba(212,171,82,.6); box-shadow: 0 10px 28px rgba(0,0,0,.7);
+}
+#b3-menu[hidden]{ display:none; }
+.b3-menu-item{
+  text-align:left; padding:11px 14px; font: 700 15px/1.2 'Shippori Mincho', serif; letter-spacing:.04em;
+  color:#efe6d2; background: rgba(255,240,210,.04); border:1px solid rgba(212,171,82,.25); border-radius:4px; cursor:pointer;
+}
+.b3-menu-item:active, .b3-menu-item:hover{ background: rgba(212,171,82,.18); border-color: rgba(243,214,138,.6); }
+.b3-fs-start{ display:block; margin:10px auto 4px; padding:10px 18px !important; font-size:15px !important; }
+#b3-hint, #b3-ctx{
+  position:fixed; left:50%; bottom:max(16px, env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:500;
+  width:min(520px, calc(100vw - 24px)); box-sizing:border-box; padding:12px 14px; border-radius:6px;
+  background: rgba(17,14,12,.96); border:1px solid rgba(212,171,82,.6); color:#efe6d2;
+  font: 14px/1.6 'Shippori Mincho', serif; box-shadow: 0 8px 24px rgba(0,0,0,.7);
+}
+#b3-ctx{ top:50%; bottom:auto; transform:translate(-50%, -50%); text-align:center; }
+#b3-ctx .btn{ margin:10px 6px 0; }
+.b3-select{ margin:6px 0; padding:6px 8px; font: 14px 'Shippori Mincho', serif; color:#efe6d2; background:#1f1b16; border:1px solid rgba(212,171,82,.5); border-radius:4px; }
+.b3-qrow .btn{ margin-top:6px; }
+/* スマホのスタート画面: ブラウザのバーで切れないよう、画面の高さに合わせて縦に収め、はみ出したらスクロール */
+body.b3-phone .start-screen{ min-height:100dvh; box-sizing:border-box; padding:56px 12px max(20px, env(safe-area-inset-bottom)); overflow-y:auto; justify-content:flex-start; }
+body.b3-phone .start-screen .title{ font-size:44px !important; margin:4px 0 !important; }
+body.b3-phone .start-screen .player-select{ flex-wrap:wrap; justify-content:center; gap:8px; }
+body.b3-phone .start-screen .player-select .btn{ flex:1 1 44%; min-width:140px; padding:10px 8px !important; }
+/* スマホ: ロゴは画面の高さに合わせて小さくし、対戦ボタンが最初の画面に見えるようにする */
+html.b3-has-logo body.b3-phone .start-screen .title{ height: min(30vh, 46vw) !important; width: min(92vw, 60vh) !important; margin: 0 auto !important; }
+html.b3-has-logo body.b3-phone .start-screen{ padding-top: 52px !important; }
+body.b3-phone .start-screen .subtitle{ font-size:13px !important; margin:2px 0 !important; }
+body.b3-phone .start-screen .note{ font-size:11px !important; margin:4px 0 !important; }
+@media (orientation: landscape){
+  html.b3-has-logo body.b3-phone .start-screen .title{ height: 34vh !important; }
+  body.b3-phone .start-screen .note{ display:none; }
+}

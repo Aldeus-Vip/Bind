@@ -49,7 +49,7 @@ function engineJs(){
   return 'window.BindEngineFactory = ' + factorySource(engineSource(s)) + ';';
 }
 const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css') + '\n' + read('src/ui.css');
-const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js'), engineJs(), read('src/cpu_ai.js'), read('src/cpu.js')];
+const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js'), engineJs(), read('src/cpu_ai.js'), read('src/cpu.js'), read('src/device.js')];
 
 s = s.replace('<title>Bind — プロトタイプ</title>', '<title>Bind 3D</title>');
 s = s.replace('</head>',
@@ -65,7 +65,10 @@ if(fs.existsSync(favDir)){
     `<link rel="icon" type="image/png" sizes="32x32" href="${fav('icon-32.png')}">\n` +
     (single ? '' : '<link rel="icon" type="image/png" sizes="16x16" href="icon-16.png">\n') +
     `<link rel="apple-touch-icon" href="${fav('apple-touch-icon.png')}">\n` +
-    '<meta name="theme-color" content="#1e1816">\n</head>');
+    '<meta name="theme-color" content="#1e1816">\n' +
+    // iPhone: ホーム画面に追加すると、ブラウザのバーなしの全画面で開く
+    '<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="mobile-web-app-capable" content="yes">\n' +
+    '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n</head>');
 }
 // 通常の Web 版をスマホで開いたら軽量版(lite/)へ移る(?full=1 で通常版のまま)
 if(!single && !lite){
