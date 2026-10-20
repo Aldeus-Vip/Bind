@@ -26,18 +26,26 @@ const markPhone = () => {
 addEventListener('resize', () => markPhone());
 
 /* ---- スマホ縦: 山札のゲージを盤面のすぐ下に置く(上から 盤面 → 山札 → 効果欄 → 手札) ---- */
+// 画面が描き直されると山札の要素も作り直されるので、要素に直接位置を書くと、描き直すたびに一瞬元の場所へ戻って
+// 画面が上下に揺れる。位置は body の CSS 変数(--b3-deck-top)に持たせ、CSS で常に当てる(作り直された瞬間から盤面の下にいる)
+let deckTop = -1, pendY = null, pendN = 0;
 function placeDeck(reset){
-  const d = document.querySelector('#app .deck-gauge-wrap');
-  if(!d) return;
   const K = window.B3 && window.B3.K, cv = document.querySelector('.b3-canvas');
   const on = !reset && document.body.classList.contains('b3-portrait') && K && K.active && K.active() && cv && K.boardBox && K.boardBox.bottom > 0;
-  if(!on){ if(d.dataset.b3placed){ d.style.cssText = ''; delete d.dataset.b3placed; } return; }
+  document.body.classList.toggle('b3-deck-under', !!on);
+  if(!on){ deckTop = -1; return; }
   const r = cv.getBoundingClientRect();
-  const fan = document.querySelector('.b3-fan'), fr = fan && fan.getBoundingClientRect();
-  let y = r.top + K.boardBox.bottom + 2;
-  if(fr && y > fr.top - 30) y = fr.top - 30; // 効果欄に重ならないように
-  d.dataset.b3placed = '1';
-  Object.assign(d.style, { position:'fixed', left:'10px', right:'10px', top: Math.round(y) + 'px', margin:'0', maxWidth:'none', zIndex:'5' });
+  // 効果欄・手札は描き直しの途中で一瞬形が変わるので、それには合わせない(盤面の高さは効果欄に重ならないよう CSS で決めてある)
+  const y = Math.round(r.top + K.boardBox.bottom + 2);
+  if(Math.abs(y - deckTop) < 2){ pendY = null; return; } // 少しの揺れでは動かさない
+  // 描き直しの途中に一瞬だけ測った盤面の大きさ(途中の値)では動かさない: 同じ位置が 3 回続いたら動かす
+  if(deckTop >= 0){
+    if(pendY === null || Math.abs(y - pendY) >= 2){ pendY = y; pendN = 1; return; }
+    if(++pendN < 3) return;
+  }
+  pendY = null;
+  deckTop = y;
+  document.body.style.setProperty('--b3-deck-top', y + 'px');
 }
 let placeN = 0;
 (function loop(){ requestAnimationFrame(loop); if(++placeN % 4) return; placeDeck(); })();

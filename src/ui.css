@@ -241,7 +241,8 @@ body.b3-phone.b3-ui #top-buttons-bar > #b3-plates-btn{ display:inline-block !imp
 body.b3-phone.b3-ui #app .left-column .players-panel{ display:none !important; }
 body.b3-portrait.b3-ui #app{ padding: 60px 4px 0 !important; }
 body.b3-portrait.b3-ui .floor-grid.b3{ height: calc(100dvh - 48px - 210px) !important; min-height: 260px; }
-body.b3-portrait .deck-gauge-wrap[data-b3placed]{ pointer-events:none; }
+/* 山札は盤面のすぐ下に固定(device.js が --b3-deck-top を入れる)。ページの高さに影響しないので、描き直しで画面が揺れない */
+body.b3-deck-under.b3-ui #app .deck-gauge-wrap{ position:fixed !important; left:10px; right:10px; top: var(--b3-deck-top, 50%); margin:0 !important; max-width:none !important; z-index:5; pointer-events:none; }
 /* スマホ縦: 盤面の下に余る高さで、手札を大きく(読みやすく、押しやすく) */
 body.b3-portrait .b3-fan .hand-row{ --cw: 96px; height: 140px; }
 body.b3-portrait.b3-ui .floor-grid.b3{ height: calc(100dvh - 60px - 250px) !important; }
