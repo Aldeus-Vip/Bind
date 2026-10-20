@@ -180,7 +180,7 @@ function evaluate(S, me, kn, W){
   s += W.hand*(handVal(hm.length, W.handCap) - handVal(ho.length, W.handCap));
   if(ho.length === 0) s += W.oppZero;
   if(W.handOwn) s += W.handOwn*handVal(hm.length, W.handCap);
-  if(W.aceKeep && hm.length <= 3 && hm.some(c => val(c) === 1)) s += W.aceKeep;
+  if(W.aceKeep && hm.length <= (W.aceKeepMax || 3) && hm.some(c => val(c) === 1)) s += W.aceKeep;
   if(W.starve) s += W.starve*(ho.length === 0 ? 1 : ho.length === 1 ? 0.6 : ho.length === 2 ? 0.25 : 0);
   if(W.known && kn) s += W.known*(knownReach(S, M, kn) - knownReach(S, O, kn));
   let hold = 0;
