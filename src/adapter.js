@@ -1739,14 +1739,17 @@ const polys = [];
 // プレイヤーが操作できるカメラ(回転 yaw・見下ろし角 pitch・ズーム)。0 / PITCH / 1 が初期位置
 const CAM0 = { yaw:0, pitch:PITCH, zoom:1 };
 const cam = Object.assign({}, CAM0);
-const viewInset = { top:0, bottom:0, lift:0 }; // top/bottom: 盤面を収める帯を狭める(未使用) / lift: 盤面を上へずらす px(ui.js が効果欄の高さを入れる)
+const boardBox = { top:0, bottom:0 };
+const viewInset = { top:0, bottom:0, lift:0, alignTop:false }; // top/bottom: 盤面を収める帯を狭める(未使用) / lift: 盤面を上へずらす px(ui.js が効果欄の高さを入れる)
 const fitExtra = []; // カメラの画角に収めたい追加の点
 const focus = { field:false }; // 今の操作の場所(ui.js が入れる)。field: フロアを選ぶ場面
 try{ const sv = JSON.parse(localStorage.getItem('b3-cam') || 'null'); if(sv) ['yaw','pitch','zoom'].forEach(k => { if(typeof sv[k]==='number' && isFinite(sv[k])) cam[k] = sv[k]; }); }catch(e){}
 const CAM_LIM = { pitch:[0.55, 1.5], zoom:[0.6, 2.2] };
 function camPlace(d){
-  const c = Math.cos(cam.pitch);
-  camera.position.set(TARGET.x + Math.sin(cam.yaw)*c*d, TARGET.y + Math.sin(cam.pitch)*d, TARGET.z + Math.cos(cam.yaw)*c*d);
+  // スマホ縦(alignTop): 縦に余る分、少し真上寄りから見下ろして、盤面を縦に大きく描く(マスを押しやすく)
+  const pitch = viewInset.alignTop ? Math.min(CAM_LIM.pitch[1], cam.pitch + 0.28) : cam.pitch;
+  const c = Math.cos(pitch);
+  camera.position.set(TARGET.x + Math.sin(cam.yaw)*c*d, TARGET.y + Math.sin(pitch)*d, TARGET.z + Math.cos(cam.yaw)*c*d);
   camera.lookAt(TARGET); camera.updateMatrixWorld();
 }
 function fitCamera(){
@@ -1773,11 +1776,14 @@ function fitCamera(){
     if(r.okX && r.y1 - r.y0 <= top - bot) hi = d; else lo = d;
   }
   const r = span(hi / cam.zoom);
-  const shift = (r.y1 + r.y0)/2 - (top + bot)/2; // 盤面の中心を帯の中心へ(NDC)
+  // 盤面の中心を帯の中心へ(NDC)。alignTop(スマホ縦): 余った高さを下に回し、盤面を上に詰める
+  const shift = ins.alignTop ? r.y1 - top : (r.y1 + r.y0)/2 - (top + bot)/2;
   // lift: 下に重なる効果欄の分だけ、盤面の大きさは変えずに画面上で上へずらす(px)
   const offY = -shift*lastH/2 + (ins.lift || 0);
   if(Math.abs(offY) > 0.5 && lastW) camera.setViewOffset(lastW, lastH, 0, offY, lastW, lastH);
   camera.updateMatrixWorld();
+  // 盤面(頭上の表示と台座を含む)が描画欄の中で占める上下の位置(px)。device.js が山札をこのすぐ下に置く
+  boardBox.top = (1 - r.y1)/2*lastH - offY; boardBox.bottom = (1 - r.y0)/2*lastH - offY;
 }
 let camSaveT = 0;
 function setCam(o){
@@ -3701,7 +3707,7 @@ const K = { QUALITY, scene, camera, canvas, renderer, chars, tiles, tween, wait,
   tileX, tileZ, topY, TOP_Y, STEP, charPos, screenOf, boardPx, override, once, failSafe, active, driving, parks, holdBack,
   ensureAt, hideChar, placeChar, restoreChar, setAvatar, avatarKeyFor, creatureKeyFor, SUIT_THEME, themeOf,
   circleTex, starTex, pillarTex, sunTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
-  preview, cam, CAM0, setCam, viewInset, fitExtra, focus, LITE, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
+  preview, cam, CAM0, setCam, viewInset, boardBox, fitExtra, focus, LITE, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, sideMat: rockMat, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };

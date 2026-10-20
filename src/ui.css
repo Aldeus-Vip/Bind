@@ -99,7 +99,7 @@ body.b3-ui.b3-hide-panels #app .floor-grid.b3{ height: max(440px, calc(100vh - 1
   position: relative; display: block !important; height: 112px; min-height: 0; margin: 0 !important;
 }
 .b3-fan .hand-row > .card{
-  position: absolute; left: 50%; bottom: -18px; width: 76px !important; height: 106px !important; margin-left: -38px;
+  position: absolute; left: 50%; bottom: -18px; width: var(--cw, 76px) !important; height: calc(var(--cw, 76px) * 1.395) !important; margin-left: calc(var(--cw, 76px) / -2);
   transform-origin: 50% 260%;
   rotate: calc(var(--i, 0) * var(--ang, 7deg));
   translate: calc(var(--i, 0) * var(--dx, 58px)) calc(var(--i, 0) * var(--i, 0) * var(--sag, 4px));
@@ -231,3 +231,17 @@ body.b3-phone .start-screen .note{ font-size:11px !important; margin:4px 0 !impo
   html.b3-has-logo body.b3-phone .start-screen .title{ height: 34vh !important; }
   body.b3-phone .start-screen .note{ display:none; }
 }
+/* ===== プレートの表示 / 非表示(device.js) ===== */
+#b3-plates-btn{ display:none; }
+body.b3-ui #b3-plates-btn{ display:inline-block; }
+#b3-plates-btn.off{ opacity:.7; }
+body.b3-no-plates .b3-gauge{ display:none !important; }
+body.b3-phone.b3-ui #top-buttons-bar > #b3-plates-btn{ display:inline-block !important; }
+/* ===== スマホ縦: 上から 盤面 → 山札 → 効果欄 → 手札。ブラウザのバーを除いた高さ(dvh)に収める ===== */
+body.b3-phone.b3-ui #app .left-column .players-panel{ display:none !important; }
+body.b3-portrait.b3-ui #app{ padding: 60px 4px 0 !important; }
+body.b3-portrait.b3-ui .floor-grid.b3{ height: calc(100dvh - 48px - 210px) !important; min-height: 260px; }
+body.b3-portrait .deck-gauge-wrap[data-b3placed]{ pointer-events:none; }
+/* スマホ縦: 盤面の下に余る高さで、手札を大きく(読みやすく、押しやすく) */
+body.b3-portrait .b3-fan .hand-row{ --cw: 96px; height: 140px; }
+body.b3-portrait.b3-ui .floor-grid.b3{ height: calc(100dvh - 60px - 250px) !important; }

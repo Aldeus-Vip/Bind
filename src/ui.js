@@ -193,14 +193,15 @@ function fanLayout(row){
   const col = document.querySelector('#app > .game-screen > .center-column');
   const cx = col ? col.getBoundingClientRect().left + col.getBoundingClientRect().width/2 : innerWidth/2;
   const ang = Math.min(7, 18/half), sag = Math.min(4, 10/(half*half));
-  const swing = 2*275*Math.sin(ang*half*Math.PI/180); // 傾けた端のカードが横へ張り出す分(回転の支点はカードの下 約 275px)
-  const maxW = Math.min(2*Math.min(cx, innerWidth - cx) - 40, innerWidth*0.7, 900) - 76 - swing;
+  const cw = parseFloat(getComputedStyle(row).getPropertyValue('--cw')) || 76; // カードの幅(スマホ縦は大きい)
+  const swing = 2*275*(cw/76)*Math.sin(ang*half*Math.PI/180); // 傾けた端のカードが横へ張り出す分(回転の支点はカードの下 約 275px)
+  const maxW = Math.min(2*Math.min(cx, innerWidth - cx) - 40, innerWidth*(cw > 76 ? 0.86 : 0.7), 900) - cw - swing;
   const dx = n > 1 ? Math.max(14, Math.min(58, maxW/(n - 1))) : 0;
   cards.forEach((c, i) => { c.style.setProperty('--i', i - (n - 1)/2); c.style.zIndex = i + 1; });
   row.style.setProperty('--dx', dx.toFixed(1) + 'px');
   row.style.setProperty('--ang', ang.toFixed(2) + 'deg');
   row.style.setProperty('--sag', sag.toFixed(2) + 'px');
-  row.style.width = Math.max(3*62 + 40, dx*(n - 1) + 76 + 60).toFixed(0) + 'px';
+  row.style.width = Math.max(3*62 + 40, dx*(n - 1) + cw + 60).toFixed(0) + 'px';
 }
 
 /* ---- 効果フレームの部品 ---- */
@@ -309,7 +310,7 @@ let placeN = 0;
   // 3D の盤面を、効果欄の1行分だけ上へずらす(盤面の大きさは変えない)
   const B = window.B3, K = B && B.K, frame = fan && fan.querySelector('.b3-frame');
   if(K && K.viewInset && K.active()){
-    const lift = frame ? Math.round(frame.offsetHeight) : 0;
+    const lift = frame && !document.body.classList.contains('b3-portrait') ? Math.round(frame.offsetHeight) : 0; // スマホ縦は盤面の下に効果欄が来るので、ずらさない
     if(Math.abs(lift - (K.viewInset.lift || 0)) > 2){ K.viewInset.lift = lift; B.layout(true); }
   }
 })();

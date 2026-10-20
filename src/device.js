@@ -13,8 +13,62 @@ const isPhone = () => matchMedia('(max-width: 860px)').matches || (matchMedia('(
 const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const standalone = () => matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true;
 
-const markPhone = () => document.body.classList.toggle('b3-phone', isPhone());
-markPhone(); addEventListener('resize', markPhone);
+// b3-phone: スマホ / b3-portrait: スマホの縦向き(盤面を上に詰め、山札をそのすぐ下に置く)
+const markPhone = () => {
+  const ph = isPhone(), por = ph && innerHeight > innerWidth;
+  document.body.classList.toggle('b3-phone', ph);
+  const was = document.body.classList.contains('b3-portrait');
+  document.body.classList.toggle('b3-portrait', por);
+  const K = window.B3 && window.B3.K;
+  if(K && K.viewInset && K.viewInset.alignTop !== por){ K.viewInset.alignTop = por; if(window.B3.layout) window.B3.layout(true); }
+  if(was && !por) placeDeck(true);
+};
+addEventListener('resize', () => markPhone());
+
+/* ---- スマホ縦: 山札のゲージを盤面のすぐ下に置く(上から 盤面 → 山札 → 効果欄 → 手札) ---- */
+function placeDeck(reset){
+  const d = document.querySelector('#app .deck-gauge-wrap');
+  if(!d) return;
+  const K = window.B3 && window.B3.K, cv = document.querySelector('.b3-canvas');
+  const on = !reset && document.body.classList.contains('b3-portrait') && K && K.active && K.active() && cv && K.boardBox && K.boardBox.bottom > 0;
+  if(!on){ if(d.dataset.b3placed){ d.style.cssText = ''; delete d.dataset.b3placed; } return; }
+  const r = cv.getBoundingClientRect();
+  const fan = document.querySelector('.b3-fan'), fr = fan && fan.getBoundingClientRect();
+  let y = r.top + K.boardBox.bottom + 2;
+  if(fr && y > fr.top - 30) y = fr.top - 30; // 効果欄に重ならないように
+  d.dataset.b3placed = '1';
+  Object.assign(d.style, { position:'fixed', left:'10px', right:'10px', top: Math.round(y) + 'px', margin:'0', maxWidth:'none', zIndex:'5' });
+}
+let placeN = 0;
+(function loop(){ requestAnimationFrame(loop); if(++placeN % 4) return; placeDeck(); })();
+
+/* ---- 手札・捨て札のプレート(頭上のゲージ)の表示 / 非表示 ---- */
+let plates = true;
+try{ plates = localStorage.getItem('bind3d.plates') !== '0'; }catch(e){}
+const applyPlates = () => {
+  document.body.classList.toggle('b3-no-plates', !plates);
+  document.querySelectorAll('[data-b3plates]').forEach(b => { b.textContent = plates ? '▣ プレート' : '▢ プレート'; b.title = plates ? '手札・捨て札のプレートを隠す' : '手札・捨て札のプレートを出す'; b.classList.toggle('off', !plates); });
+};
+function togglePlates(){ plates = !plates; try{ localStorage.setItem('bind3d.plates', plates ? '1' : '0'); }catch(e){} applyPlates(); }
+if(bar){
+  const pb = document.createElement('button');
+  pb.id = 'b3-plates-btn'; pb.type = 'button'; pb.dataset.b3plates = '1';
+  pb.addEventListener('click', e => { e.stopPropagation(); togglePlates(); });
+  bar.insertBefore(pb, bar.firstChild);
+}
+applyPlates();
+
+/* ---- スマホ横: 縦向きを勧める ---- */
+let landHintShown = false;
+function landscapeHint(){
+  const st = typeof state !== 'undefined' ? state : null;
+  if(landHintShown || !document.body.classList.contains('b3-phone') || innerHeight > innerWidth || !st || !st.players || st.gameOver) return;
+  landHintShown = true;
+  hint('スマホは縦向きにすると、盤面・効果欄・手札が重ならず遊びやすくなります。');
+}
+addEventListener('resize', landscapeHint);
+setInterval(landscapeHint, 3000);
+markPhone();
 
 /* ---- 全画面 ---- */
 const fsSupported = !!(root.requestFullscreen || root.webkitRequestFullscreen);
@@ -34,7 +88,8 @@ function toggleFullscreen(){
     const req = root.requestFullscreen || root.webkitRequestFullscreen;
     try{
       const r = req.call(root, { navigationUI: 'hide' });
-      if(r && r.then) r.then(() => { try{ screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); }catch(e){} }).catch(() => hint('全画面にできませんでした。ブラウザのメニューからお試しください。'));
+      // スマホは縦向きで遊ぶ前提(横向きは盤面・効果欄・手札が重なる)。縦に固定できる端末だけ固定する
+      if(r && r.then) r.then(() => { try{ if(isPhone() && screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(() => {}); }catch(e){} }).catch(() => hint('全画面にできませんでした。ブラウザのメニューからお試しください。'));
     }catch(e){}
     return;
   }
