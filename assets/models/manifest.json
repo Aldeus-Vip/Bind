@@ -85,7 +85,15 @@
   "c8": {
     "file": "c8.glb",
     "toon": true,
-    "height": 1.2
+    "height": 1.2,
+    "gait": {
+      "serpent": {
+        "helix": true,
+        "A": 0.3,
+        "lam": 0.55,
+        "y0": 0.48
+      }
+    }
   },
   "c9": {
     "file": "c9.glb",

@@ -1752,7 +1752,9 @@ async function hopTo(ch, dest, dur, height){
   let dy = Math.atan2(to.x-from.x, to.z-from.z) - startYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   ch.busy = true;
   const kind = moveStyleOf(ch.avKey) === 'hop4' ? 'hop4' : 'hop2';
-  const mv = u => ch.av.move && ch.av.move({ kind, u, t:clockT() });
+  ch.stride = -(ch.stride || 1); // 2足は跳ぶたびに踏み切る脚を入れ替える
+  const lead = ch.stride;
+  const mv = u => ch.av.move && ch.av.move({ kind, u, lead, t:clockT() });
   await tween(0.12, t => { ch.root.rotation.y = startYaw + dy*ease.out(t); ch.body.scale.set(1+0.12*t, 1-0.18*t, 1+0.12*t); mv(t - 1); });
   await tween(dur, t => {
     ch.root.position.lerpVectors(from, to, ease.inOut(t));

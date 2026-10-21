@@ -327,17 +327,20 @@ function gaitRig(model, box, rotY, rig, over){
   // 長い体を、地面を這う S 字の線に沿わせる(根元 = 頭側から順に、次の骨が線の上に来るよう向ける)
   const Vw = new THREE.Vector3(), Va = new THREE.Vector3(), Vb = new THREE.Vector3(), Qw = new THREE.Quaternion(), Qp = new THREE.Quaternion(), Qd = new THREE.Quaternion(), Qt = new THREE.Quaternion();
   const toWorld = p => p.clone().multiplyScalar(H).applyQuaternion(Fi).add(new THREE.Vector3(cx, box.min.y, cz)).applyMatrix4(model.matrixWorld);
+  const SP = Object.assign({ A:0.13, lam:0.62, helix:false, y0:0 }, over.serpent || {});
   function slither(k, d, t){
     if(bodyJ.length < 4) return;
     model.updateWorldMatrix(true, true);
     // 進む距離 d に合わせて波を後ろへ送る(体の各点が同じ跡をたどる)
-    const A = 0.13, lam = 0.62, wave = (d || 0)*1.1 + t*0.25;
+    // helix: 横だけでなく上下にも振って螺旋を描く(長い体でも前後に伸びすぎない。浮いて進む)
+    const A = SP.A, lam = SP.lam, wave = (d || 0)*1.1 + t*0.25;
     const pts = []; let len = 0, prev = null;
-    const total = segLen.reduce((a, b) => a + b, 0)*1.6 + 0.5;
-    for(let i = 0; i <= 320; i++){
-      const s = i/320*total;
-      const env = Math.min(1, 0.25 + s*1.5);
-      const p = new THREE.Vector3(A*env*S(2*PI*(s/lam - wave)), 0.035 + 0.24*Math.max(0, 1 - s/0.32)**2, 0.3 - s);
+    const total = segLen.reduce((a, b) => a + b, 0) + 0.5;
+    for(let i = 0; i <= 600; i++){
+      const s = i/600*total;
+      const env = Math.min(1, 0.25 + s*1.5), ph = 2*PI*(s/lam - wave);
+      const p = SP.helix ? new THREE.Vector3(A*env*S(ph), SP.y0 + A*env*C(ph), 0.3 - s)
+        : new THREE.Vector3(A*env*S(ph), 0.035 + 0.24*Math.max(0, 1 - s/0.32)**2, 0.3 - s);
       if(prev) len += p.distanceTo(prev);
       pts.push({ p, len }); prev = p;
     }
@@ -379,8 +382,16 @@ function gaitRig(model, box, rotY, rig, over){
       was = true;
       const k = mv.k == null ? 1 : mv.k, u = mv.u == null ? -2 : mv.u, d = mv.d || 0;
       if(mv.kind === 'hop2'){
-        const c = crouchOf(u), a = airOf(u);
-        legs.forEach(l => { add(l.hip, -(0.3*c + 0.65*a), 0, 0); add(l.knee, 0.6*c + 1.0*a, 0, 0); });
+        // 片足で踏み切り、もう片足で着地する(跳ぶたびに左右が入れ替わる。lead = 着地する脚の側)
+        const c = crouchOf(u), a = airOf(u), s = u > 0 && u < 1 ? u : u >= 1 ? 1 : 0, land = u >= 1 ? S(PI*Math.min(1, u - 1)) : 0;
+        const lead = mv.lead || 1;
+        legs.forEach(l => {
+          if(l.side === lead){ // 着地する脚: 膝を上げて前へ振り出し、伸ばして着く → 着地で受け止めて曲げる
+            add(l.hip, -(0.2*c + 0.95*a + 0.25*land), 0, 0); add(l.knee, 0.35*c + 1.1*a*(1 - 0.7*s) + 0.45*land, 0, 0);
+          } else {             // 踏み切る脚: 曲げて蹴り、後ろへ伸ばしたまま流れて、着地後に前へ戻る
+            add(l.hip, 0.7*a*(1 - 0.4*s) + 0.35*land, 0, 0); add(l.knee, 0.6*c + 0.25*a + 0.6*a*s + 0.3*land, 0, 0);
+          }
+        });
         wingL.forEach((j, i) => add(j, 0, 0, a*(i ? 0.3 : 0.6))); wingR.forEach((j, i) => add(j, 0, 0, -a*(i ? 0.3 : 0.6)));
       } else if(mv.kind === 'hop4'){
         const c = crouchOf(u), a = airOf(u), s = u > 0 && u < 1 ? u : 0, env = Math.sqrt(a);
