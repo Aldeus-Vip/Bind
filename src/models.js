@@ -12,7 +12,9 @@
        "rotY": 0,                 // 向きの補正(ラジアン)。正面がカメラ側(+Z)になるように
        "toon": true,              // 質感をトゥーン調に変換する(既定 true)
        "badgeY": 1.45,            // 頭上カードの高さ(省略時は height + 0.25)
-       "anims": { "idle": "Idle", "raise": "Attack", "jump": "Jump" }  // 省略可。アニメーション名
+       "anims": { "idle": "Idle", "raise": "Attack", "jump": "Jump" },  // 省略可。アニメーション名
+       "headYaw": 0.7,            // 移動するときの頭の向き(rotY で補正した後の正面からの角度)。省略時 0
+       "wing": { "speed": 40, "fly": 16, "amp": 0.5 }  // 羽ばたきの速さ(待機 / 飛行)と振れ幅の倍率。虫は速く小さく
      }
    }
    キー: beast-A, c2〜c13(2〜K), jb(黒JOKER), jw(白JOKER), caster(術者)
@@ -124,11 +126,11 @@ function makeGltfAvatar(key, spec, gltf){
     // アニメーションが無く、manifest に rig(骨の対応表)があるときは、骨をコードで動かす
     // rig を書かなければ骨の配置から自動で推定する("rig": false で無効)
     const rig = spec.rig === false ? null : (spec.rig && spec.rig !== 'auto') ? spec.rig : autoRig(model, box);
-    const proc = !mixer && rig ? proceduralRig(model, rig) : null;
+    const proc = !mixer && rig ? proceduralRig(model, rig, spec.wing) : null;
     if(rig && !spec.rig) model.userData.autoRig = rig; // 確認用
     // 移動の動き(骨がある場合)。rig の名前を骨に直してから渡す
     const rigB = rig ? { wingsL: rig.wingsL, wingsR: rig.wingsR } : null;
-    const gait = !mixer && spec.gait !== false ? gaitRig(model, box, spec.rotY || 0, rigB, Object.assign({ crawl: B.moveStyleOf && B.moveStyleOf(key) === 'crawl' }, spec.gait || {})) : null;
+    const gait = !mixer && spec.gait !== false ? gaitRig(model, box, (spec.rotY || 0) - (spec.headYaw || 0), rigB, Object.assign({ crawl: B.moveStyleOf && B.moveStyleOf(key) === 'crawl', wing: spec.wing }, spec.gait || {})) : null;
     let mv = null;
     let raiseK = 0, jumpK = 0;
     // 周囲を舞う小さな分身(10 の虫の群れなど)。manifest の swarm で指定し、軽量版モデルを使う
@@ -144,6 +146,7 @@ function makeGltfAvatar(key, spec, gltf){
         else if(!proc){ holder.position.y = 0.05*raise; holder.rotation.x = -0.15*raise; }
       },
       idle(t, ph){ if(!mixer && !proc) holder.position.y = Math.sin(t*1.6 + ph)*0.02; },
+      headYaw: spec.headYaw || 0, // 頭の向き(正面からの角度)。移動はこの向きで進む
       move(m){ mv = m; },
       tick(t, dt, ph){ if(mixer) mixer.update(dt); if(gait) gait.reset(); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(gait) gait.apply(mv, t); if(swarm) swarm.tick(t + (ph || 0), raiseK); if(idleFx) idleFx.tick(t + (ph || 0), dt, raiseK); },
     };
@@ -154,7 +157,8 @@ function makeGltfAvatar(key, spec, gltf){
    rig: { hips, spine:[…], neck:[…], head, jaw, tail:[…], ears:[…] }(骨の名前)
    回転はモデル空間の軸で指定する(X=縦に首を振る / Y=左右を向く / Z=傾ける)。
    各骨の向きがバラバラでも、親の向きで変換してから掛けるので同じ意味になる。 */
-function proceduralRig(model, rig){
+function proceduralRig(model, rig, wing){
+  wing = Object.assign({ speed:1, amp:1 }, wing || {}); // 羽ばたきの速さ・振れ幅(虫は速く小さく)
   model.updateMatrixWorld(true);
   const rootInv = model.getWorldQuaternion(new THREE.Quaternion()).invert();
   const get = n => !n ? null : (typeof n === 'string' ? model.getObjectByName(n) : n);
@@ -183,9 +187,9 @@ function proceduralRig(model, rig){
     J.tail.forEach((j, i) => turn(j, (-raise*0.12 + jump*0.15)*tk, Math.sin(t*1.8 - i*0.6)*(0.10 + Math.min(i, 5)*0.04)*(1 + raise*1.5)*tk, 0));
     // 翼: 付け根から羽ばたく(構えると大きく広げる)
     // 待機中もはっきり羽ばたく。先の骨は少し遅れてしなる。ときどき大きく羽を伸ばす
-    const stroke = ph => { const s = Math.sin(t*2.6 - ph); return s > 0 ? s : s*0.75; };
+    const stroke = ph => { const s = Math.sin(t*2.6*wing.speed - ph); return s > 0 ? s : s*0.75; };
     const stretch = Math.max(0, Math.sin(t*0.29)*6 - 5)*0.25;
-    const flap = i => (stroke(i*0.7)*0.32 + 0.06 + stretch)*(i ? 0.6 : 1) + raise*0.35 - jump*0.2;
+    const flap = i => (stroke(i*0.7)*0.32*wing.amp + 0.06 + stretch)*(i ? 0.6 : 1) + raise*0.35 - jump*0.2;
     J.wingsL.forEach((j, i) => turn(j, 0, 0, flap(i)));
     J.wingsR.forEach((j, i) => turn(j, 0, 0, -flap(i)));
     const flick = Math.max(0, Math.sin(t*0.37)*8 - 7); // ときどき耳を動かす
@@ -301,6 +305,9 @@ function gaitRig(model, box, rotY, rig, over){
   let tailC = over.tail ? over.tail.map(byName).filter(Boolean) : null;
   if(!tailC){ let best = 1e9; limbs.forEach(c => { if(c.length >= 3 && tip(c).z < top(c).z - 0.2 && tip(c).z < best && !legChains.includes(c)){ best = tip(c).z; tailC = c; } }); }
   const tail = (tailC || []).map(J);
+  // なびく鎖(飛ぶときの尾羽など): manifest の gait.trail に骨の名前の並びを複数
+  const trail = (over.trail || []).map(c => c.map(byName).filter(Boolean).map(J));
+  const wingO = Object.assign({ speed:1, amp:1 }, over.wing || {});
   // ひれ(泳ぐ生物): 横へ張り出す短い鎖
   const fins = over.fins ? over.fins.map(byName).filter(Boolean).map(b => ({ j: J(b), side: fpos.get(b).x >= 0 ? 1 : -1 })) : limbs.filter(c => c !== tailC && !legChains.includes(c) && c.length >= 2 && Math.abs(tip(c).x - top(c).x) > 0.15 && tip(c).y < top(c).y).map(c => ({ j: J(c[0]), side: tip(c).x >= 0 ? 1 : -1 }));
   // 翼: autoRig / manifest の rig から(+X 側が L)
@@ -381,7 +388,17 @@ function gaitRig(model, box, rotY, rig, over){
       if(!mv) return;
       was = true;
       const k = mv.k == null ? 1 : mv.k, u = mv.u == null ? -2 : mv.u, d = mv.d || 0;
-      if(mv.kind === 'hop2'){
+      if(mv.kind === 'walk2' || mv.kind === 'walk4'){
+        // 歩く: 脚を交互に前へ振り出し、振り出している間だけ膝を曲げる(2足は左右交互、4足は 左後→左前→右後→右前)
+        const cyc = mv.cyc || 0, q4 = mv.kind === 'walk4';
+        legs.forEach(l => {
+          const ph = cyc + (l.side > 0 ? 0 : PI) + (q4 && l.front ? PI/2 : 0);
+          const sw = S(ph), up = Math.max(0, C(ph));
+          add(l.hip, -(q4 ? 0.32 : 0.42)*sw*k, 0, 0);
+          add(l.knee, (q4 ? 0.45 : 0.6)*up*k, 0, 0);
+        });
+        tail.forEach((j, i) => add(j, 0, 0.08*S(cyc*2 - i*0.6)*k, 0));
+      } else if(mv.kind === 'hop2'){
         // 片足で踏み切り、もう片足で着地する(跳ぶたびに左右が入れ替わる。lead = 着地する脚の側)
         const c = crouchOf(u), a = airOf(u), s = u > 0 && u < 1 ? u : u >= 1 ? 1 : 0, land = u >= 1 ? S(PI*Math.min(1, u - 1)) : 0;
         const lead = mv.lead || 1;
@@ -414,12 +431,21 @@ function gaitRig(model, box, rotY, rig, over){
         fins.forEach(f => add(f.j, 0, 0, f.side*0.3*S(t*6.5 + 1)*k));
       } else if(mv.kind === 'fly' || mv.kind === 'glide'){
         if(mv.kind === 'fly'){
-          const f = ph => { const s = S(t*7.5 - ph); return s > 0 ? s : s*0.8; };
-          wingL.forEach((j, i) => add(j, -0.15*k*(i ? 0 : 1), 0, (0.2 + 0.85*f(i*0.8))*(i ? 0.6 : 1)*k));
-          wingR.forEach((j, i) => add(j, -0.15*k*(i ? 0 : 1), 0, -(0.2 + 0.85*f(i*0.8))*(i ? 0.6 : 1)*k));
+          const w = 7.5*(wingO.fly || wingO.speed), f = ph => { const s = S(t*w - ph); return s > 0 ? s : s*0.8; };
+          const a = i => (0.2 + 0.85*wingO.amp*f(i*0.8))*(i ? 0.6 : 1)*k;
+          if(over.flat){
+            // 体を水平に倒して飛ぶ鳥: 翼は体の軸(頭〜尾)のまわりに回す = 倒した後は上下に打つ
+            wingL.forEach((j, i) => add(j, 0, a(i) - 0.15*k, 0));
+            wingR.forEach((j, i) => add(j, 0, -a(i) + 0.15*k, 0));
+          } else {
+            wingL.forEach((j, i) => add(j, -0.15*k*(i ? 0 : 1), 0, a(i)));
+            wingR.forEach((j, i) => add(j, -0.15*k*(i ? 0 : 1), 0, -a(i)));
+          }
         }
-        legs.forEach(l => { add(l.hip, 0.45*k, 0, 0); add(l.knee, 0.35*k, 0, 0); }); // 脚は後ろへ流す
+        if(!over.flat) legs.forEach(l => { add(l.hip, 0.45*k, 0, 0); add(l.knee, 0.35*k, 0, 0); }); // 脚は後ろへ流す
         tail.forEach((j, i) => add(j, 0, 0.12*S(t*3 - i*0.6)*k, 0));
+        // 尾羽をなびかせる(付け根から先へ波が伝わる)
+        trail.forEach((c, n) => c.forEach((j, i) => add(j, (0.1 + 0.07*i)*S(t*5 - i*0.9 - n*0.7)*k, 0, 0.05*S(t*3.1 - i*0.7 + n)*k)));
       }
     },
   };

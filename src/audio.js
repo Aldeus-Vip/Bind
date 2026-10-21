@@ -86,6 +86,25 @@ const SFX = {
   card(){ noise({ f:3000, f1:1200, d:0.18, v:0.12, q:0.8, filter:'highpass' }); },
   draw(){ noise({ f:2500, f1:5000, d:0.22, v:0.12, filter:'bandpass', q:0.6 }); tone({ f:N(84), d:0.25, v:0.05, wet:0.5 }); },
   hop(){ noise({ f:400, f1:120, d:0.12, v:0.18, filter:'lowpass' }); tone({ f:140, f1:70, d:0.12, v:0.18 }); },
+  // ---- 移動の音(adapter.js の travel が動きに合わせて鳴らす。n = 何歩目か) ----
+  step(n){ const hi = (n||0) % 2; noise({ f:hi ? 520 : 440, f1:160, d:0.09, v:0.11, filter:'lowpass' }); tone({ f:hi ? 105 : 92, f1:60, d:0.07, v:0.07 }); noise({ f:2600, d:0.03, v:0.025, filter:'highpass' }); },
+  hoof(n){ const hi = (n||0) % 2; tone({ f:hi ? 980 : 820, f1:hi ? 520 : 430, d:0.045, v:0.09, type:'triangle' }); noise({ f:hi ? 2600 : 2100, d:0.035, v:0.08, filter:'bandpass', q:4 }); tone({ f:170, f1:90, d:0.06, v:0.08 }); },
+  paw(){ noise({ f:320, f1:110, d:0.11, v:0.13, filter:'lowpass' }); tone({ f:78, f1:52, d:0.1, v:0.1 }); },
+  skitter(){ for(let k=0;k<4;k++) noise({ f:3200 + Math.random()*1500, d:0.014, v:0.05, filter:'highpass', delay:k*0.028 + Math.random()*0.01 }); },
+  slither(){ noise({ f:2400, f1:3800, d:0.55, v:0.05, q:0.7, filter:'highpass', a:0.18 }); noise({ f:300, d:0.4, v:0.04, filter:'lowpass', a:0.15 }); },
+  swish(){ noise({ f:450, f1:1300, d:0.32, v:0.09, q:1.2, a:0.09 }); tone({ f:300 + Math.random()*200, f1:700, d:0.08, v:0.025, delay:0.12 }); },
+  flap(){ noise({ f:650, f1:220, d:0.2, v:0.17, filter:'lowpass', a:0.035 }); noise({ f:1500, f1:600, d:0.12, v:0.04, q:0.8, a:0.02 }); },
+  buzz(dur){ // 虫の羽音(移動のあいだ鳴り続ける)
+    dur = Math.min(4, Math.max(0.6, dur || 1.2));
+    const t = now(), osc = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.value = 185; lfo.frequency.value = 23; lg.gain.value = 9; lfo.connect(lg); lg.connect(osc.frequency);
+    f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.9;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.12);
+    g.gain.setValueAtTime(0.06, t + dur - 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(f); f.connect(g); out(g, 0.15);
+    osc.start(t); lfo.start(t); osc.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+  },
+  whoosh(dur){ dur = Math.min(4, Math.max(0.6, dur || 1.2)); noise({ f:280, f1:900, d:dur, v:0.07, q:1.4, a:dur*0.35, slide:dur }); },
   turn(){ chord([N(69), N(76)], { d:0.9, v:0.08, type:'sine', arp:0.12, wet:0.6 }); },
   flip(){ noise({ f:1800, f1:600, d:0.3, v:0.14, q:1.5 }); tone({ f:N(81), d:0.5, v:0.07, delay:0.25, wet:0.6 }); },
   reveal(){ noise({ f:300, f1:3000, d:0.5, v:0.12 }); chord([N(69), N(73), N(76)], { d:0.9, v:0.06, delay:0.3, arp:0.05, wet:0.7 }); },
@@ -144,7 +163,9 @@ function play(name, arg){
 
 /* ---------------- 演出と効果音の対応 ---------------- */
 const MAP = {
-  triggerMoveTravel: (o, d, p) => { // 経路の歩数だけ跳ねる音
+  // 移動の音(足音・羽ばたきなど)は adapter.js の移動が動きに合わせて鳴らす。2D 表示のときだけここで跳ねる音
+  triggerMoveTravel: (o, d, p) => {
+    if(window.B3 && B3.enabled) return;
     let n = 1; try{ const path = shortestFloorPath(o, d, p); if(path && path.length) n = Math.max(1, path.length - 1); }catch(e){}
     for(let k=0;k<Math.min(n, 8);k++) setTimeout(() => play('hop'), 160 + k*480);
   },

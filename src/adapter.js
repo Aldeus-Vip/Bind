@@ -1089,6 +1089,7 @@ function makeCreature(key, opt, build){
   outer.traverse(o => { if(o.isMesh && !o.userData.outline){ o.castShadow = true; if(o.material && o.material.isMeshToonMaterial) mats.push(o.material); } });
   const umats = [...new Set(mats)]; umats.forEach(m => m.userData.c0 = m.color.clone());
   let raise = 0, jump = 0;
+  const pivotY = 0.5*(opt.auraH || 0.9);
   const av = {
     key, root:outer, head:ctx.head || body, eyes:ctx.eyes, mats:umats, badgeY:opt.badgeY || 1.2, badgeX:opt.badgeX || 0.45, lift:0,
     setSuit(th){
@@ -1115,30 +1116,40 @@ function makeCreature(key, opt, build){
     },
     blink(on){ ctx.eyes.forEach(e => e.scale.y = on ? 0.1 : (e.userData.sy || 1)); },
     // 移動中の体の浮き・傾き(足元の陣は地面に残す)。骨の動きは spec.move(models.js)
+    // 傾きは頭の向き(headYaw)を基準に、体の中ほど(pivot)を軸にして回す
     move(m){
-      const L = moveLook(m && Object.assign({ key }, m));
-      body.position.y = L.lift; body.rotation.x = L.lean; body.rotation.z = L.roll; av.lift = L.lift;
+      const L = moveLook(m && Object.assign({ key }, m)), hy = av.headYaw;
+      mvQ.setFromAxisAngle(AX_Y, hy).multiply(mvQ2.setFromEuler(mvE.set(L.lean, 0, L.roll, 'XZY'))).multiply(mvQ3.setFromAxisAngle(AX_Y, -hy));
+      body.quaternion.copy(mvQ);
+      body.position.set(0, pivotY, 0).applyQuaternion(mvQ).multiplyScalar(-1).add(mvP.set(0, pivotY + L.lift, 0));
+      av.lift = L.lift;
       if(spec.move) spec.move(m);
     },
   };
+  av.headYaw = spec.headYaw || 0;
   av.setSuit(SUIT_THEME.H); av.pose('rest', 0);
   return av;
 }
+const AX_Y = new THREE.Vector3(0, 1, 0), mvQ = new THREE.Quaternion(), mvQ2 = new THREE.Quaternion(), mvQ3 = new THREE.Quaternion(), mvE = new THREE.Euler(), mvP = new THREE.Vector3();
 /* ---- 移動の仕方(生物ごと) ----
-   hop4: 4足で跳ぶ(A・Q) / hop2: 2足で跳ぶ(2・3・J・K、術者) / crawl: 多脚で這う(4) / serpent: 長い体でくねる(5・8)
+   walk4: 4足で歩く(A・Q) / walk2: 2足で歩く(2・3・J・K) / crawl: 多脚で這う(4) / serpent: 長い体でくねる(5・8)
+   (hop2 / hop4: 跳ぶ。骨のない術者などの予備)
    swim: 浮いて尾びれで泳ぐ(6) / fly: 浮いて羽ばたく(7・9・10・白JOKER) / glide: 浮いたまま傾いて滑る(黒JOKER) */
-const MOVE_STYLE = { 'beast-A':'hop4', c12:'hop4', c2:'hop2', c3:'hop2', c11:'hop2', c13:'hop2', c4:'crawl', c5:'serpent', c8:'serpent',
+const MOVE_STYLE = { 'beast-A':'walk4', c12:'walk4', c2:'walk2', c3:'walk2', c11:'walk2', c13:'walk2', c4:'crawl', c5:'serpent', c8:'serpent',
   c6:'swim', c7:'fly', c9:'fly', c10:'fly', jw:'fly', jb:'glide' };
-const moveStyleOf = key => MOVE_STYLE[key] || 'hop2';
-// 元の姿勢が斜めのモデルを、移動中は水平に寝かせる分の前傾(6 のシャチは跳ね上がった姿勢)
-const MOVE_LEAN = { c6:0.6 };
+const moveStyleOf = key => MOVE_STYLE[key] || 'walk2';
+// 移動中に体を前へ倒す量(7 は縦長の体を水平に倒して飛ぶ)
+const MOVE_LEAN = { c7:1.15 }; // 7 は体を水平に倒して飛ぶ
 // 体全体の浮き(lift)・前傾(lean、+ で前へ)・横の傾き(roll)
 function moveLook(m){
   const L = { lift:0, lean:0, roll:0 };
   if(!m) return L;
   const k = m.k==null ? 1 : m.k, t = m.t || 0, u = m.u==null ? -2 : m.u;
   L.lean = (MOVE_LEAN[m.key] || 0)*k;
-  if(m.kind==='fly'){ L.lift = 0.5*k + 0.05*Math.sin(t*7.5 - 1.2)*k; L.lean = 0.3*k; }
+  const cyc = m.cyc || 0;
+  if(m.kind==='walk2'){ L.lift = 0.02*Math.abs(Math.sin(cyc))*k; L.lean += 0.05*k; L.roll = 0.035*Math.sin(cyc)*k; }
+  else if(m.kind==='walk4'){ L.lift = 0.01*Math.abs(Math.sin(cyc*2))*k; L.lean += 0.02*k; }
+  else if(m.kind==='fly'){ L.lift = (MOVE_LEAN[m.key] ? 0.6 : 0.5)*k + 0.05*Math.sin(t*7.5 - 1.2)*k; L.lean += (MOVE_LEAN[m.key] ? 0 : 0.3)*k; }
   else if(m.kind==='swim'){ L.lift = 0.42*k + 0.04*Math.sin(t*3.2)*k; L.lean += (0.12 + 0.06*Math.sin(t*6.5))*k; }
   else if(m.kind==='glide'){ L.lift = 0.36*k + 0.02*Math.sin(t*2.4)*k; L.lean = 0.14*k; L.roll = -0.24*k; }
   else if(m.kind==='crawl'){ L.lift = 0.012*Math.abs(Math.sin((m.d || 0)*Math.PI*3.6))*k; L.lean = 0.04*k; }
@@ -1751,7 +1762,7 @@ async function hopTo(ch, dest, dur, height){
   const startYaw = ch.root.rotation.y;
   let dy = Math.atan2(to.x-from.x, to.z-from.z) - startYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   ch.busy = true;
-  const kind = moveStyleOf(ch.avKey) === 'hop4' ? 'hop4' : 'hop2';
+  const kind = /4$/.test(moveStyleOf(ch.avKey)) ? 'hop4' : 'hop2';
   ch.stride = -(ch.stride || 1); // 2足は跳ぶたびに踏み切る脚を入れ替える
   const lead = ch.stride;
   const mv = u => ch.av.move && ch.av.move({ kind, u, lead, t:clockT() });
@@ -1764,7 +1775,7 @@ async function hopTo(ch, dest, dur, height){
     ch.av.pose('jump', Math.sin(Math.PI*t));
     mv(t);
   });
-  dust(to);
+  dust(to); sfx('hop');
   await tween(0.16, t => { const k = Math.sin(Math.PI*t)*0.2; ch.body.scale.set(1+k*0.6, 1-k, 1+k*0.6); mv(1 + t); });
   ch.body.scale.set(1,1,1); ch.av.pose('rest', 0); if(ch.av.move) ch.av.move(null);
   ch.idx = dest; ch.busy = false;
@@ -1774,12 +1785,26 @@ const clockT = () => simT;
 /* 跳ばない生物の移動: 浮く(または体を伸ばす)→ 道なりに進む → 降りる(元の姿勢に戻る)
    path はマス番号の並び。マスの中心を通るたびに onCell(マス番号) を呼ぶ */
 const GLIDE = {
-  crawl:   { up:0.2,  down:0.2,  per:0.55 },
+  walk2:   { up:0.12, down:0.18, per:0.55, steps:1.0 },
+  walk4:   { up:0.12, down:0.18, per:0.5,  steps:0.8 },
+  crawl:   { up:0.2,  down:0.2,  per:0.55, steps:1.8 },
   serpent: { up:0.45, down:0.45, per:0.5 },
   swim:    { up:0.32, down:0.32, per:0.42 },
   fly:     { up:0.32, down:0.32, per:0.4 },
   glide:   { up:0.3,  down:0.3,  per:0.4 },
 };
+// 移動中の音: 足が着くたび(cyc の区切り)/ 羽ばたくたび(時間)/ 始めに1回(長い音)
+const sfx = (n, a) => { if(window.BindAudio) BindAudio.play(n, a); };
+const MOVE_SOUND = {
+  walk2: { name:'step', perCyc:2 }, crawl: { name:'skitter', perCyc:2 }, serpent: { name:'slither', perTile:1.4 },
+  swim: { name:'swish', hz:6.5/(2*Math.PI) }, fly: { name:'flap', hz:7.5/(2*Math.PI) },
+};
+function moveSoundOf(ch, kind){
+  if(kind === 'walk4') return { name: ch.avKey === 'c12' ? 'hoof' : 'paw', perCyc:4 };
+  if(kind === 'fly' && ch.avKey === 'c10') return { name:'buzz', once:true };
+  if(kind === 'glide') return { name:'whoosh', once:true };
+  return MOVE_SOUND[kind] || null;
+}
 async function travel(ch, path, onCell){
   const kind = moveStyleOf(ch.avKey);
   const G = GLIDE[kind];
@@ -1798,23 +1823,34 @@ async function travel(ch, path, onCell){
     return { p:a.clone().lerp(b, Math.min(1, Math.max(0, f))), yaw:Math.atan2(b.x - a.x, b.z - a.z) };
   };
   const turnTo = (yaw, r) => { let dy = yaw - ch.root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); ch.root.rotation.y += dy*r; };
-  const yaw0 = L > 0 ? at(0.001).yaw : ch.root.rotation.y;
-  // 浮く・体を伸ばす(進む向きへ振り向きながら)
-  await tween(G.up, t => { turnTo(yaw0, 0.25); ch.av.move({ kind, k:ease.inOut(t), d:0, t:clockT() }); });
-  let next = 1;
+  const hy = ch.av.headYaw || 0; // 頭の向きが正面からずれているモデル(4・6)は、その分だけ体を回して頭から進む
+  const yaw0 = (L > 0 ? at(0.001).yaw : ch.root.rotation.y) - hy;
+  const cycOf = s => s/STEP1*2*Math.PI*(G.steps || 0);
+  const snd = moveSoundOf(ch, kind), t0 = clockT();
+  let lastEv = 0;
   const dur = G.per*L/STEP1;
+  if(snd && snd.once) sfx(snd.name, G.up + dur + G.down);
+  if(kind === 'fly' && !(snd && snd.once)) sfx('flap');
+  // 浮く・体を伸ばす(進む向きへ振り向きながら)
+  await tween(G.up, t => { turnTo(yaw0, 0.25); ch.av.move({ kind, k:ease.inOut(t), d:0, cyc:0, t:clockT() }); });
+  let next = 1;
   await tween(dur, t => {
     const s = L*(t - Math.sin(2*Math.PI*t)/(2*Math.PI)*0.6); // 出だしと止まり際だけ少しゆっくり
     const q = at(s);
     ch.root.position.copy(q.p);
-    turnTo(q.yaw, 0.2);
-    ch.av.move({ kind, k:1, d:s/STEP1, t:clockT() });
+    turnTo(q.yaw - hy, 0.2);
+    const cyc = cycOf(s);
+    ch.av.move({ kind, k:1, d:s/STEP1, cyc, t:clockT() });
+    if(snd && !snd.once){
+      const ev = snd.perCyc ? Math.floor(cyc/(2*Math.PI)*snd.perCyc + 0.25) : snd.perTile ? Math.floor(s/STEP1*snd.perTile) : Math.floor((clockT() - t0)*snd.hz);
+      if(ev > lastEv){ lastEv = ev; sfx(snd.name, ev); }
+    }
     while(next < pts.length && s >= lens[next] - 1e-4){ if(onCell) onCell(path[next-1]); next++; }
   });
   while(next < pts.length){ if(onCell) onCell(path[next-1]); next++; }
   ch.root.position.copy(pts[pts.length-1]);
-  const d1 = L/STEP1;
-  await tween(G.down, t => { ch.av.move({ kind, k:1 - ease.inOut(t), d:d1, t:clockT() }); });
+  const d1 = L/STEP1, c1 = cycOf(L);
+  await tween(G.down, t => { ch.av.move({ kind, k:1 - ease.inOut(t), d:d1, cyc:c1, t:clockT() }); });
   ch.av.move(null);
   if(kind==='fly' || kind==='swim' || kind==='glide') dust(pts[pts.length-1]);
   ch.idx = path[path.length-1]; ch.busy = false;

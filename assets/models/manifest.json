@@ -57,7 +57,8 @@
         "Bone_061",
         "Bone_066"
       ]
-    }
+    },
+    "headYaw": 0.7
   },
   "c5": {
     "file": "c5.glb",
@@ -75,12 +76,32 @@
         "Bone_007",
         "Bone_011"
       ]
-    }
+    },
+    "headYaw": 0.93
   },
   "c7": {
     "file": "c7.glb",
     "toon": true,
-    "height": 1.15
+    "height": 1.15,
+    "gait": {
+      "flat": true,
+      "trail": [
+        [
+          "Bone_013",
+          "Bone_012"
+        ],
+        [
+          "Bone_025",
+          "Bone_024",
+          "Bone_023"
+        ],
+        [
+          "Bone_028",
+          "Bone_027",
+          "Bone_026"
+        ]
+      ]
+    }
   },
   "c8": {
     "file": "c8.glb",
@@ -109,6 +130,11 @@
       "size": 0.16,
       "radius": 0.6,
       "height": 0.55
+    },
+    "wing": {
+      "speed": 40,
+      "fly": 16,
+      "amp": 0.5
     }
   },
   "c11": {
