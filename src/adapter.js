@@ -1769,7 +1769,7 @@ async function hopTo(ch, dest, dur, height){
   ch.body.scale.set(1,1,1); ch.av.pose('rest', 0); if(ch.av.move) ch.av.move(null);
   ch.idx = dest; ch.busy = false;
 }
-const clockT = () => performance.now()/1000;
+const clockT = () => simT;
 
 /* 跳ばない生物の移動: 浮く(または体を伸ばす)→ 道なりに進む → 降りる(元の姿勢に戻る)
    path はマス番号の並び。マスの中心を通るたびに onCell(マス番号) を呼ぶ */
@@ -2241,6 +2241,8 @@ function adaptResolution(ms){
     renderer.setPixelRatio(liteRatio); layout(true);
   }
 }
+// 3D の演出の時間(確認ツールのスロー再生・一時停止で timeScale を変える。通常は 1)
+let timeScale = 1, simT = 0;
 function loop(){
   requestAnimationFrame(loop);
   if(LITE){
@@ -2249,7 +2251,7 @@ function loop(){
     if(lastFrameAt && active()) adaptResolution(now - lastFrameAt);
     lastFrameAt = now;
   }
-  const dt = Math.min(clock.getDelta(), LITE ? 0.1 : 0.05), t = clock.elapsedTime;
+  const dt = Math.min(clock.getDelta(), LITE ? 0.1 : 0.05)*timeScale; simT += dt; const t = simT;
   for(let k=tweens.length-1; k>=0; k--){
     const tw = tweens[k]; tw.t += dt;
     const p = Math.min(1, tw.t/tw.dur);
@@ -3529,7 +3531,7 @@ function uiEnd(){ if(ui) ui.live = Math.max(0, ui.live-1); }
   requestAnimationFrame(uiLoop);
   if(!ui.r || ctxLost) return;
   if(ui.live === 0 && ui.parts.length === 0){ if(ui.dirty){ ui.r.clear(); ui.dirty = false; } return; }
-  const dt = 1/60;
+  const dt = timeScale/60;
   for(let k=ui.parts.length-1; k>=0; k--){
     const m = ui.parts[k], u = m.userData; u.life += dt;
     u.v.y -= u.g*dt; m.position.addScaledVector(u.v, dt);
@@ -3796,6 +3798,7 @@ const K = { QUALITY, scene, camera, canvas, renderer, chars, tiles, tween, wait,
   preview, cam, CAM0, setCam, viewInset, boardBox, fitExtra, focus, LITE, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
   summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, sideMat: rockMat, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
+  get timeScale(){ return timeScale; }, set timeScale(v){ timeScale = Math.max(0, +v || 0); }, now: () => simT,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
 window.B3 = { ui, chars, tiles, layout, sync, K, get enabled(){ return enabled; },
   // models.js(glTF モデルの差し替え)から使う

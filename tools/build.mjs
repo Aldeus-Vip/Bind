@@ -6,6 +6,8 @@
      node tools/build.mjs --single   → dist/bind_3d_game.html  1ファイル版(画像は data URI、ライブラリは CDN)
      node tools/build.mjs --lite     → dist/web/lite/  スマホ向けの軽量版(先に通常版を作ってから。通常版をスマホで開くとここへ移る)
      node tools/build.mjs --single --lite → dist/bind_3d_game_lite.html  軽量版の1ファイル版
+     node tools/build.mjs --debug    → dist/debug/  ビジュアル確認ツール入り(公開しない。src/debug.js)
+     node tools/build.mjs --single --debug → dist/bind_3d_debug.html  確認ツールの1ファイル版
 
    軽量版: モデルのポリゴン 4 割・テクスチャ 512px、カード絵などの画像は WebP に縮小、
            描画は解像度を抑えて影・観客・背景の光の粒を止める(window.BIND_LITE)。2 回目以降はオフラインでも起動(sw.js)。
@@ -20,6 +22,7 @@ import { createRequire } from 'node:module';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const single = process.argv.includes('--single');
 const lite = process.argv.includes('--lite');
+const debug = process.argv.includes('--debug') && !lite;
 const LITE_MODELS = { textureSize:512, simplify:0.4 };
 const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 
@@ -50,6 +53,7 @@ function engineJs(){
 }
 const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css') + '\n' + read('src/ui.css');
 const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js'), engineJs(), read('src/cpu_ai.js'), read('src/cpu.js'), read('src/device.js')];
+if(debug) js.push(read('src/debug.js'));
 
 // ページの名前・検索結果の説明・SNS に貼ったときの見た目(OGP)
 const SITE_URL = 'https://aldeus-vip.github.io/Bind/';
@@ -64,7 +68,8 @@ s = s.replace('<title>Bind — プロトタイプ</title>', `<title>${esc(TITLE)
   `<meta property="og:url" content="${SITE_URL}">\n<meta property="og:image" content="${SITE_URL}og-image.jpg">\n` +
   `<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n<meta property="og:locale" content="ja_JP">\n` +
   `<meta name="twitter:card" content="summary_large_image">\n<meta name="twitter:title" content="${esc(TITLE)}">\n` +
-  `<meta name="twitter:description" content="${esc(DESC)}">\n<meta name="twitter:image" content="${SITE_URL}og-image.jpg">`);
+  `<meta name="twitter:description" content="${esc(DESC)}">\n<meta name="twitter:image" content="${SITE_URL}og-image.jpg">` +
+  (debug ? '\n<meta name="robots" content="noindex">' : ''));
 s = s.replace('</head>',
   '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
   '<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">\n</head>');
@@ -84,7 +89,7 @@ if(fs.existsSync(favDir)){
     '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n</head>');
 }
 // 通常の Web 版をスマホで開いたら軽量版(lite/)へ移る(?full=1 で通常版のまま)
-if(!single && !lite){
+if(!single && !lite && !debug){
   s = s.replace('<head>', `<head>\n<script>(function(){try{var q=location.search;if(/[?&]full=1/.test(q))return;
   if(matchMedia('(pointer: coarse)').matches&&Math.min(screen.width,screen.height)<820)location.replace('lite/'+q+location.hash);}catch(e){}})();</script>`);
 }
@@ -150,7 +155,7 @@ const k = s.lastIndexOf('</body>');
 s = s.slice(0, k) + tags + s.slice(k);
 
 if(single){
-  const out = path.join(root, 'dist', lite ? 'bind_3d_game_lite.html' : 'bind_3d_game.html');
+  const out = path.join(root, 'dist', debug ? 'bind_3d_debug.html' : lite ? 'bind_3d_game_lite.html' : 'bind_3d_game.html');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, s);
   const size = Buffer.byteLength(s);
@@ -160,7 +165,7 @@ if(single){
 }
 
 /* ---- Web 版: data URI を assets/media/ のファイルへ ---- */
-const outDir = path.join(root, 'dist', 'web', lite ? 'lite' : '');
+const outDir = debug ? path.join(root, 'dist', 'debug') : path.join(root, 'dist', 'web', lite ? 'lite' : '');
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(path.join(outDir, 'assets', 'media'), { recursive: true });
 fs.mkdirSync(path.join(outDir, 'vendor'), { recursive: true });

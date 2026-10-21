@@ -24,6 +24,7 @@ npm run build:single:lite     # → dist/bind_3d_game_lite.html(軽量版の1フ
 npm run test:online           # 2タブでオンライン対戦(同期ずれ検出)
 npm run test:play             # CPU 同士の自動対戦(エラーと進行停止の検出)
 npm run test:models           # glTF モデル差し替えの確認
+npm run debug                 # ビジュアル確認ツール(dist/debug/。公開サイトには入らない。src/debug.js)
 ```
 
 - テストのスクリーンショットはカレントディレクトリに出る。`tools/out/` で実行すること。

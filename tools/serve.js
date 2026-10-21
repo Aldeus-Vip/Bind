@@ -4,7 +4,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.join(__dirname, '..', 'dist', 'web');
+// --debug で dist/debug(ビジュアル確認ツール)を配信する
+const ROOT = path.join(__dirname, '..', 'dist', process.argv.includes('--debug') ? 'debug' : 'web');
 const TYPES = { '.html':'text/html; charset=utf-8', '.js':'text/javascript', '.css':'text/css', '.json':'application/json',
   '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp', '.gif':'image/gif', '.svg':'image/svg+xml', '.glb':'model/gltf-binary', '.gltf':'model/gltf+json' };
 
@@ -32,6 +33,6 @@ async function url(){
 module.exports = { start, url };
 
 if(require.main === module){
-  const port = Number(process.argv[2]) || 8080;
-  start(port).then(() => console.log(`serving dist/web at http://localhost:${port}/`));
+  const port = Number(process.argv.find(a => /^\d+$/.test(a))) || 8080;
+  start(port).then(() => console.log(`serving ${path.relative(path.join(__dirname, '..'), ROOT)} at http://localhost:${port}/`));
 }

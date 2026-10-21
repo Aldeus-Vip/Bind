@@ -16,7 +16,10 @@
     "test:ui": "node tools/tests/ui.js",
     "test": "npm run build && npm run test:online && npm run test:play",
     "build:lite": "node tools/build.mjs --lite",
-    "build:single:lite": "node tools/build.mjs --single --lite"
+    "build:single:lite": "node tools/build.mjs --single --lite",
+    "build:debug": "node tools/build.mjs --debug",
+    "build:single:debug": "node tools/build.mjs --single --debug",
+    "debug": "node tools/build.mjs --debug && node tools/serve.js --debug"
   },
   "dependencies": {
     "peerjs": "1.5.5",
