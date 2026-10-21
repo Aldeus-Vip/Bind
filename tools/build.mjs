@@ -51,7 +51,20 @@ function engineJs(){
 const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css') + '\n' + read('src/ui.css');
 const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js'), engineJs(), read('src/cpu_ai.js'), read('src/cpu.js'), read('src/device.js')];
 
-s = s.replace('<title>Bind — プロトタイプ</title>', '<title>Bind 3D</title>');
+// ページの名前・検索結果の説明・SNS に貼ったときの見た目(OGP)
+const SITE_URL = 'https://aldeus-vip.github.io/Bind/';
+const TITLE = 'Bind ― トランプで繰り広げるボードゲーム';
+const DESC = 'トランプで駒(パーソナル)を操る、2人用の封じ合いの戦略ボードゲーム。ブラウザで無料、CPU対戦・オンライン対戦に対応。';
+const esc = t => t.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+s = s.replace('<title>Bind — プロトタイプ</title>', `<title>${esc(TITLE)}</title>\n` +
+  `<meta name="description" content="${esc(DESC)}">\n` +
+  (single ? '' : `<link rel="canonical" href="${SITE_URL}">\n`) +
+  `<meta property="og:type" content="website">\n<meta property="og:site_name" content="Bind">\n` +
+  `<meta property="og:title" content="${esc(TITLE)}">\n<meta property="og:description" content="${esc(DESC)}">\n` +
+  `<meta property="og:url" content="${SITE_URL}">\n<meta property="og:image" content="${SITE_URL}og-image.jpg">\n` +
+  `<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n<meta property="og:locale" content="ja_JP">\n` +
+  `<meta name="twitter:card" content="summary_large_image">\n<meta name="twitter:title" content="${esc(TITLE)}">\n` +
+  `<meta name="twitter:description" content="${esc(DESC)}">\n<meta name="twitter:image" content="${SITE_URL}og-image.jpg">`);
 s = s.replace('</head>',
   '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
   '<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">\n</head>');
@@ -172,6 +185,7 @@ for(const key of Object.keys(LOCAL)){
 
 if(fs.existsSync(texDir)) fs.cpSync(texDir, path.join(outDir, 'textures'), { recursive: true });
 if(fs.existsSync(favDir)) for(const f of fs.readdirSync(favDir)) fs.copyFileSync(path.join(favDir, f), path.join(outDir, f));
+if(!lite && fs.existsSync(path.join(root, 'assets', 'og-image.jpg'))) fs.copyFileSync(path.join(root, 'assets', 'og-image.jpg'), path.join(outDir, 'og-image.jpg')); // SNS 用の画像
 // glTF モデル(あれば)
 const modelsDir = path.join(root, 'assets', 'models');
 if(fs.existsSync(modelsDir)){

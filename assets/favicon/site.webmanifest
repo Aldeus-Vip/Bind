@@ -1,13 +1,25 @@
 {
-  "name": "BIND",
-  "short_name": "BIND",
+  "name": "Bind ― トランプで繰り広げるボードゲーム",
+  "short_name": "Bind",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ],
   "theme_color": "#1e1816",
   "background_color": "#1e1816",
   "display": "fullscreen",
-  "display_override": ["fullscreen", "standalone"],
-  "start_url": "./"
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "start_url": "./",
+  "description": "トランプで駒(パーソナル)を操る、2人用の封じ合いの戦略ボードゲーム。"
 }
