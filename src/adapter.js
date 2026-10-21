@@ -1801,6 +1801,7 @@ const MOVE_SOUND = {
 };
 function moveSoundOf(ch, kind){
   if(kind === 'walk4') return { name: ch.avKey === 'c12' ? 'hoof' : 'paw', perCyc:4 };
+  if(kind === 'walk2' && (ch.avKey === 'c11' || ch.avKey === 'c13')) return { name:'stomp', perCyc:2 }; // J・K は大柄なので重い足音
   if(kind === 'fly' && ch.avKey === 'c10') return { name:'buzz', once:true };
   if(kind === 'glide') return { name:'whoosh', once:true };
   return MOVE_SOUND[kind] || null;
@@ -2355,6 +2356,46 @@ function failSafe(e, playerIdx, resolve){
   console.error('[Bind3D] 演出エラー(ゲームは続行します)', e);
   if(playerIdx!=null){ driving[playerIdx] = false; chars[playerIdx].busy = false; }
   resolve();
+}
+
+/* 移動の見た目の経路(元の shortestFloorPath の置き換え。ルールには使われていない演出専用の経路)
+   元は「周りの8マスを左上から順に調べる」幅優先探索だったため、同じ歩数の経路がいくつもあるとき
+   いつも左上回りになっていた(右下から左へ2マスでも 左上→左下 と進む)。
+   歩数が最短なのは同じまま、目的地へまっすぐ向かう経路(曲がりも少ない)を選ぶ。
+   通れないマス(空きマス・相手のパーソナル)を避けるのは元と同じ。 */
+if(typeof shortestFloorPath === 'function'){
+  window.shortestFloorPath = function(fromIdx, toIdx, playerIdx){
+    if(fromIdx === toIdx) return [];
+    const passable = n => { const slot = state.floor[n]; return (slot !== null && (slot.owner === null || slot.owner === playerIdx)) || (slot === null && state.windCells.has(n)); };
+    // 目的地からの歩数(目的地側から広げる)
+    const dist = new Array(CELLS).fill(Infinity); dist[toIdx] = 0;
+    let frontier = [toIdx];
+    while(frontier.length){
+      const next = [];
+      for(const cur of frontier) for(const n of neighbors8(cur)){
+        if(dist[n] !== Infinity || (n !== fromIdx && !passable(n))) continue;
+        dist[n] = dist[cur] + 1; next.push(n);
+      }
+      frontier = next;
+    }
+    if(dist[fromIdx] === Infinity) return [];
+    // 出発点から、歩数が1つ減るマスのうち「目的地への直線に近い・向きを変えない」ものを選んで進む
+    const T = rc(toIdx), path = [];
+    let cur = fromIdx, dir = null;
+    while(cur !== toIdx){
+      const C = rc(cur);
+      let best = null, bestScore = Infinity;
+      for(const n of neighbors8(cur)){
+        if(dist[n] !== dist[cur] - 1) continue;
+        const N = rc(n), d = { r:N.r - C.r, c:N.c - C.c };
+        const score = Math.hypot(T.r - N.r, T.c - N.c) + (dir && (d.r !== dir.r || d.c !== dir.c) ? 0.05 : 0);
+        if(score < bestScore){ bestScore = score; best = { n, d }; }
+      }
+      if(!best) return [];
+      path.push(best.n); cur = best.n; dir = best.d;
+    }
+    return path;
+  };
 }
 
 // ムーブ: 最短経路を1マスずつジャンプして移動

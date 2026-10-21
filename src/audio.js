@@ -89,6 +89,7 @@ const SFX = {
   // ---- 移動の音(adapter.js の travel が動きに合わせて鳴らす。n = 何歩目か) ----
   step(n){ const hi = (n||0) % 2; noise({ f:hi ? 520 : 440, f1:160, d:0.09, v:0.11, filter:'lowpass' }); tone({ f:hi ? 105 : 92, f1:60, d:0.07, v:0.07 }); noise({ f:2600, d:0.03, v:0.025, filter:'highpass' }); },
   hoof(n){ const hi = (n||0) % 2; tone({ f:hi ? 980 : 820, f1:hi ? 520 : 430, d:0.045, v:0.09, type:'triangle' }); noise({ f:hi ? 2600 : 2100, d:0.035, v:0.08, filter:'bandpass', q:4 }); tone({ f:170, f1:90, d:0.06, v:0.08 }); },
+  stomp(n){ const hi = (n||0) % 2; tone({ f:hi ? 62 : 55, f1:32, d:0.32, v:0.32 }); noise({ f:260, f1:70, d:0.3, v:0.22, filter:'lowpass', wet:0.25 }); noise({ f:1200, f1:500, d:0.06, v:0.04, delay:0.01 }); }, // ズシン(J・K)
   paw(){ noise({ f:320, f1:110, d:0.11, v:0.13, filter:'lowpass' }); tone({ f:78, f1:52, d:0.1, v:0.1 }); },
   skitter(){ for(let k=0;k<4;k++) noise({ f:3200 + Math.random()*1500, d:0.014, v:0.05, filter:'highpass', delay:k*0.028 + Math.random()*0.01 }); },
   slither(){ noise({ f:2400, f1:3800, d:0.55, v:0.05, q:0.7, filter:'highpass', a:0.18 }); noise({ f:300, d:0.4, v:0.04, filter:'lowpass', a:0.15 }); },
