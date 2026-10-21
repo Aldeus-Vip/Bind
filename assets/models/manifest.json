@@ -45,7 +45,19 @@
     "file": "c4.glb",
     "toon": true,
     "height": 0.85,
-    "rotY": 0.7
+    "rotY": 0.7,
+    "gait": {
+      "legs": [
+        "Bone_008",
+        "Bone_013",
+        "Bone_018",
+        "Bone_023",
+        "Bone_038",
+        "Bone_043",
+        "Bone_061",
+        "Bone_066"
+      ]
+    }
   },
   "c5": {
     "file": "c5.glb",
@@ -57,7 +69,13 @@
     "toon": true,
     "height": 1.0,
     "maxFoot": 1.5,
-    "rotY": 1.3
+    "rotY": 1.3,
+    "gait": {
+      "fins": [
+        "Bone_007",
+        "Bone_011"
+      ]
+    }
   },
   "c7": {
     "file": "c7.glb",

@@ -1090,7 +1090,7 @@ function makeCreature(key, opt, build){
   const umats = [...new Set(mats)]; umats.forEach(m => m.userData.c0 = m.color.clone());
   let raise = 0, jump = 0;
   const av = {
-    key, root:outer, head:ctx.head || body, eyes:ctx.eyes, mats:umats, badgeY:opt.badgeY || 1.2, badgeX:opt.badgeX || 0.45,
+    key, root:outer, head:ctx.head || body, eyes:ctx.eyes, mats:umats, badgeY:opt.badgeY || 1.2, badgeX:opt.badgeX || 0.45, lift:0,
     setSuit(th){
       ctx.suit = th;
       const g = new THREE.Color(th.glow);
@@ -1114,9 +1114,41 @@ function makeCreature(key, opt, build){
       if(spec.tick) spec.tick(t, dt, phase, raise);
     },
     blink(on){ ctx.eyes.forEach(e => e.scale.y = on ? 0.1 : (e.userData.sy || 1)); },
+    // 移動中の体の浮き・傾き(足元の陣は地面に残す)。骨の動きは spec.move(models.js)
+    move(m){
+      const L = moveLook(m && Object.assign({ key }, m));
+      body.position.y = L.lift; body.rotation.x = L.lean; body.rotation.z = L.roll; av.lift = L.lift;
+      if(spec.move) spec.move(m);
+    },
   };
   av.setSuit(SUIT_THEME.H); av.pose('rest', 0);
   return av;
+}
+/* ---- 移動の仕方(生物ごと) ----
+   hop4: 4足で跳ぶ(A・Q) / hop2: 2足で跳ぶ(2・3・J・K、術者) / crawl: 多脚で這う(4) / serpent: 長い体でくねる(5・8)
+   swim: 浮いて尾びれで泳ぐ(6) / fly: 浮いて羽ばたく(7・9・10・白JOKER) / glide: 浮いたまま傾いて滑る(黒JOKER) */
+const MOVE_STYLE = { 'beast-A':'hop4', c12:'hop4', c2:'hop2', c3:'hop2', c11:'hop2', c13:'hop2', c4:'crawl', c5:'serpent', c8:'serpent',
+  c6:'swim', c7:'fly', c9:'fly', c10:'fly', jw:'fly', jb:'glide' };
+const moveStyleOf = key => MOVE_STYLE[key] || 'hop2';
+// 元の姿勢が斜めのモデルを、移動中は水平に寝かせる分の前傾(6 のシャチは跳ね上がった姿勢)
+const MOVE_LEAN = { c6:0.6 };
+// 体全体の浮き(lift)・前傾(lean、+ で前へ)・横の傾き(roll)
+function moveLook(m){
+  const L = { lift:0, lean:0, roll:0 };
+  if(!m) return L;
+  const k = m.k==null ? 1 : m.k, t = m.t || 0, u = m.u==null ? -2 : m.u;
+  L.lean = (MOVE_LEAN[m.key] || 0)*k;
+  if(m.kind==='fly'){ L.lift = 0.5*k + 0.05*Math.sin(t*7.5 - 1.2)*k; L.lean = 0.3*k; }
+  else if(m.kind==='swim'){ L.lift = 0.42*k + 0.04*Math.sin(t*3.2)*k; L.lean += (0.12 + 0.06*Math.sin(t*6.5))*k; }
+  else if(m.kind==='glide'){ L.lift = 0.36*k + 0.02*Math.sin(t*2.4)*k; L.lean = 0.14*k; L.roll = -0.24*k; }
+  else if(m.kind==='crawl'){ L.lift = 0.012*Math.abs(Math.sin((m.d || 0)*Math.PI*3.6))*k; L.lean = 0.04*k; }
+  else if(m.kind==='hop4'){
+    // かがむ → 跳ぶ(鼻先が上 → 下) → 着地
+    L.lean = u < 0 ? -0.18*(u + 1) : u <= 1 ? -0.18*Math.cos(Math.PI*u) : 0.18*Math.max(0, 2 - u);
+  } else if(m.kind==='hop2'){
+    L.lean = u < 0 ? 0.1*(u + 1) : u <= 1 ? 0.1*Math.cos(Math.PI*u*0.5) : 0;
+  }
+  return L;
 }
 function glowMat(color, base){ const m = toon(color, { emissive:0xffffff, emissiveIntensity:base || 0.6 }); m.userData.base = base || 0.6; return m; }
 
@@ -1719,18 +1751,71 @@ async function hopTo(ch, dest, dur, height){
   const startYaw = ch.root.rotation.y;
   let dy = Math.atan2(to.x-from.x, to.z-from.z) - startYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   ch.busy = true;
-  await tween(0.12, t => { ch.root.rotation.y = startYaw + dy*ease.out(t); ch.body.scale.set(1+0.12*t, 1-0.18*t, 1+0.12*t); });
+  const kind = moveStyleOf(ch.avKey) === 'hop4' ? 'hop4' : 'hop2';
+  const mv = u => ch.av.move && ch.av.move({ kind, u, t:clockT() });
+  await tween(0.12, t => { ch.root.rotation.y = startYaw + dy*ease.out(t); ch.body.scale.set(1+0.12*t, 1-0.18*t, 1+0.12*t); mv(t - 1); });
   await tween(dur, t => {
     ch.root.position.lerpVectors(from, to, ease.inOut(t));
     ch.root.position.y = from.y + (to.y-from.y)*t + Math.sin(Math.PI*t)*height;
     const s = 1 + Math.sin(Math.PI*t)*0.12;
     ch.body.scale.set(1/Math.sqrt(s), s, 1/Math.sqrt(s));
     ch.av.pose('jump', Math.sin(Math.PI*t));
+    mv(t);
   });
   dust(to);
-  await tween(0.16, t => { const k = Math.sin(Math.PI*t)*0.2; ch.body.scale.set(1+k*0.6, 1-k, 1+k*0.6); });
-  ch.body.scale.set(1,1,1); ch.av.pose('rest', 0);
+  await tween(0.16, t => { const k = Math.sin(Math.PI*t)*0.2; ch.body.scale.set(1+k*0.6, 1-k, 1+k*0.6); mv(1 + t); });
+  ch.body.scale.set(1,1,1); ch.av.pose('rest', 0); if(ch.av.move) ch.av.move(null);
   ch.idx = dest; ch.busy = false;
+}
+const clockT = () => performance.now()/1000;
+
+/* 跳ばない生物の移動: 浮く(または体を伸ばす)→ 道なりに進む → 降りる(元の姿勢に戻る)
+   path はマス番号の並び。マスの中心を通るたびに onCell(マス番号) を呼ぶ */
+const GLIDE = {
+  crawl:   { up:0.2,  down:0.2,  per:0.55 },
+  serpent: { up:0.45, down:0.45, per:0.5 },
+  swim:    { up:0.32, down:0.32, per:0.42 },
+  fly:     { up:0.32, down:0.32, per:0.4 },
+  glide:   { up:0.3,  down:0.3,  per:0.4 },
+};
+async function travel(ch, path, onCell){
+  const kind = moveStyleOf(ch.avKey);
+  const G = GLIDE[kind];
+  if(!G || !ch.av.move){
+    for(const c of path){ await hopTo(ch, c, 0.4); if(onCell) onCell(c); await wait(0.08); }
+    return;
+  }
+  ch.busy = true;
+  const pts = [ch.root.position.clone(), ...path.map(charPos)];
+  const lens = [0]; for(let i=1;i<pts.length;i++) lens.push(lens[i-1] + pts[i].distanceTo(pts[i-1]));
+  const L = lens[lens.length-1];
+  const STEP1 = Math.max(0.01, charPos(0).distanceTo(charPos(1)));
+  const at = s => {
+    let i = 1; while(i < pts.length-1 && lens[i] < s) i++;
+    const a = pts[i-1], b = pts[i], f = (s - lens[i-1])/Math.max(1e-6, lens[i] - lens[i-1]);
+    return { p:a.clone().lerp(b, Math.min(1, Math.max(0, f))), yaw:Math.atan2(b.x - a.x, b.z - a.z) };
+  };
+  const turnTo = (yaw, r) => { let dy = yaw - ch.root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); ch.root.rotation.y += dy*r; };
+  const yaw0 = L > 0 ? at(0.001).yaw : ch.root.rotation.y;
+  // 浮く・体を伸ばす(進む向きへ振り向きながら)
+  await tween(G.up, t => { turnTo(yaw0, 0.25); ch.av.move({ kind, k:ease.inOut(t), d:0, t:clockT() }); });
+  let next = 1;
+  const dur = G.per*L/STEP1;
+  await tween(dur, t => {
+    const s = L*(t - Math.sin(2*Math.PI*t)/(2*Math.PI)*0.6); // 出だしと止まり際だけ少しゆっくり
+    const q = at(s);
+    ch.root.position.copy(q.p);
+    turnTo(q.yaw, 0.2);
+    ch.av.move({ kind, k:1, d:s/STEP1, t:clockT() });
+    while(next < pts.length && s >= lens[next] - 1e-4){ if(onCell) onCell(path[next-1]); next++; }
+  });
+  while(next < pts.length){ if(onCell) onCell(path[next-1]); next++; }
+  ch.root.position.copy(pts[pts.length-1]);
+  const d1 = L/STEP1;
+  await tween(G.down, t => { ch.av.move({ kind, k:1 - ease.inOut(t), d:d1, t:clockT() }); });
+  ch.av.move(null);
+  if(kind==='fly' || kind==='swim' || kind==='glide') dust(pts[pts.length-1]);
+  ch.idx = path[path.length-1]; ch.busy = false;
 }
 
 /* ---------------- camera fit / DOM cell overlay ---------------- */
@@ -2064,7 +2149,7 @@ function sync(dt){
       }
       if(idx===null){ if(ch.shown) hideChar(ch); }
       else if(!ch.shown){ placeChar(ch, idx); if(!reset) popIn(ch); }
-      else if(ch.idx!==idx && !ch.busy){ hopTo(ch, idx, 0.42); }
+      else if(ch.idx!==idx && !ch.busy){ travel(ch, [idx]); }
       else if(!ch.busy && ch.idx===idx){
         const target = charPos(idx);
         ch.root.position.x += (target.x - ch.root.position.x)*0.3;
@@ -2204,7 +2289,7 @@ function loop(){
     ch.av.tick(t, dt, ch.phase);
     if(ch.blinkAt < 0) ch.blinkAt = 2 + Math.random()*3;
     ch.ring.rotation.z = t*1.2;
-    ch.badge.position.y = (ch.av ? ch.av.badgeY : 1.1) + Math.sin(t*2 + ch.phase)*0.03;
+    ch.badge.position.y = (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + Math.sin(t*2 + ch.phase)*0.03;
     if(ch.bolts.visible) updateBolts(ch, t, dt);
     if(ch.sunSp.visible) ch.sunSp.material.rotation = t*0.8;
   });
@@ -2247,16 +2332,15 @@ override('triggerMoveTravel', () => function(originIdx, destIdx, playerIdx){
     driving[playerIdx] = true;
     ensureAt(ch, originIdx);
     (async () => {
-      for(const c of path){
-        await hopTo(ch, c, 0.4);
+      // 生物ごとの移動(跳ぶ・這う・泳ぐ・飛ぶ)。表のフロアを通るたびに炎
+      await travel(ch, path, c => {
         const s = state.floor[c];
         if(s && s.faceUp){
           const layer = fxLayer(), sp = screenOf(c, 0.3);
           if(layer && typeof spawnFlameBurst==='function') spawnFlameBurst(layer, sp.x, sp.y);
           burst(charPos(c).add(new THREE.Vector3(0,0.2,0)), 0xff7a2a, 14, { up:2.5, speed:0.4 });
         }
-        await wait(0.08);
-      }
+      });
       parks[playerIdx] = destIdx;
       driving[playerIdx] = false;
       resolve();
@@ -3713,5 +3797,5 @@ const K = { QUALITY, scene, camera, canvas, renderer, chars, tiles, tween, wait,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
 window.B3 = { ui, chars, tiles, layout, sync, K, get enabled(){ return enabled; },
   // models.js(glTF モデルの差し替え)から使う
-  AVATARS, makeCreature, toon, glowMat, setAvatar, scene, renderer };
+  AVATARS, makeCreature, toon, glowMat, setAvatar, scene, renderer, moveStyleOf, travel };
 })();

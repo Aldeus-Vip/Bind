@@ -126,6 +126,10 @@ function makeGltfAvatar(key, spec, gltf){
     const rig = spec.rig === false ? null : (spec.rig && spec.rig !== 'auto') ? spec.rig : autoRig(model, box);
     const proc = !mixer && rig ? proceduralRig(model, rig) : null;
     if(rig && !spec.rig) model.userData.autoRig = rig; // 確認用
+    // 移動の動き(骨がある場合)。rig の名前を骨に直してから渡す
+    const rigB = rig ? { wingsL: rig.wingsL, wingsR: rig.wingsR } : null;
+    const gait = !mixer && spec.gait !== false ? gaitRig(model, box, spec.rotY || 0, rigB, Object.assign({ crawl: B.moveStyleOf && B.moveStyleOf(key) === 'crawl' }, spec.gait || {})) : null;
+    let mv = null;
     let raiseK = 0, jumpK = 0;
     // 周囲を舞う小さな分身(10 の虫の群れなど)。manifest の swarm で指定し、軽量版モデルを使う
     const swarm = spec.swarm && miniOf[key] ? makeSwarm(ctx.inner || ctx.body, miniOf[key], spec.swarm, s) : null;
@@ -140,7 +144,8 @@ function makeGltfAvatar(key, spec, gltf){
         else if(!proc){ holder.position.y = 0.05*raise; holder.rotation.x = -0.15*raise; }
       },
       idle(t, ph){ if(!mixer && !proc) holder.position.y = Math.sin(t*1.6 + ph)*0.02; },
-      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(swarm) swarm.tick(t + (ph || 0), raiseK); if(idleFx) idleFx.tick(t + (ph || 0), dt, raiseK); },
+      move(m){ mv = m; },
+      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(gait) gait.reset(); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(gait) gait.apply(mv, t); if(swarm) swarm.tick(t + (ph || 0), raiseK); if(idleFx) idleFx.tick(t + (ph || 0), dt, raiseK); },
     };
   });
 }
@@ -243,6 +248,170 @@ function autoRig(model, box){
     side.push(root2); if(c[i+1]) side.push(c[i+1]);
   });
   return { spine, neck, head:[head], tail: tail.slice(0, 8), wingsL, wingsR };
+}
+
+/* ---- 移動の動き(跳ぶ・這う・くねる・泳ぐ・飛ぶ) ----
+   adapter.js の移動が av.move({ kind, k, u, d, t }) で状態を渡し、毎フレームここで骨を動かす。
+   kind: hop2(2足で跳ぶ) / hop4(4足で跳ぶ) / crawl(多脚で這う) / serpent(長い体でくねる) / swim(尾びれで泳ぐ) / fly(羽ばたく) / glide(滑る)
+   k: 移動の姿勢への切り替え(0〜1) / u: 跳躍の進み(-1〜0 かがむ・0〜1 空中・1〜2 着地) / d: 進んだ距離(マス) / t: 時刻(秒)
+   回転は「正面 = +Z」の向き(rotY で補正した後)の軸で指定する。X = 前後に振る / Y = 左右に振る / Z = 横に上げる。
+   manifest の "gait": { "legs": [骨の名前…], "tail": [...], "body": [...] } で自動の判定を上書きできる。 */
+function gaitRig(model, box, rotY, rig, over){
+  model.updateWorldMatrix(true, true);
+  over = over || {};
+  const H = Math.max(box.max.y - box.min.y, 1e-6), cx = (box.min.x + box.max.x)/2, cz = (box.min.z + box.max.z)/2;
+  const F = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY || 0), Fi = F.clone().invert();
+  const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+  const rootInv = model.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const bones = []; model.traverse(o => { if(o.isBone) bones.push(o); });
+  if(bones.length < 3) return null;
+  // 正面向きの空間で、高さを 1 とした位置
+  const fpos = new Map();
+  bones.forEach(b => { const p = b.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv); p.x -= cx; p.y -= box.min.y; p.z -= cz; fpos.set(b, p.applyQuaternion(F).divideScalar(H)); });
+  const isBone = o => o && o.isBone;
+  const kids = b => b.children.filter(isBone);
+  const byName = n => typeof n === 'string' ? model.getObjectByName(n) : n;
+  // 骨の先端から根元へ。3本たまるまでは枝分かれ(指など)も越えて上る
+  const limbOf = leaf => {
+    const c = [leaf];
+    for(let o = leaf.parent; isBone(o); o = o.parent){
+      if(kids(o).length > 1 && c.length >= 3) break;
+      c.unshift(o);
+    }
+    return c;
+  };
+  const leaves = bones.filter(b => kids(b).length === 0);
+  const limbs = []; const tops = new Set();
+  leaves.forEach(lf => { const c = limbOf(lf); if(isBone(c[0].parent) && !tops.has(c[0])){ tops.add(c[0]); limbs.push(c); } });
+  const tip = c => fpos.get(c[c.length - 1]), top = c => fpos.get(c[0]);
+  const prep = b => {
+    const P = rootInv.clone().multiply(b.parent.getWorldQuaternion(new THREE.Quaternion()));
+    return { b, rest: b.quaternion.clone(), pos: b.position.clone(), P, Pinv: P.clone().invert() };
+  };
+  const all = new Map(); const J = b => { if(!all.has(b)) all.set(b, prep(b)); return all.get(b); };
+
+  // 脚: 先端が地面(高さの 12% 以内)に届く鎖。這う生物は少し浮いた脚も含める
+  const legChains = over.legs ? over.legs.map(n => { const b = byName(n); return b ? limbs.find(c => c[0] === b) || [b, ...b.children.filter(isBone)] : null; }).filter(Boolean)
+    : limbs.filter(c => c.length >= 3 && (tip(c).y < 0.12 || (over.crawl && tip(c).y < 0.3 && top(c).y < 0.45 && c.length >= 4 && tip(c).z - top(c).z < 0.25 && Math.hypot(tip(c).x - top(c).x, tip(c).z - top(c).z) > 0.2)));
+  const midZ = legChains.length ? legChains.reduce((s, c) => s + top(c).z, 0)/legChains.length : 0;
+  const legs = legChains.map(c => ({ hip: J(c[0]), knee: c.length >= 3 ? J(c[Math.floor(c.length/2)]) : null, side: top(c).x + tip(c).x >= 0 ? 1 : -1, front: top(c).z > midZ + 0.02, z: top(c).z }));
+  // 這うときの足並み: 左右それぞれ前から順に、隣どうしが逆の足を出す
+  [1, -1].forEach(s => legs.filter(l => l.side === s).sort((a, b) => b.z - a.z).forEach((l, i) => { l.ph = ((i + (s > 0 ? 0 : 1)) % 2)*Math.PI; }));
+  // 尾(泳ぐ生物の尾びれ): 後ろへいちばん長く伸びる鎖
+  let tailC = over.tail ? over.tail.map(byName).filter(Boolean) : null;
+  if(!tailC){ let best = 1e9; limbs.forEach(c => { if(c.length >= 3 && tip(c).z < top(c).z - 0.2 && tip(c).z < best && !legChains.includes(c)){ best = tip(c).z; tailC = c; } }); }
+  const tail = (tailC || []).map(J);
+  // ひれ(泳ぐ生物): 横へ張り出す短い鎖
+  const fins = over.fins ? over.fins.map(byName).filter(Boolean).map(b => ({ j: J(b), side: fpos.get(b).x >= 0 ? 1 : -1 })) : limbs.filter(c => c !== tailC && !legChains.includes(c) && c.length >= 2 && Math.abs(tip(c).x - top(c).x) > 0.15 && tip(c).y < top(c).y).map(c => ({ j: J(c[0]), side: tip(c).x >= 0 ? 1 : -1 }));
+  // 翼: autoRig / manifest の rig から(+X 側が L)
+  const wingL = (rig && rig.wingsL || []).map(byName).filter(Boolean).map(J), wingR = (rig && rig.wingsR || []).map(byName).filter(Boolean).map(J);
+  // 長い体(蛇・竜): 根元からいちばん深い先端までの骨の並び
+  let body = over.body ? over.body.map(byName).filter(Boolean) : null;
+  if(!body){ let deep = []; leaves.forEach(lf => { const p = []; for(let o = lf; isBone(o); o = o.parent) p.unshift(o); if(p.length > deep.length) deep = p; }); body = deep; }
+  const bodyJ = body.map(J);
+  const segLen = body.slice(1).map((b, i) => fpos.get(b).distanceTo(fpos.get(body[i])));
+  model.userData.gait = { legs: legs.map(l => l.hip.b.name), tail: tail.map(j => j.b.name), fins: fins.map(f => f.j.b.name), body: body.length, bodyLen: +segLen.reduce((a, b) => a + b, 0).toFixed(2) }; // 確認用
+
+  const q = new THREE.Quaternion(), qm = new THREE.Quaternion(), e = new THREE.Euler();
+  // 正面向きの空間で (x, y, z) 回す(今の向きに足し込む)
+  function add(j, x, y, z){
+    if(!j || (!x && !y && !z)) return;
+    q.setFromEuler(e.set(x, y, z, 'YXZ'));
+    qm.copy(Fi).multiply(q).multiply(F);
+    j.b.quaternion.premultiply(j.P.clone().premultiply(qm).premultiply(j.Pinv));
+  }
+  const S = Math.sin, C = Math.cos, PI = Math.PI;
+  const crouchOf = u => u < 0 ? u + 1 : u < 1 ? Math.max(0, 1 - u*4) : 0.8*S(PI*(u - 1));
+  const airOf = u => u > 0 && u < 1 ? S(PI*u) : 0;
+
+  // 長い体を、地面を這う S 字の線に沿わせる(根元 = 頭側から順に、次の骨が線の上に来るよう向ける)
+  const Vw = new THREE.Vector3(), Va = new THREE.Vector3(), Vb = new THREE.Vector3(), Qw = new THREE.Quaternion(), Qp = new THREE.Quaternion(), Qd = new THREE.Quaternion(), Qt = new THREE.Quaternion();
+  const toWorld = p => p.clone().multiplyScalar(H).applyQuaternion(Fi).add(new THREE.Vector3(cx, box.min.y, cz)).applyMatrix4(model.matrixWorld);
+  function slither(k, d, t){
+    if(bodyJ.length < 4) return;
+    model.updateWorldMatrix(true, true);
+    // 進む距離 d に合わせて波を後ろへ送る(体の各点が同じ跡をたどる)
+    const A = 0.13, lam = 0.62, wave = (d || 0)*1.1 + t*0.25;
+    const pts = []; let len = 0, prev = null;
+    const total = segLen.reduce((a, b) => a + b, 0)*1.6 + 0.5;
+    for(let i = 0; i <= 320; i++){
+      const s = i/320*total;
+      const env = Math.min(1, 0.25 + s*1.5);
+      const p = new THREE.Vector3(A*env*S(2*PI*(s/lam - wave)), 0.035 + 0.24*Math.max(0, 1 - s/0.32)**2, 0.3 - s);
+      if(prev) len += p.distanceTo(prev);
+      pts.push({ p, len }); prev = p;
+    }
+    // 骨の長さぶんずつ線をたどって目標点を作る
+    const tg = [pts[0].p]; let at = 0, acc = 0;
+    for(let i = 0; i < segLen.length; i++){
+      const want = acc + segLen[i]; let j = at;
+      while(j < pts.length - 1 && pts[j].len < want) j++;
+      at = j; tg.push(pts[j].p); acc = pts[j].len;
+    }
+    const W = tg.map(toWorld);
+    // 頭(根元)の位置
+    const r = bodyJ[0];
+    Vw.copy(W[0]); r.b.parent.worldToLocal(Vw);
+    r.b.position.copy(r.pos).lerp(Vw, k);
+    r.b.updateMatrixWorld(true);
+    for(let i = 0; i < bodyJ.length - 1; i++){
+      const j = bodyJ[i], nx = bodyJ[i + 1].b;
+      j.b.getWorldPosition(Va); nx.getWorldPosition(Vb);
+      const cur = Vb.sub(Va).normalize(), want = W[i + 1].clone().sub(Va).normalize();
+      Qd.setFromUnitVectors(cur, want);
+      j.b.getWorldQuaternion(Qw); j.b.parent.getWorldQuaternion(Qp);
+      Qt.copy(Qp).invert().multiply(Qd.multiply(Qw));
+      j.b.quaternion.slerp(Qt, k);
+      j.b.updateMatrixWorld(true);
+    }
+  }
+
+  let was = false;
+  return {
+    // 毎フレーム、動かす骨を元の姿勢に戻してから(proceduralRig がその後で待機の動きを足す)
+    reset(){
+      if(!was) return;
+      all.forEach(j => { j.b.quaternion.copy(j.rest); j.b.position.copy(j.pos); });
+      was = false;
+    },
+    apply(mv, t){
+      if(!mv) return;
+      was = true;
+      const k = mv.k == null ? 1 : mv.k, u = mv.u == null ? -2 : mv.u, d = mv.d || 0;
+      if(mv.kind === 'hop2'){
+        const c = crouchOf(u), a = airOf(u);
+        legs.forEach(l => { add(l.hip, -(0.3*c + 0.65*a), 0, 0); add(l.knee, 0.6*c + 1.0*a, 0, 0); });
+        wingL.forEach((j, i) => add(j, 0, 0, a*(i ? 0.3 : 0.6))); wingR.forEach((j, i) => add(j, 0, 0, -a*(i ? 0.3 : 0.6)));
+      } else if(mv.kind === 'hop4'){
+        const c = crouchOf(u), a = airOf(u), s = u > 0 && u < 1 ? u : 0, env = Math.sqrt(a);
+        legs.forEach(l => {
+          if(l.front){ add(l.hip, 0.2*c - 1.1*s*env, 0, 0); add(l.knee, 0.6*c + 0.9*env*(1 - s), 0, 0); }
+          else { add(l.hip, -0.3*c + 1.15*(1 - s)*env, 0, 0); add(l.knee, 0.7*c + 0.8*env*s, 0, 0); }
+        });
+        tail.forEach((j, i) => add(j, -0.25*a, 0, 0));
+      } else if(mv.kind === 'crawl'){
+        const cyc = d*2*PI*1.8;
+        legs.forEach(l => {
+          const ph = cyc + (l.ph || 0), up = Math.max(0, C(ph));
+          add(l.hip, 0, 0.45*S(ph)*k, l.side*0.45*up*k);
+          add(l.knee, 0, 0, -l.side*0.25*up*k);
+        });
+      } else if(mv.kind === 'serpent'){
+        slither(k, d, t);
+      } else if(mv.kind === 'swim'){
+        tail.forEach((j, i) => add(j, (0.05 + 0.03*i)*S(t*6.5 - i*0.8)*k, 0, 0));
+        fins.forEach(f => add(f.j, 0, 0, f.side*0.3*S(t*6.5 + 1)*k));
+      } else if(mv.kind === 'fly' || mv.kind === 'glide'){
+        if(mv.kind === 'fly'){
+          const f = ph => { const s = S(t*7.5 - ph); return s > 0 ? s : s*0.8; };
+          wingL.forEach((j, i) => add(j, -0.15*k*(i ? 0 : 1), 0, (0.2 + 0.85*f(i*0.8))*(i ? 0.6 : 1)*k));
+          wingR.forEach((j, i) => add(j, -0.15*k*(i ? 0 : 1), 0, -(0.2 + 0.85*f(i*0.8))*(i ? 0.6 : 1)*k));
+        }
+        legs.forEach(l => { add(l.hip, 0.45*k, 0, 0); add(l.knee, 0.35*k, 0, 0); }); // 脚は後ろへ流す
+        tail.forEach((j, i) => add(j, 0, 0.12*S(t*3 - i*0.6)*k, 0));
+      }
+    },
+  };
 }
 
 /* ---- 群れ: 軽量版モデルの小さな複製を、本体の周りに浮かべて飛び回らせる ----
