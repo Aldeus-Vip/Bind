@@ -250,6 +250,9 @@
   gap: 10px !important; padding: 16px !important;
 }
 .floor-grid.b3-table > .floor-cell{ border-radius: 8px; }
+/* 描き直しのたびにカードが下から浮かんだり回り直したりしないよう、盤面のカードは「動いて変わる」を止める */
+.floor-grid.b3-table .card, .floor-grid.b3-table .card-back, .floor-grid.b3-table .b3-bind2d{ transition: none !important; }
+.floor-grid.b3-table .card.faceup-trap.b3card, .floor-grid.b3-table > .floor-cell.b3-bound .card.personal{ animation-delay: var(--b3-t, 0s) !important; }
 .floor-grid.b3-table > .floor-cell.empty{ border: 1px dashed rgba(212,171,82,.22); background: rgba(0,0,0,.25); }
 .floor-grid.b3-table .empty-mark{ display: none; }
 /* 選べるマス(空きマスも): マウスを重ねると金の枠と光 */
@@ -308,7 +311,7 @@ body.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 290px) * 0.9
   box-shadow: 0 0 0 3px var(--pc, #d4ab52), 0 0 14px var(--pc, #d4ab52), 10px -6px 14px rgba(0,0,0,.75) !important; /* 卓に置いた影(カードと一緒に回るので、回した後に右下へ落ちる向き) */
 }
 .floor-grid.b3-table > .floor-cell.b3-bound .b3-bind2d{ transform: rotate(90deg); }
-.floor-grid.b3-table > .floor-cell.b3-bind-new .card.personal, .floor-grid.b3-table > .floor-cell.b3-bind-new .b3-bind2d{ animation: b3TipOver .55s cubic-bezier(.3,1.4,.5,1) both, b3Twitch 2.6s steps(1) .55s infinite; }
+.floor-grid.b3-table > .floor-cell.b3-bind-new .card.personal, .floor-grid.b3-table > .floor-cell.b3-bind-new .b3-bind2d{ animation: b3TipOver .55s cubic-bezier(.3,1.4,.5,1) var(--b3-tip, 0s) both !important; }
 @keyframes b3TipOver{ from{ transform: rotate(0deg); } to{ transform: rotate(90deg); } }
 /* パーソナルの下のフロア: 倒したカードの上下にのぞく */
 .floor-grid.b3-table > .floor-cell > .b3-under{ position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; margin: 0; filter: brightness(.9); box-shadow: 0 3px 8px rgba(0,0,0,.6) !important; }

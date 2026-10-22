@@ -24,14 +24,17 @@ function token(kind, src, title){
   return d;
 }
 
-const wasBound = new Set(), nowBound = new Set(); // 横向きに倒す動きは、新しくバインドされたときだけ
+// 横向きに倒す動きは、ゲームの状態でバインドが「無し → 有り」になったときだけ(描き直しのたびには倒れ直さない)
+const tipAt = [0, 0], wasBoundSt = [false, false];
 function dress(){
   const grid = document.getElementById('floor-grid-el');
   if(!grid) return;
   grid.classList.toggle('b3-table', is2D());
   if(!is2D()) return;
   if(TEX.ground) grid.style.setProperty('--b3-mat', `url("${TEX.ground}")`);
-  nowBound.clear();
+  if(state && state.players) state.players.forEach((pl, i) => { if(pl.bound && !wasBoundSt[i]) tipAt[i] = performance.now(); wasBoundSt[i] = !!pl.bound; });
+  // 脈打ち・震えなどの繰り返しの動きは、描き直しても時間の続きから(最初からやり直してちらつかない)
+  grid.style.setProperty('--b3-t', -(performance.now() % 26400) + 'ms');
   grid.querySelectorAll(':scope > .floor-cell').forEach(cell => {
     // パーソナル: プレイヤーの色を枠に使う(元は背景をその色で塗っていた)
     const pc = cell.querySelector('.card.personal');
@@ -52,8 +55,7 @@ function dress(){
       }
       // 実物のトランプでは、バインドはパーソナルを横向きに倒して表す。倒れた瞬間だけ回る動きを見せる
       const owner = state.floor[+cell.id.slice(11)] && state.floor[+cell.id.slice(11)].owner;
-      if(owner != null && !wasBound.has(owner)) cell.classList.add('b3-bind-new');
-      if(owner != null) nowBound.add(owner);
+      if(owner != null && performance.now() - tipAt[owner] < 500){ cell.classList.add('b3-bind-new'); cell.style.setProperty('--b3-tip', -(performance.now() - tipAt[owner]) + 'ms'); }
     }
     // 雷撃フロア: 裏向きのカードはそのままに、⚡のトークンを置く
     if(cell.classList.contains('debuff-floor') && !cell.querySelector('.b3-token-bolt')){
@@ -175,7 +177,7 @@ function lightning2D(cellIndex, fromSky){
 const origRender = window.render;
 window.render = function(){
   const r = origRender.apply(this, arguments);
-  try{ dress(); wasBound.clear(); nowBound.forEach(p => wasBound.add(p)); }catch(e){ console.error('[Bind2D]', e); }
+  try{ dress(); }catch(e){ console.error('[Bind2D]', e); }
   return r;
 };
 
