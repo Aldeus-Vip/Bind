@@ -346,11 +346,14 @@ body.b3-2d.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 380px)
 #b3-flylayer{ z-index: 45; }
 #b3-tbl > *{ pointer-events: auto; }
 /* 山: 一番上のカードの下に、枚数ぶんの厚さの黒い直方体と白い筋 */
-.b3-piles{ position: absolute; display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
-.b3-pile{ position: relative; width: var(--cw, 74px); aspect-ratio: 5/7; margin-bottom: var(--t, 0px); cursor: default; }
+.b3-piles{ position: absolute; display: flex; flex-direction: column; gap: 40px; align-items: flex-start; }
+/* 山札・捨て札は横向きに置く(実物の Bind では「誰のものでもない」ことを示すため横に向ける) */
+.b3-pile{ position: relative; width: calc(var(--cw, 74px) * 1.4); aspect-ratio: 7/5; margin-bottom: var(--t, 0px); cursor: default; }
 .b3-pile-stack{ position: absolute; left: 0; right: 0; top: var(--t); height: 100%; border-radius: 7px;
   background: repeating-linear-gradient(to bottom, #101010 0 2px, #cfcac0 2px 2.6px); box-shadow: 0 4px 10px rgba(0,0,0,.7); }
-.b3-pile .b3-pile-top{ position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; border-radius: 7px; box-shadow: 0 2px 6px rgba(0,0,0,.6) !important; transition: none !important; }
+.b3-pile .b3-pile-top{ position: absolute !important; left: 50%; top: 50%; width: var(--cw, 74px) !important; height: calc(var(--cw, 74px) * 1.4) !important; margin: 0 !important; transform: translate(-50%, -50%) rotate(90deg) !important;
+  border-radius: 7px; box-shadow: 0 2px 6px rgba(0,0,0,.6) !important; transition: none !important; }
+.b3-pile .b3-pile-empty.b3-pile-top{ inset: 0; left: 0; top: 0; width: 100% !important; height: 100% !important; transform: none !important; }
 .b3-pile-empty{ position: absolute; inset: 0; border-radius: 7px; border: 2px dashed rgba(212,171,82,.3); background: rgba(0,0,0,.25); }
 .b3-pile-count{ position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); font: 700 22px 'Cinzel', 'Shippori Mincho', serif; color: #f0d690; text-shadow: 0 2px 4px #000; }
 .b3-pile-label{ position: absolute; left: 0; right: -60px; bottom: calc(-1 * var(--t) - 18px); font-size: 11px; color: #bba27a; white-space: nowrap; text-shadow: 0 1px 3px #000; }

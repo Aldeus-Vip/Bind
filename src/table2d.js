@@ -331,7 +331,9 @@ function zoneRect(z){
   if(!e) return null;
   const r = e.getBoundingClientRect();
   const w = e.offsetWidth || r.width, h = e.offsetHeight || r.height;
-  return { x: r.left + r.width/2, y: r.top + r.height/2, w, h };
+  // 山札・捨て札は横向き(カードを 90° 回して置いている)
+  const rot = (z.zone === 'deck' || z.zone === 'disc') && !e.classList.contains('b3-pile-empty') ? 90 : 0;
+  return { x: r.left + r.width/2, y: r.top + r.height/2, w: rot ? Math.min(w, h) : w, h: rot ? Math.max(w, h) : h, rot };
 }
 // 今のカードの居場所(見る人から見た表裏つき)
 function snapshot(){
@@ -360,10 +362,11 @@ function fly(id, a, b, delay){
   const dur = Math.min(900, 380 + Math.hypot(Bz.x - A.x, Bz.y - A.y)*0.45);
   const turn = a.up !== b.up;
   const sx = Bz.w/A.w, sy = Bz.h/A.h, dx = Bz.x - A.x, dy = Bz.y - A.y;
+  const r0 = A.rot || 0, r1 = Bz.rot || 0, rm = (r0 + r1)/2; // 山(横向き)へ置く・山から取るときは途中で回す
   // 持ち上げて(少し大きく、影が濃く)運び、置く
   const kf = turn
-    ? [{ transform:'translate(0,0) scale(1,1)' }, { transform:`translate(${dx/2}px, ${dy/2 - 30}px) scale(0, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }]
-    : [{ transform:'translate(0,0) scale(1,1)' }, { transform:`translate(${dx/2}px, ${dy/2 - 24}px) scale(${(1 + sx)/2*1.08}, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }];
+    ? [{ transform:`translate(0,0) rotate(${r0}deg) scale(1,1)` }, { transform:`translate(${dx/2}px, ${dy/2 - 30}px) rotate(${rm}deg) scale(0, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) rotate(${r1}deg) scale(${sx}, ${sy})` }]
+    : [{ transform:`translate(0,0) rotate(${r0}deg) scale(1,1)` }, { transform:`translate(${dx/2}px, ${dy/2 - 24}px) rotate(${rm}deg) scale(${(1 + sx)/2*1.08}, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) rotate(${r1}deg) scale(${sx}, ${sy})` }];
   return trackAnimation(res => {
     let fin = false; // 完了の通知は1回だけ(trackAnimation の数が狂わないように)
     const done = () => { if(fin) return; fin = true; flying.delete(id); try{ el.remove(); }catch(e){} hideFlying(); drawTable(); res();
