@@ -83,7 +83,7 @@ if(fs.existsSync(favDir)){
     `<link rel="icon" type="image/png" sizes="32x32" href="${fav('icon-32.png')}">\n` +
     (single ? '' : '<link rel="icon" type="image/png" sizes="16x16" href="icon-16.png">\n') +
     `<link rel="apple-touch-icon" href="${fav('apple-touch-icon.png')}">\n` +
-    '<meta name="theme-color" content="#1e1816">\n' +
+    '<meta name="theme-color" content="#181a1e">\n' +
     // iPhone: ホーム画面に追加すると、ブラウザのバーなしの全画面で開く
     '<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="mobile-web-app-capable" content="yes">\n' +
     '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n</head>');
