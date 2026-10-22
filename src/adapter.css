@@ -437,3 +437,26 @@ body.b3-2d.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 380px)
 @media (max-width: 860px){ #b3-feed{ left: 8px; bottom: auto; top: 54px; width: 70vw; } .b3-feed-line{ font-size: 11px; } }
 #b3-banner.side{ transform: translate(0, -50%) scale(.92); max-width: min(380px, calc(100vw - 40px)); flex-direction: column; align-items: flex-start; }
 #b3-banner.side.show{ transform: translate(0, -50%) scale(1); }
+
+/* ===== 2D のスマホ表示(table2d.js の placeTable が位置を決める) =====
+   縦: 上から 相手の手札の扇 → 盤面 → ログ1行 → 山(横一列) → 効果欄・手札
+   横: 左に山(縦一列)、中央に盤面、右に ログ1行 → 相手の手札の扇 → 効果の告知・効果欄・手札 */
+body.b3-2d.b3-portrait.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100dvh - 470px) * 0.95)) !important; margin: 62px auto 0 !important; }
+body.b3-2d.b3-landscape.b3-ui .floor-grid.b3-table{ max-width: calc((100dvh - 56px) * 0.9) !important; width: calc((100dvh - 56px) * 0.9) !important; margin: 0 0 0 max(110px, 15vw) !important; }
+body.b3-2d.b3-landscape.b3-ui #app .game-screen{ justify-items: start; }
+.b3-piles.row{ flex-direction: row; gap: 44px; align-items: flex-start; }
+body.b3-phone .b3-piles:not(.row){ gap: 26px; }
+body.b3-phone .b3-pile-count{ font-size: 16px; left: calc(100% + 6px); }
+body.b3-phone .b3-pile-label{ font-size: 9px; right: -40px; bottom: calc(-1 * var(--t) - 14px); }
+body.b3-phone .b3-pile-pop{ max-width: 92vw; }
+body.b3-phone .b3-pop-row .card.b3-pop-card{ width: 40px; height: 56px; }
+body.b3-phone .b3-ofan-count{ font-size: 10px; padding: 1px 8px; top: calc(var(--R) - var(--fh) * 0.5 - 18px); }
+/* ログはスマホでは最新の1行だけ(盤面に重ねない) */
+#b3-feed.compact .b3-feed-line:not(:last-child){ display: none; }
+#b3-feed.compact .b3-feed-line{ font-size: 10.5px; padding: 2px 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 効果の告知もスマホでは小さく(縦は盤面の下、横は盤面の右) */
+#b3-banner.compact{ padding: 8px 12px; gap: 10px; }
+#b3-banner.compact .card.b3-banner-card{ width: 40px; height: 56px; }
+#b3-banner.compact .b3-banner-title{ font-size: 15px; }
+#b3-banner.compact .b3-banner-desc{ font-size: 10.5px; line-height: 1.4; }
+#b3-banner.compact.side{ flex-direction: row; align-items: center; }

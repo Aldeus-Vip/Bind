@@ -204,14 +204,15 @@ function pileEl(kind, p){
   top.classList.add('b3-pile-top'); d.appendChild(top);
   const cnt = document.createElement('div'); cnt.className = 'b3-pile-count'; cnt.textContent = n;
   const lab = document.createElement('div'); lab.className = 'b3-pile-label';
-  lab.textContent = kind === 'deck' ? '山札' : (p === bottomP() ? 'あなたの捨て札' : (state.players[p].name || '相手') + 'の捨て札');
+  const ph = document.body.classList.contains('b3-phone');
+  lab.textContent = kind === 'deck' ? '山札' : (p === bottomP() ? 'あなたの捨て札' : (ph ? '相手' : (state.players[p].name || '相手')) + 'の捨て札');
   d.appendChild(cnt); d.appendChild(lab);
   if(kind === 'discard'){
     const dt = typeof discardTaskFor === 'function' ? discardTaskFor(p) : null;
     if(dt) d.classList.add('picking');
     d.addEventListener('mouseenter', () => { pinned = p; drawPop(); });
     d.addEventListener('mouseleave', e => { if(!(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.b3-pile-pop'))){ pinned = null; drawPop(); } });
-    d.addEventListener('click', () => { pinned = p; drawPop(); });
+    d.addEventListener('click', () => { pinned = pinned === p && document.body.classList.contains('b3-phone') ? null : p; drawPop(); }); // スマホはもう一度押すと閉じる
   }
   return d;
 }
@@ -242,9 +243,16 @@ function drawPop(){
   pop.addEventListener('mouseleave', () => { pinned = null; drawPop(); });
   tbl.appendChild(pop);
   const r = pile.getBoundingClientRect();
-  pop.style.left = (r.right + 46) + 'px';
-  pop.style.top = Math.max(8, Math.min(innerHeight - pop.offsetHeight - 8, r.top + r.height/2 - pop.offsetHeight/2)) + 'px';
+  if(pile.parentNode.classList.contains('row')){ // スマホ縦: 山の列の上に、画面からはみ出さないよう
+    pop.style.left = Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.left + r.width/2 - pop.offsetWidth/2)) + 'px';
+    pop.style.top = Math.max(8, r.top - pop.offsetHeight - 12) + 'px';
+  } else {
+    pop.style.left = Math.min(r.right + 46, Math.max(8, innerWidth - pop.offsetWidth - 8)) + 'px';
+    pop.style.top = Math.max(8, Math.min(innerHeight - pop.offsetHeight - 8, r.top + r.height/2 - pop.offsetHeight/2)) + 'px';
+  }
 }
+// スマホ: 捨て札の中身は、山と中身以外のところを押すと閉じる
+document.addEventListener('pointerdown', e => { if(pinned == null || !e.target.closest) return; if(e.target.closest('.b3-pile-discard, .b3-pile-pop')) return; pinned = null; drawPop(); }, true);
 // 相手の手札: 逆向きの扇(裏向き)。手札を選ぶ効果(5・10・JOKER・Q)の最中は、ここで選ぶ
 function fanEl(p){
   const pl = state.players[p], n = pl.hand.length;
@@ -298,13 +306,29 @@ function placeTable(){
   const g = grid.getBoundingClientRect(), cell = grid.querySelector('.floor-cell');
   const cw = cell ? cell.getBoundingClientRect().width : 90;
   tbl.style.setProperty('--cw', Math.round(cw*0.82) + 'px');
-  const col = tbl.querySelector('.b3-piles'), fan = tbl.querySelector('.b3-ofan');
-  if(col){ col.style.left = Math.max(6, g.left - col.offsetWidth - 70) + 'px'; col.style.top = Math.max(60, g.top + g.height/2 - col.offsetHeight/2) + 'px'; }
+  const col = tbl.querySelector('.b3-piles'), fan = tbl.querySelector('.b3-ofan'), feed = document.getElementById('b3-feed');
+  const bc = document.body.classList, por = bc.contains('b3-portrait'), land = bc.contains('b3-landscape');
+  // スマホ縦: 盤面の下に ログ1行 → 山(横一列)。スマホ横: 山は盤面の左、ログと相手の手札は盤面の右上
+  if(col){
+    col.classList.toggle('row', por);
+    if(por){ col.style.setProperty('--cw', Math.round(cw*0.6) + 'px'); col.style.left = Math.max(6, g.left + g.width/2 - col.offsetWidth/2) + 'px'; col.style.top = (g.bottom + 30) + 'px'; }
+    else {
+      col.style.setProperty('--cw', land ? Math.round(cw*0.7) + 'px' : '');
+      col.style.left = Math.max(6, g.left - col.offsetWidth - (land ? 40 : 70)) + 'px'; col.style.top = Math.max(land ? 46 : 60, g.top + g.height/2 - col.offsetHeight/2) + 'px';
+    }
+  }
+  if(feed){
+    feed.classList.toggle('compact', por || land);
+    if(por) Object.assign(feed.style, { left:(g.left + 4) + 'px', top:(g.bottom + 4) + 'px', width:(g.width - 8) + 'px', bottom:'auto' });
+    else if(land) Object.assign(feed.style, { left:(g.right + 10) + 'px', top:'52px', width:Math.max(120, innerWidth - g.right - 20) + 'px', bottom:'auto' });
+    else Object.assign(feed.style, { left:'', top:'', width:'', bottom:'' });
+  }
   if(fan){
-    // 扇の根本は盤面の上の中央よりさらに上。カードの下端が盤面の少し上に来る
-    const fw = Math.round(cw*0.62), fh = Math.round(fw*1.4), R = 260;
+    // 扇の根本は盤面の上の中央よりさらに上。カードの下端が盤面の少し上に来る(スマホ横は盤面の右上)
+    const fw = Math.round(cw*(por ? 0.45 : land ? 0.55 : 0.62)), fh = Math.round(fw*1.4), R = por || land ? 180 : 260;
     fan.style.setProperty('--fw', fw + 'px'); fan.style.setProperty('--fh', fh + 'px'); fan.style.setProperty('--R', R + 'px');
-    fan.style.left = (g.left + g.width/2) + 'px'; fan.style.top = (g.top - 8 - fh/2 - R) + 'px';
+    if(land){ fan.style.left = (g.right + (innerWidth - g.right)/2) + 'px'; fan.style.top = (112 + fh/2 - R) + 'px'; }
+    else { fan.style.left = (g.left + g.width/2) + 'px'; fan.style.top = (g.top - 8 - fh/2 - R) + 'px'; }
   }
 }
 let lastG = '';
@@ -648,7 +672,7 @@ function carry(card, cells, stepMs){
 const banner = document.createElement('div'); banner.id = 'b3-banner'; document.body.appendChild(banner);
 let bannerT = 0;
 function announce(card, title, text, p){
-  banner.innerHTML = '';
+  banner.innerHTML = ''; banner.style.maxWidth = '';
   if(card){ const c = cardStatic(card, 'b3-banner-card'); banner.appendChild(c); }
   const t = document.createElement('div'); t.className = 'b3-banner-text';
   const who = state && state.players && state.players[p] ? (p === bottomP() ? 'あなた' : state.players[p].name) : '';
@@ -657,7 +681,11 @@ function announce(card, title, text, p){
   banner.appendChild(t);
   // 盤面の右の空いているところに出す(盤面を隠さない)。右が狭いときは盤面の上の中央
   const g = document.getElementById('floor-grid-el'), gr = g && g.getBoundingClientRect();
-  if(gr && innerWidth - gr.right > 300){ banner.style.left = (gr.right + 24) + 'px'; banner.style.top = (gr.top + gr.height*0.35) + 'px'; banner.classList.add('side'); }
+  const bc = document.body.classList;
+  banner.classList.toggle('compact', bc.contains('b3-phone'));
+  if(gr && bc.contains('b3-portrait')){ banner.style.left = '50%'; banner.style.top = Math.min(innerHeight - 90, gr.bottom + 150) + 'px'; banner.classList.remove('side'); } // 盤面の下(手札の上)
+  else if(gr && bc.contains('b3-landscape')){ banner.style.left = (gr.right + 8) + 'px'; banner.style.top = (innerHeight*0.6) + 'px'; banner.style.maxWidth = (innerWidth - gr.right - 16) + 'px'; banner.classList.add('side'); }
+  else if(gr && innerWidth - gr.right > 300){ banner.style.left = (gr.right + 24) + 'px'; banner.style.top = (gr.top + gr.height*0.35) + 'px'; banner.classList.add('side'); }
   else { banner.style.left = ''; banner.style.top = ''; banner.classList.remove('side'); }
   banner.classList.remove('show'); void banner.offsetWidth; banner.classList.add('show');
   clearTimeout(bannerT); bannerT = setTimeout(() => banner.classList.remove('show'), 2600);
