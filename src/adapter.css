@@ -343,7 +343,7 @@ body.b3-2d.b3-ui #app .game-screen{ grid-template-columns: minmax(0, 1fr) !impor
 body.b3-2d.b3-ui #app .left-column{ display: none !important; }
 body.b3-2d.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 380px) * 0.9)) !important; margin: 92px auto 0 !important; }
 #b3-tbl, #b3-flylayer{ position: fixed; inset: 0; pointer-events: none; z-index: 40; }
-#b3-flylayer{ z-index: 45; }
+#b3-flylayer{ z-index: 950; } /* 下の効果のバー・手札の扇より手前 */
 #b3-tbl > *{ pointer-events: auto; }
 /* 山: 一番上のカードの下に、枚数ぶんの厚さの黒い直方体と白い筋 */
 .b3-piles{ position: absolute; display: flex; flex-direction: column; gap: 40px; align-items: flex-start; }

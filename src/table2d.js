@@ -303,6 +303,7 @@ let lastG = '';
   const grid = inGame() && document.getElementById('floor-grid-el'); if(!grid) return;
   const r = grid.getBoundingClientRect(), k = `${r.left|0},${r.top|0},${r.width|0},${r.height|0}`;
   if(k !== lastG){ lastG = k; placeTable(); }
+  if(flying.size) hideFlying(); // 手札の扇などが後から作り直されても、着地前のカードは隠したまま
 })();
 // 演出(table2d の「実物のカードの動き」)から使う位置
 const T2 = window.B3.table2d = {
@@ -369,7 +370,9 @@ function fly(id, a, b, delay){
     : [{ transform:`translate(0,0) rotate(${r0}deg) scale(1,1)` }, { transform:`translate(${dx/2}px, ${dy/2 - 24}px) rotate(${rm}deg) scale(${(1 + sx)/2*1.08}, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) rotate(${r1}deg) scale(${sx}, ${sy})` }];
   return trackAnimation(res => {
     let fin = false; // 完了の通知は1回だけ(trackAnimation の数が狂わないように)
-    const done = () => { if(fin) return; fin = true; flying.delete(id); try{ el.remove(); }catch(e){} hideFlying(); drawTable(); res();
+    const done = () => { if(fin) return; fin = true; flying.delete(id); try{ el.remove(); }catch(e){}
+      document.querySelectorAll(`[data-b3hid="${id}"]`).forEach(e => { e.style.visibility = ''; delete e.dataset.b3hid; }); // 着地したら、隠していた着地先を戻す
+      hideFlying(); drawTable(); res();
       // CPU は演出中は動かないので、カードが着地したら声をかけ直す(描き直しの後に始まる動きなので、元のゲームは呼び直さない)
       if(typeof cpuMaybeAct === 'function') setTimeout(() => { try{ if(!animationsInFlight) cpuMaybeAct(); }catch(e){} }, 0); };
     const an = el.animate(kf, { duration:dur, delay, easing:'cubic-bezier(.45,.05,.35,1)', fill:'both' });
@@ -379,6 +382,7 @@ function fly(id, a, b, delay){
   });
 }
 // 着地前のカードの着地先を隠す(描き直しで出てきても)
+const travIdx = () => (typeof travelingOriginIndex !== 'undefined' ? travelingOriginIndex : null);
 function hideFlying(){
   if(!flying.size || !inGame()) return;
   const me = bottomP();
@@ -389,9 +393,14 @@ function hideFlying(){
       if(idx < 0) return;
       if(p === me){ const row = document.querySelector('.b3-fan .hand-row'); e = row && row.children[idx]; }
       else e = document.getElementById(`b3-ohand-${p}-${idx}`);
-    } else if(key.startsWith('cell')) e = document.querySelector(`#floor-cell-${key.slice(4)} > .card, #floor-cell-${key.slice(4)} > .card-back`);
+    } else if(key.startsWith('cell')){
+      // パーソナルが乗っているマスでは、下のカードは見えていない(上のパーソナルを隠してしまわないように)
+      const c = +key.slice(4), slot = state.floor[c];
+      if(slot && slot.owner != null && travIdx() !== c) return;
+      e = document.querySelector(`#floor-cell-${c} > .card-back, #floor-cell-${c} > .card:not(.personal)`);
+    }
     else if(key.startsWith('pers')){ const pl = state.players[+key.slice(4)]; e = pl && pl.personalIndex != null ? document.querySelector(`#floor-cell-${pl.personalIndex} .card.personal`) : null; }
-    if(e) e.style.visibility = 'hidden';
+    if(e){ e.style.visibility = 'hidden'; e.dataset.b3hid = id; }
   });
 }
 function physical(){
@@ -449,8 +458,8 @@ function carry(card, cells, stepMs){
 [['triggerMoveTravel', (o, d, p) => {
   let path = typeof shortestFloorPath === 'function' ? shortestFloorPath(o, d, p) : [d];
   if(!path.length && o === d){ const h = neighbors8(o).find(n => { const s = state.floor[n]; return s && (s.owner === null || s.owner === p); }); if(h !== undefined) path = [h, o]; }
-  return carry(state.players[p].personalCard, [o, ...path], 330);
-}], ['triggerDualRiftTeleport', (o, d, p) => carry(state.players[p].personalCard, [o, d], 600)], ['triggerTeleport', (o, d, p) => carry(state.players[p].personalCard, [o, d], 600)]].forEach(([k, fn]) => {
+  return carry(state.players[p].personalCard, [o, ...path], 620); // 1マスごとに持ち上げて置く(3D の歩きと同じくらいの間合い)
+}], ['triggerDualRiftTeleport', (o, d, p) => carry(state.players[p].personalCard, [o, d], 900)], ['triggerTeleport', (o, d, p) => carry(state.players[p].personalCard, [o, d], 900)]].forEach(([k, fn]) => {
   const prev = window[k]; if(typeof prev !== 'function') return;
   window[k] = function(o, d, p){
     if(!is2D()) return prev.apply(this, arguments);
