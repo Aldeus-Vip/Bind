@@ -350,7 +350,8 @@ function zoneRect(z){
 function snapshot(){
   const m = new Map(), me = bottomP();
   const put = (c, z) => { if(c && c.id != null) m.set(c.id, Object.assign({ card:c }, z)); };
-  state.deck.forEach(c => put(c, { zone:'deck', key:'deck', up:false }));
+  const nd = state.deck.length;
+  state.deck.forEach((c, i) => put(c, { zone:'deck', key:'deck', up:false, bottom: nd > 1 && i < nd/2 })); // 山札の下半分 = 一番下へ戻されたカード
   state.players.forEach((pl, p) => {
     pl.discard.forEach(c => put(c, { zone:'disc', p, key:'disc' + p, up:true }));
     pl.hand.forEach((c, idx) => put(c, { zone:'hand', p, idx, key:'hand' + p, up: p === me }));
@@ -370,12 +371,19 @@ function fly(id, a, b, delay){
   Object.assign(el.style, { left:(A.x - A.w/2) + 'px', top:(A.y - A.h/2) + 'px', width:A.w + 'px', height:A.h + 'px' });
   flyLayer.appendChild(el);
   flying.set(id, b.key);
-  const dur = Math.min(900, 380 + Math.hypot(Bz.x - A.x, Bz.y - A.y)*0.45);
+  const dur = Math.min(1100, 520 + Math.hypot(Bz.x - A.x, Bz.y - A.y)*0.5);
   const turn = a.up !== b.up;
   const sx = Bz.w/A.w, sy = Bz.h/A.h, dx = Bz.x - A.x, dy = Bz.y - A.y;
   const r0 = A.rot || 0, r1 = Bz.rot || 0, rm = (r0 + r1)/2; // 山(横向き)へ置く・山から取るときは途中で回す
   // 持ち上げて(少し大きく、影が濃く)運び、置く
-  const kf = turn
+  // 山札の一番下へ戻すとき: 真横まで運び、黒い直方体(厚さ)の下へ横から滑り込ませる
+  const toBottom = b.zone === 'deck' && b.bottom && a.zone !== 'deck';
+  const tk = thick(state.deck.length), bx = Bz.x - Bz.h*1.15, by = Bz.y + Bz.w/2 + Math.max(4, tk/2);
+  const kf = toBottom
+    ? [{ transform:`translate(0,0) rotate(${r0}deg) scale(1,1)`, opacity:1 },
+       { transform:`translate(${bx - A.x}px, ${by - A.y}px) rotate(90deg) scale(${sx}, ${sy})`, opacity:1, offset:0.6 },
+       { transform:`translate(${Bz.x - A.x}px, ${by - A.y}px) rotate(90deg) scale(${sx*0.12}, ${sy})`, opacity:0 }]
+    : turn
     ? [{ transform:`translate(0,0) rotate(${r0}deg) scale(1,1)` }, { transform:`translate(${dx/2}px, ${dy/2 - 30}px) rotate(${rm}deg) scale(0, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) rotate(${r1}deg) scale(${sx}, ${sy})` }]
     : [{ transform:`translate(0,0) rotate(${r0}deg) scale(1,1)` }, { transform:`translate(${dx/2}px, ${dy/2 - 24}px) rotate(${rm}deg) scale(${(1 + sx)/2*1.08}, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) rotate(${r1}deg) scale(${sx}, ${sy})` }];
   return trackAnimation(res => {
@@ -386,7 +394,7 @@ function fly(id, a, b, delay){
       // CPU は演出中は動かないので、カードが着地したら声をかけ直す(描き直しの後に始まる動きなので、元のゲームは呼び直さない)
       if(typeof cpuMaybeAct === 'function') setTimeout(() => { try{ if(!animationsInFlight) cpuMaybeAct(); }catch(e){} }, 0); };
     const an = el.animate(kf, { duration:dur, delay, easing:'cubic-bezier(.45,.05,.35,1)', fill:'both' });
-    if(turn) setTimeout(() => { el.innerHTML = ''; el.appendChild(faceEl(card, b.up)); }, delay + dur/2);
+    if(turn) setTimeout(() => { el.innerHTML = ''; el.appendChild(faceEl(card, b.up)); }, delay + dur*(toBottom ? 0.3 : 0.5));
     an.onfinish = done; an.oncancel = done;
     setTimeout(done, delay + dur + 400); // 念のため
   });
@@ -435,13 +443,95 @@ B.table2d.skipMove = id => skipMove.add(id);
 /* ---- 2D では元の演出(炎・渦・柱など)を出さない。カードの動きは上の仕組みが出すので、少し間をおくだけにする ----
    移動・ワープ・敗北・雷は専用の動き(下と上)。対になる演出(浮かぶ → 収まる など)は両方とも間をおくだけ。 */
 const KEEP = new Set(['triggerNumberEffect', 'triggerCardNumberEffect', 'triggerSuitEffect', 'triggerDefeatBurn', 'triggerLightningBoltStrike', 'triggerLightningZap',
-  'triggerMoveTravel', 'triggerDualRiftTeleport', 'triggerTeleport']);
+  'triggerMoveTravel', 'triggerDualRiftTeleport', 'triggerTeleport', 'triggerChangeFlip']);
 const BEAT = { triggerDrawCardAppear:260, triggerSunDrawCardAppear:200, triggerVortexDrawCardAppear:200, triggerClubDrawAppear:200, triggerChangeFlip:420,
   triggerExtraTurnWhiteout:500, triggerWindCellLanding:120, triggerWindCellDissipate:120, triggerTornadoAppear:200, triggerTornadoSettleInPlace:200 };
 const beat = ms => trackAnimation(res => setTimeout(res, ms));
+
+/* ---- 2D の簡単な演出(リング・光の粒・渦・斬撃・光の柱・ひび・画面の光)。8 の雷くらいの「今これが起きた」がわかる程度 ---- */
+const C2 = { H:'#ff4a5a', S:'#a070ff', D:'#ffc040', C:'#4aa0ff', sun:'#ffd36a', violet:'#b67dff', green:'#5fe08a', water:'#5ab8ff', wind:'#7fe6d6', dark:'#9a5cff', blood:'#ff4a8a', white:'#f4f0ff' };
+const boxOf = e => { if(!e) return null; const r = e.getBoundingClientRect(); return r.width || r.height ? { x:r.left + r.width/2, y:r.top + r.height/2, w:r.width, h:r.height } : null; };
+const at = {
+  cell: i => cellBox(i),
+  deck: () => boxOf(T2.deck()),
+  disc: p => boxOf(T2.discard(p)),
+  hand: p => p === bottomP() ? boxOf(document.querySelector('.b3-fan .hand-row')) : boxOf(tbl.querySelector('.b3-ofan-card') && (() => { const cs = [...tbl.querySelectorAll('.b3-ofan-card')]; if(!cs.length) return null; const rs = cs.map(c => c.getBoundingClientRect()); const l = Math.min(...rs.map(r => r.left)), t = Math.min(...rs.map(r => r.top)), rr = Math.max(...rs.map(r => r.right)), bb = Math.max(...rs.map(r => r.bottom)); return { getBoundingClientRect: () => ({ left:l, top:t, width:rr - l, height:bb - t }) }; })()),
+  slot: (p, idx) => p === bottomP() ? boxOf((document.querySelector('.b3-fan .hand-row') || { children:[] }).children[idx]) || at.hand(p) : boxOf(document.getElementById(`b3-ohand-${p}-${idx}`)) || at.hand(p),
+};
+function fxEl(cls, b, sz){ const e = document.createElement('div'); e.className = 'b3-fx ' + cls; const S = sz || Math.max(b.w, b.h); Object.assign(e.style, { left:b.x + 'px', top:b.y + 'px', width:S + 'px', height:S + 'px' }); flyLayer.appendChild(e); return e; }
+const kill = (e, ms) => setTimeout(() => { try{ e.remove(); }catch(_){ } }, ms);
+const fx = {
+  ring(b, col, big){ if(!b) return; [0, 160].forEach(d => { const e = fxEl('b3-fx-ring', b, Math.max(b.w, b.h)*(big ? 1.3 : 1)); e.style.setProperty('--c', col);
+    e.animate([{ transform:'translate(-50%,-50%) scale(.3)', opacity:1 }, { transform:'translate(-50%,-50%) scale(1.5)', opacity:0 }], { duration:700, delay:d, easing:'ease-out', fill:'both' }); kill(e, 900 + d); }); },
+  burst(b, col, n){ if(!b) return; for(let k = 0; k < (n || 16); k++){ const e = fxEl('b3-fx-mote', b, 8); e.style.setProperty('--c', col);
+    const a = Math.random()*Math.PI*2, d = Math.max(b.w, b.h)*(0.4 + Math.random()*0.6);
+    e.animate([{ transform:'translate(-50%,-50%)', opacity:1 }, { transform:`translate(calc(-50% + ${Math.cos(a)*d}px), calc(-50% + ${Math.sin(a)*d - 20}px)) scale(.3)`, opacity:0 }], { duration:600 + Math.random()*300, easing:'cubic-bezier(.2,.7,.3,1)', fill:'both' }); kill(e, 1000); } },
+  swirl(b, col){ if(!b) return; const e = fxEl('b3-fx-swirl', b, Math.max(b.w, b.h)*1.25); e.style.setProperty('--c', col);
+    e.animate([{ transform:'translate(-50%,-50%) rotate(0) scale(1.2)', opacity:0 }, { opacity:1, offset:0.25 }, { transform:'translate(-50%,-50%) rotate(540deg) scale(.2)', opacity:0 }], { duration:900, easing:'ease-in', fill:'both' }); kill(e, 1000); },
+  slash(b, col){ if(!b) return; const e = fxEl('b3-fx-slash', b, Math.max(b.w, b.h)*1.6); e.style.setProperty('--c', col);
+    e.animate([{ transform:'translate(-50%,-50%) rotate(-35deg) scaleX(0)', opacity:1 }, { transform:'translate(-50%,-50%) rotate(-35deg) scaleX(1)', opacity:1, offset:0.35 }, { transform:'translate(-50%,-50%) rotate(-35deg) scaleX(1)', opacity:0 }], { duration:520, easing:'ease-out', fill:'both' }); kill(e, 600); },
+  pillar(b, col){ if(!b) return; const e = fxEl('b3-fx-pillar', b, b.w*1.1); e.style.setProperty('--c', col); e.style.height = (b.h*2.6) + 'px';
+    e.animate([{ transform:'translate(-50%,-85%) scaleX(0)', opacity:0 }, { transform:'translate(-50%,-85%) scaleX(1)', opacity:1, offset:0.3 }, { transform:'translate(-50%,-85%) scaleX(.2)', opacity:0 }], { duration:900, easing:'ease-out', fill:'both' }); kill(e, 1000); },
+  crack(b, i){ if(!b) return; const e = fxEl('b3-fx-crack', b, Math.max(b.w, b.h));
+    e.innerHTML = '<svg viewBox="0 0 100 100"><path d="M50 2 L44 22 L58 34 L38 52 L62 68 L40 86 L52 98 M44 22 L20 26 M58 34 L84 26 M38 52 L12 58 M62 68 L90 74" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
+    e.animate([{ opacity:0, transform:'translate(-50%,-50%) scale(.9)' }, { opacity:1, transform:'translate(-50%,-50%) scale(1)', offset:0.2 }, { opacity:0, transform:'translate(-50%,-50%) scale(1.05)' }], { duration:900, fill:'both' }); kill(e, 1000);
+    const c = i != null && document.getElementById('floor-cell-' + i); if(c){ c.classList.add('b3-shock'); setTimeout(() => c.classList.remove('b3-shock'), 380); } },
+  flash(col){ const e = document.createElement('div'); e.className = 'b3-fx-flash'; e.style.setProperty('--c', col); flyLayer.appendChild(e);
+    e.animate([{ opacity:0 }, { opacity:.45, offset:0.2 }, { opacity:0 }], { duration:700, fill:'both' }); kill(e, 800); },
+  glow(b, col){ if(!b) return; const e = fxEl('b3-fx-glow', b); Object.assign(e.style, { width:b.w + 'px', height:b.h + 'px' }); e.style.setProperty('--c', col);
+    e.animate([{ opacity:0 }, { opacity:1, offset:0.3 }, { opacity:0 }], { duration:800, fill:'both' }); kill(e, 900); },
+};
+// 元の演出の名前 → 2D の簡単な演出(戻り値は待つ時間 ms。省略時 700)
+const FX = {
+  triggerMagmaRiseAndCrack: i => { fx.ring(at.cell(i), C2.H); fx.burst(at.cell(i), C2.H); },            // ♥: 裏 → 表
+  triggerSpadeSlashHand: (p, idx) => { fx.slash(at.slot(p, idx), C2.S); },                              // ♠: 手札を斬る
+  triggerDiamondCircleSpawn: i => { fx.ring(at.cell(i), C2.D); fx.burst(at.cell(i), C2.D, 10); },       // ♦: 新しいフロア
+  triggerDiscardSpinVanish: p => { fx.swirl(at.disc(p), C2.D); },                                       // ♦: 捨て札 → 山札の下
+  triggerClubGrowthVanish: p => { fx.swirl(at.disc(p), C2.C); },                                        // ♣: 捨て札 → 山札の下
+  triggerClubDrawAppear: () => { fx.burst(at.deck(), C2.C, 8); return 420; },
+  triggerSunDrawCardAppear: () => { fx.burst(at.deck(), C2.sun, 8); return 380; },                       // A: 5枚引く
+  triggerSunFloorSpawn: i => { fx.ring(at.cell(i), C2.sun); fx.burst(at.cell(i), C2.sun, 10); },        // A: 新しいフロア
+  triggerCardFlip: i => { fx.glow(at.cell(i), C2.sun); },                                               // A: 表 → 裏(太陽の強化)
+  triggerExtraTurnWhiteout: () => { fx.flash(C2.sun); return 900; },                                    // A: 追加ターン
+  triggerVortexDrawCardAppear: () => { fx.swirl(at.deck(), C2.water); return 420; },                    // 3: 1枚引く
+  triggerVortexHide: i => { fx.swirl(at.cell(i), C2.water); },                                          // 3: 表 → 裏
+  triggerSummon2RiseAndReveal: i => { fx.ring(at.cell(i), C2.violet, true); fx.pillar(at.cell(i), C2.violet); }, // 2: 召喚
+  triggerSummon2Return: i => { fx.ring(at.cell(i), C2.violet); return 500; },
+  triggerDiscardFlipRise: p => { fx.pillar(at.disc(p), C2.violet); },                                   // 4: 捨て札から
+  triggerFloorSpawn: i => { fx.ring(at.cell(i), C2.violet); },                                          // 4: 空きマスへ置く
+  triggerLightningFloorTransform: i => { fx.ring(at.cell(i), '#9b7dff'); fx.burst(at.cell(i), '#ffe27a', 8); }, // 4: 雷撃フロア
+  triggerGreenVortexSteal: (t, idx) => { fx.swirl(at.slot(t, idx), C2.green); },                        // 5: 手札を奪う
+  triggerWhirlpoolDrain: i => { fx.swirl(at.cell(i), C2.water); fx.ring(at.cell(i), C2.water); },       // 6: 渦に沈む
+  triggerTornadoAppear: i => { fx.swirl(at.cell(i), C2.wind); return 500; },                            // 7: 竜巻
+  triggerTornadoMove: (a, b) => { fx.swirl(at.cell(a), C2.wind); fx.swirl(at.cell(b), C2.wind); },
+  triggerTornadoSettleInPlace: i => { fx.ring(at.cell(i), C2.wind); return 400; },
+  triggerWindCellLanding: i => { fx.ring(at.cell(i), C2.wind); return 300; },
+  triggerWindCellDissipate: i => { fx.ring(at.cell(i), C2.wind); return 300; },
+  triggerDiscardPillarRise: p => { fx.pillar(at.disc(p), C2.sun); },                                    // 9: 捨て札 → 山札の上
+  triggerDiscardPillarReturn: () => 200,
+  triggerRedPurpleHandRise: (p, idx) => { fx.ring(at.slot(p, idx), C2.blood); fx.glow(at.slot(p, idx), C2.blood); }, // 10: 手札を捨てさせる
+  triggerRedPurpleDiscardArrival: () => 300, triggerRedPurpleDiscardReturn: () => 200,
+  triggerBlackEvaporate: i => { fx.swirl(at.cell(i), C2.dark); fx.burst(at.cell(i), C2.dark, 12); },    // J: フロアを手札へ
+  triggerBlackMistHandAppear: p => { fx.swirl(at.hand(p), C2.dark); return 500; }, triggerBlackMistReturn: () => 200,
+  triggerHandWipeNebula: p => { fx.swirl(at.hand(p), C2.blood); fx.flash('#3a0016'); },                 // Q: 手札を全部捨てさせる
+  triggerDiscardAppearNebula: p => { fx.ring(at.disc(p), C2.blood); return 400; },
+  triggerKCrackReveal: i => { fx.crack(at.cell(i), i); },                                               // K: 叩き割って表に
+  triggerKDestroy: i => { fx.crack(at.cell(i), i); fx.burst(at.cell(i), '#ff8a3a', 18); },              // K: 壊して捨て札へ
+  triggerKShatterSurvive: i => { fx.glow(at.cell(i), '#ff8a3a'); return 500; },
+  triggerJokerBarrierBreak: i => { fx.ring(at.cell(i), C2.white, true); fx.burst(at.cell(i), C2.dark, 14); }, // JOKER: フロアを相手の捨て札へ
+  triggerScytheSlashHand: (p, idx) => { fx.slash(at.slot(p, idx), C2.white); },                         // JOKER: 手札を斬る
+  triggerJokerTopdeckRise: p => { fx.pillar(at.disc(p), C2.white); },                                   // JOKER: 捨て札 → 山札の上
+  triggerRemainingDiscardNebula: p => { fx.swirl(at.disc(p), C2.dark); },                               // JOKER: 残りを山札の下へ
+};
 Object.keys(window).filter(k => /^trigger[A-Z]/.test(k) && typeof window[k] === 'function' && !KEEP.has(k)).forEach(k => {
   const prev = window[k];
-  window[k] = function(){ return is2D() ? beat(BEAT[k] != null ? BEAT[k] : 320) : prev.apply(this, arguments); };
+  window[k] = function(){
+    if(!is2D()) return prev.apply(this, arguments);
+    // 効果ごとの簡単な演出(何が起きたかわかる程度)。カードの動きそのものは physical() が出す
+    const f = FX[k]; let ms = BEAT[k] != null ? BEAT[k] : 700;
+    if(f){ try{ const r = f.apply(null, arguments); if(typeof r === 'number') ms = r; }catch(e){ console.error('[Bind2D]', k, e); } }
+    return beat(ms);
+  };
 });
 // 対象のプレイヤーを囲む枠(元はパネルに付けていた)も 2D では出さない
 ['attachMindFrame', 'detachMindFrame'].forEach(k => { const prev = window[k]; if(typeof prev === 'function') window[k] = function(){ if(!is2D()) return prev.apply(this, arguments); }; });
@@ -479,6 +569,96 @@ function carry(card, cells, stepMs){
     return Promise.resolve(fn(o, d, p)).finally(() => { if(hide){ travelingOriginIndex = null; } });
   };
 });
+
+/* ---- チェンジ(2D): パーソナルと下のフロアのカードを背中合わせにして、その場でクルッと返す ----
+   表 = パーソナルの絵柄、裏 = 下のフロアのカード。返るとパーソナルは裏へ隠れ、下のカードの絵柄が出てくる(入れ替えは同時) */
+(() => {
+  const prev = window.triggerChangeFlip; if(typeof prev !== 'function') return;
+  window.triggerChangeFlip = function(cell, oldCard, newCard, p){
+    if(!is2D()) return prev.apply(this, arguments);
+    if(typeof settings !== 'undefined' && settings.moveAnim === false) return Promise.resolve();
+    return trackAnimation(res => {
+      const b = cellBox(cell);
+      if(!b || !oldCard || !newCard){ res(); return; }
+      skipMove.add(oldCard.id); skipMove.add(newCard.id); // 入れ替えはこの動きで見せる(居場所の記録では動かさない)
+      const el = document.createElement('div'); el.className = 'b3-fly b3-swap';
+      Object.assign(el.style, { left:(b.x - b.w/2) + 'px', top:(b.y - b.h/2) + 'px', width:b.w + 'px', height:b.h + 'px' });
+      const inner = document.createElement('div'); inner.className = 'b3-swap-inner';
+      const front = faceEl(oldCard, true), back = faceEl(newCard, true);
+      front.classList.add('b3-swap-front'); back.classList.add('b3-swap-back');
+      inner.appendChild(front); inner.appendChild(back); el.appendChild(inner); flyLayer.appendChild(el);
+      if(typeof animatingCellIndices !== 'undefined'){ animatingCellIndices.add(cell); render(); } // 下のマスは空けておく(重なって見えないように)
+      inner.animate([{ transform:'translateY(0) rotateY(0deg) scale(1)' }, { transform:'translateY(-16px) rotateY(90deg) scale(1.12)', offset:0.5 }, { transform:'translateY(0) rotateY(180deg) scale(1)' }],
+        { duration:950, delay:250, easing:'cubic-bezier(.5,0,.3,1)', fill:'both' });
+      fx.ring(b, '#f0d690');
+      let fin = false;
+      const done = () => { if(fin) return; fin = true;
+        if(typeof animatingCellIndices !== 'undefined') animatingCellIndices.delete(cell);
+        res(); setTimeout(() => { try{ el.remove(); }catch(e){} }, 120); }; // 呼び出し側がこの後すぐ入れ替えて描き直す
+      setTimeout(done, 1350);
+    });
+  };
+})();
+
+/* ---- 効果の発動を告げる(2D): どのカードの何の効果かを、カードと説明で少しの間見せてから効果を始める ---- */
+const banner = document.createElement('div'); banner.id = 'b3-banner'; document.body.appendChild(banner);
+let bannerT = 0;
+function announce(card, title, text, p){
+  banner.innerHTML = '';
+  if(card){ const c = cardStatic(card, 'b3-banner-card'); banner.appendChild(c); }
+  const t = document.createElement('div'); t.className = 'b3-banner-text';
+  const who = state && state.players && state.players[p] ? (p === bottomP() ? 'あなた' : state.players[p].name) : '';
+  t.innerHTML = `<div class="b3-banner-who">${who}</div><div class="b3-banner-title"></div><div class="b3-banner-desc"></div>`;
+  t.querySelector('.b3-banner-title').textContent = title; t.querySelector('.b3-banner-desc').textContent = text || '';
+  banner.appendChild(t);
+  // 盤面の右の空いているところに出す(盤面を隠さない)。右が狭いときは盤面の上の中央
+  const g = document.getElementById('floor-grid-el'), gr = g && g.getBoundingClientRect();
+  if(gr && innerWidth - gr.right > 300){ banner.style.left = (gr.right + 24) + 'px'; banner.style.top = (gr.top + gr.height*0.35) + 'px'; banner.classList.add('side'); }
+  else { banner.style.left = ''; banner.style.top = ''; banner.classList.remove('side'); }
+  banner.classList.remove('show'); void banner.offsetWidth; banner.classList.add('show');
+  clearTimeout(bannerT); bannerT = setTimeout(() => banner.classList.remove('show'), 2600);
+}
+const EFX = () => window.BIND_EFFECTS || { number:[], suit:[] };
+const SUITN = { H:'ハート', S:'スペード', D:'ダイヤ', C:'クラブ' };
+const SUITM = { H:'♥', S:'♠', D:'♦', C:'♣' };
+const PAUSE = 1100; // 効果を告げてから始めるまで(一つ一つでしっかり止まる)
+[['triggerNumberEffect', (rank, p) => { const e = EFX().number.find(x => x.key === rank) || {}; const pc = state.players[p] && state.players[p].personalCard;
+    announce(pc && pc.rank === rank ? pc : { suit:'S', rank, id:'b3-banner-' + rank }, `${e.label || rank} の効果`, e.text, p); }],
+ ['triggerSuitEffect', (suit, p) => { const e = EFX().suit.find(x => x.key === suit) || {}; announce(null, `${SUITM[suit] || ''} ${SUITN[suit] || suit}の効果`, e.text, p); }],
+ ['triggerCardNumberEffect', (card, p) => { if(!card || card.suit !== 'JOKER') return false; const e = EFX().number.find(x => x.key === 'JOKER' || x.label === 'JOKER') || {}; announce(card, 'JOKER の効果', e.text, p); }],
+].forEach(([k, show]) => {
+  const prev = window[k]; if(typeof prev !== 'function') return;
+  window[k] = async function(){
+    if(is2D() && state && !state.gameOver){
+      let shown = true;
+      try{ shown = show.apply(null, arguments) !== false; }catch(e){ console.error('[Bind2D]', e); }
+      if(shown) await beat(PAUSE);
+    }
+    return prev.apply(this, arguments);
+  };
+});
+
+/* ---- 何が起きたか(2D・3D): ゲームのログの文を、画面の左下に流す。新しい行ほど明るく、しばらくすると消える ---- */
+const feed = document.createElement('div'); feed.id = 'b3-feed'; document.body.appendChild(feed);
+(() => {
+  const prev = window.log; if(typeof prev !== 'function') return;
+  window.log = function(msg){
+    const r = prev.apply(this, arguments);
+    try{
+      if(typeof msg === 'string' && msg.trim()){
+        const line = document.createElement('div'); line.className = 'b3-feed-line' + (/^---/.test(msg) ? ' turn' : '');
+        line.textContent = msg.replace(/^-+\s*|\s*-+$/g, '');
+        feed.appendChild(line);
+        while(feed.children.length > 6) feed.firstChild.remove();
+        setTimeout(() => { line.classList.add('old'); }, 7000);
+        setTimeout(() => { try{ line.remove(); }catch(e){} }, 9000);
+      }
+    }catch(e){}
+    return r;
+  };
+})();
+// 対局の外(スタート画面など)では出さない
+(function feedVis(){ requestAnimationFrame(feedVis); const on = typeof state !== 'undefined' && state && state.players && !document.querySelector('.start-screen'); feed.style.display = on ? '' : 'none'; })();
 
 const origRender = window.render;
 window.render = function(){

@@ -392,3 +392,43 @@ body.b3-2d.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 380px)
   border: 1px solid #f0cf7a; box-shadow: 0 0 14px rgba(255,214,130,.5); animation: b3-breathe 1.6s ease-in-out infinite; }
 .b3-myhand-pick:hover{ background: rgba(70,52,26,.95); }
 .b3-ofan.picking{ cursor: pointer; }
+
+/* 2D: チェンジ — 背中合わせの2枚がその場で返る(table2d.js) */
+.b3-swap{ perspective: 700px; }
+.b3-swap-inner{ position: absolute; inset: 0; transform-style: preserve-3d; }
+.b3-swap .b3-swap-front, .b3-swap .b3-swap-back{ position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.b3-swap .b3-swap-back{ transform: rotateY(180deg); }
+
+/* 2D: 効果ごとの簡単な演出 */
+.b3-fx{ position: absolute; pointer-events: none; transform: translate(-50%,-50%); }
+.b3-fx-ring{ border-radius: 50%; border: 3px solid var(--c); box-shadow: 0 0 18px var(--c), inset 0 0 14px var(--c); }
+.b3-fx-mote{ border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); }
+.b3-fx-swirl{ border-radius: 50%; border: 4px dashed var(--c); border-left-color: transparent; border-right-color: transparent; box-shadow: 0 0 16px var(--c); }
+.b3-fx-slash{ height: 5px !important; border-radius: 4px; background: linear-gradient(90deg, transparent, #fff 40%, var(--c) 60%, transparent); box-shadow: 0 0 14px var(--c); transform-origin: center; }
+.b3-fx-pillar{ border-radius: 40% 40% 8px 8px; background: linear-gradient(to top, var(--c), color-mix(in srgb, var(--c) 30%, transparent) 70%, transparent); filter: blur(1px); mix-blend-mode: screen; transform-origin: 50% 100%; }
+.b3-fx-crack svg{ width: 100%; height: 100%; filter: drop-shadow(0 0 4px #ff9a4a) drop-shadow(0 0 2px #fff); }
+.b3-fx-glow{ border-radius: 8px; box-shadow: 0 0 0 3px var(--c), 0 0 26px var(--c); }
+.b3-fx-flash{ position: fixed; inset: 0; background: radial-gradient(circle, var(--c), transparent 75%); mix-blend-mode: screen; pointer-events: none; }
+
+/* 2D: 効果の発動を告げる表示(盤面の上の中央に少しの間) */
+#b3-banner{ position: fixed; left: 50%; top: 26%; transform: translate(-50%, -50%) scale(.9); z-index: 960; display: flex; gap: 14px; align-items: center;
+  padding: 12px 18px; border-radius: 12px; background: rgba(14,10,8,.92); border: 1px solid rgba(212,171,82,.7); box-shadow: 0 0 24px rgba(0,0,0,.8), 0 0 18px rgba(212,171,82,.25);
+  opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; max-width: min(560px, 90vw); }
+#b3-banner.show{ opacity: 1; transform: translate(-50%, -50%) scale(1); }
+#b3-banner .card.b3-banner-card{ width: 64px; height: 90px; flex: 0 0 auto; }
+#b3-banner .b3-banner-who{ font-size: 11px; color: #bba27a; }
+#b3-banner .b3-banner-title{ font: 700 20px 'Shippori Mincho', serif; color: #f6dc96; letter-spacing: .05em; }
+#b3-banner .b3-banner-desc{ font-size: 12px; color: #e6d8bc; line-height: 1.5; margin-top: 2px; }
+
+/* 何が起きたか(2D・3D): ログの文を左下に流す */
+#b3-feed{ position: fixed; left: 150px; bottom: 18px; width: min(360px, 34vw); z-index: 150; pointer-events: none; display: flex; flex-direction: column; gap: 3px; }
+.b3-feed-line{ font-size: 12px; line-height: 1.45; color: #f1e4c4; padding: 3px 9px; border-radius: 6px; background: rgba(14,10,8,.78); border-left: 3px solid #d4ab52;
+  text-shadow: 0 1px 2px #000; animation: b3FeedIn .3s ease-out; transition: opacity 1.5s ease; }
+.b3-feed-line.turn{ border-left-color: #f6dc96; color: #f6dc96; font-weight: 700; }
+.b3-feed-line.old{ opacity: 0; }
+.b3-feed-line:not(:last-child){ opacity: .72; }
+.b3-feed-line.old:not(:last-child){ opacity: 0; }
+@keyframes b3FeedIn{ from{ opacity: 0; transform: translateX(-10px); } to{ opacity: 1; transform: none; } }
+@media (max-width: 860px){ #b3-feed{ left: 8px; bottom: auto; top: 54px; width: 70vw; } .b3-feed-line{ font-size: 11px; } }
+#b3-banner.side{ transform: translate(0, -50%) scale(.92); max-width: min(380px, calc(100vw - 40px)); flex-direction: column; align-items: flex-start; }
+#b3-banner.side.show{ transform: translate(0, -50%) scale(1); }
