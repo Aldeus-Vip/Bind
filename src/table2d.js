@@ -182,6 +182,9 @@ function lightning2D(cellIndex, fromSky){
    ===================================================================== */
 const tbl = document.createElement('div'); tbl.id = 'b3-tbl';
 document.body.appendChild(tbl);
+// 動いているカードの入れ物(描き直しで山・扇を作り直しても消えないよう別にする)
+const flyLayer = document.createElement('div'); flyLayer.id = 'b3-flylayer';
+document.body.appendChild(flyLayer);
 const bottomP = () => { const u = window.B3UI; const me = u && u.myIndex ? u.myIndex() : null; if(me != null) return me; return (typeof selectedHandTab !== 'undefined' && selectedHandTab != null) ? selectedHandTab : 0; };
 const inGame = () => is2D() && typeof state !== 'undefined' && state && state.players && !state.gameOver && document.getElementById('floor-grid-el');
 let pinned = null; // マウスを重ねて開いている捨て札(プレイヤー番号)
@@ -189,7 +192,8 @@ const thick = n => Math.round(Math.min(n, 54)*0.8); // 枚数 → 厚さ(px)
 
 function pileEl(kind, p){
   const d = document.createElement('div'); d.className = 'b3-pile b3-pile-' + kind; d.dataset.kind = kind; if(p != null) d.dataset.p = p;
-  const list = kind === 'deck' ? state.deck : state.players[p].discard;
+  // 飛んでいる途中のカードは、まだ山に届いていないものとして数えない
+  const list = (kind === 'deck' ? state.deck : state.players[p].discard).filter(c => c && !flying.has(c.id));
   const n = list.length, t = thick(n);
   d.style.setProperty('--t', t + 'px');
   const stack = document.createElement('div'); stack.className = 'b3-pile-stack'; if(n > 1) d.appendChild(stack);
@@ -308,10 +312,156 @@ const T2 = window.B3.table2d = {
   bottomP, drawTable,
 };
 
+/* =====================================================================
+   実物のカードの動き(2D): 描き直しのたびにカードの居場所(山札・手札・捨て札・マス・パーソナル)と表裏を記録し、
+   居場所や表裏が変わったカードを、前の位置から新しい位置へ滑らせる(表裏が変わるなら途中でひっくり返す)。
+   引く・捨てる・フロアを捨て札へ・相手の手札を捨てさせる…などを、効果ごとに書かずに同じ仕組みで表す。
+   ===================================================================== */
+const flying = new Map(); // カードの id → 着地先(着くまで着地先のカードは隠す)
+const skipMove = new Set(); // 専用の動き(移動など)で動かしたカード: 次の記録では動かさない
+let prevSnap = null, prevState = null;
+function zoneRect(z){
+  let e = null;
+  if(z.zone === 'deck') e = T2.deck();
+  else if(z.zone === 'disc') e = T2.discard(z.p);
+  else if(z.zone === 'hand'){
+    if(z.p === bottomP()){ const row = document.querySelector('.b3-fan .hand-row'); e = row ? row.children[z.idx] || row : null; }
+    else e = document.getElementById(`b3-ohand-${z.p}-${z.idx}`) || tbl.querySelector('.b3-ofan');
+  } else e = document.getElementById('floor-cell-' + z.cell);
+  if(!e) return null;
+  const r = e.getBoundingClientRect();
+  const w = e.offsetWidth || r.width, h = e.offsetHeight || r.height;
+  return { x: r.left + r.width/2, y: r.top + r.height/2, w, h };
+}
+// 今のカードの居場所(見る人から見た表裏つき)
+function snapshot(){
+  const m = new Map(), me = bottomP();
+  const put = (c, z) => { if(c && c.id != null) m.set(c.id, Object.assign({ card:c }, z)); };
+  state.deck.forEach(c => put(c, { zone:'deck', key:'deck', up:false }));
+  state.players.forEach((pl, p) => {
+    pl.discard.forEach(c => put(c, { zone:'disc', p, key:'disc' + p, up:true }));
+    pl.hand.forEach((c, idx) => put(c, { zone:'hand', p, idx, key:'hand' + p, up: p === me }));
+  });
+  state.floor.forEach((s, i) => { if(s && s.card) put(s.card, { zone:'cell', cell:i, key:'cell' + i, up: !!s.faceUp }); });
+  state.players.forEach((pl, p) => { if(pl.personalCard && pl.personalIndex != null) put(pl.personalCard, { zone:'cell', cell:pl.personalIndex, key:'pers' + p, up:true }); });
+  m.forEach(z => { z.rect = zoneRect(z); });
+  return m;
+}
+const faceEl = (card, up) => { const e = up ? cardStatic(card, 'b3-fly-face') : cardBackDiv('b3-fly-face'); e.classList.add('b3-fly-face'); return e; };
+// 1枚を滑らせる(必要なら途中でひっくり返す)
+function fly(id, a, b, delay){
+  const card = b.card, el = document.createElement('div'); el.className = 'b3-fly';
+  const A = a.rect, Bz = b.rect;
+  if(!A || !Bz) return;
+  el.appendChild(faceEl(card, a.up));
+  Object.assign(el.style, { left:(A.x - A.w/2) + 'px', top:(A.y - A.h/2) + 'px', width:A.w + 'px', height:A.h + 'px' });
+  flyLayer.appendChild(el);
+  flying.set(id, b.key);
+  const dur = Math.min(900, 380 + Math.hypot(Bz.x - A.x, Bz.y - A.y)*0.45);
+  const turn = a.up !== b.up;
+  const sx = Bz.w/A.w, sy = Bz.h/A.h, dx = Bz.x - A.x, dy = Bz.y - A.y;
+  // 持ち上げて(少し大きく、影が濃く)運び、置く
+  const kf = turn
+    ? [{ transform:'translate(0,0) scale(1,1)' }, { transform:`translate(${dx/2}px, ${dy/2 - 30}px) scale(0, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }]
+    : [{ transform:'translate(0,0) scale(1,1)' }, { transform:`translate(${dx/2}px, ${dy/2 - 24}px) scale(${(1 + sx)/2*1.08}, ${(1 + sy)/2*1.08})`, offset:0.5 }, { transform:`translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }];
+  return trackAnimation(res => {
+    let fin = false; // 完了の通知は1回だけ(trackAnimation の数が狂わないように)
+    const done = () => { if(fin) return; fin = true; flying.delete(id); try{ el.remove(); }catch(e){} hideFlying(); drawTable(); res();
+      // CPU は演出中は動かないので、カードが着地したら声をかけ直す(描き直しの後に始まる動きなので、元のゲームは呼び直さない)
+      if(typeof cpuMaybeAct === 'function') setTimeout(() => { try{ if(!animationsInFlight) cpuMaybeAct(); }catch(e){} }, 0); };
+    const an = el.animate(kf, { duration:dur, delay, easing:'cubic-bezier(.45,.05,.35,1)', fill:'both' });
+    if(turn) setTimeout(() => { el.innerHTML = ''; el.appendChild(faceEl(card, b.up)); }, delay + dur/2);
+    an.onfinish = done; an.oncancel = done;
+    setTimeout(done, delay + dur + 400); // 念のため
+  });
+}
+// 着地前のカードの着地先を隠す(描き直しで出てきても)
+function hideFlying(){
+  if(!flying.size || !inGame()) return;
+  const me = bottomP();
+  flying.forEach((key, id) => {
+    let e = null;
+    if(key.startsWith('hand')){
+      const p = +key.slice(4), idx = state.players[p].hand.findIndex(c => c && c.id === id);
+      if(idx < 0) return;
+      if(p === me){ const row = document.querySelector('.b3-fan .hand-row'); e = row && row.children[idx]; }
+      else e = document.getElementById(`b3-ohand-${p}-${idx}`);
+    } else if(key.startsWith('cell')) e = document.querySelector(`#floor-cell-${key.slice(4)} > .card, #floor-cell-${key.slice(4)} > .card-back`);
+    else if(key.startsWith('pers')){ const pl = state.players[+key.slice(4)]; e = pl && pl.personalIndex != null ? document.querySelector(`#floor-cell-${pl.personalIndex} .card.personal`) : null; }
+    if(e) e.style.visibility = 'hidden';
+  });
+}
+function physical(){
+  if(!inGame()){ prevSnap = null; prevState = null; return; }
+  if(state !== prevState){ prevState = state; prevSnap = snapshot(); return; } // 新しい対局: 動かさずに記録だけ
+  const now = snapshot();
+  let n = 0;
+  now.forEach((z, id) => {
+    const o = prevSnap.get(id); // 連鎖の間どこにも無かったカード(4・10・J・2)は、最後に見た居場所から
+    if(!o){ return; }
+    if(skipMove.has(id)){ skipMove.delete(id); return; }
+    if(o.key === z.key && o.up === z.up) return;
+    if(o.key.startsWith('hand') && z.key === o.key) return; // 同じ手札の中で並びが変わっただけ
+    fly(id, o, z, n++*110);
+  });
+  prevSnap.forEach((z, id) => { if(!now.has(id)) now.set(id, z); }); // 見えなくなったカードは最後の居場所を覚えておく
+  prevSnap = now;
+  hideFlying();
+}
+B.table2d.skipMove = id => skipMove.add(id);
+
+/* ---- 2D では元の演出(炎・渦・柱など)を出さない。カードの動きは上の仕組みが出すので、少し間をおくだけにする ----
+   移動・ワープ・敗北・雷は専用の動き(下と上)。対になる演出(浮かぶ → 収まる など)は両方とも間をおくだけ。 */
+const KEEP = new Set(['triggerNumberEffect', 'triggerCardNumberEffect', 'triggerSuitEffect', 'triggerDefeatBurn', 'triggerLightningBoltStrike', 'triggerLightningZap',
+  'triggerMoveTravel', 'triggerDualRiftTeleport', 'triggerTeleport']);
+const BEAT = { triggerDrawCardAppear:260, triggerSunDrawCardAppear:200, triggerVortexDrawCardAppear:200, triggerClubDrawAppear:200, triggerChangeFlip:420,
+  triggerExtraTurnWhiteout:500, triggerWindCellLanding:120, triggerWindCellDissipate:120, triggerTornadoAppear:200, triggerTornadoSettleInPlace:200 };
+const beat = ms => trackAnimation(res => setTimeout(res, ms));
+Object.keys(window).filter(k => /^trigger[A-Z]/.test(k) && typeof window[k] === 'function' && !KEEP.has(k)).forEach(k => {
+  const prev = window[k];
+  window[k] = function(){ return is2D() ? beat(BEAT[k] != null ? BEAT[k] : 320) : prev.apply(this, arguments); };
+});
+// 対象のプレイヤーを囲む枠(元はパネルに付けていた)も 2D では出さない
+['attachMindFrame', 'detachMindFrame'].forEach(k => { const prev = window[k]; if(typeof prev === 'function') window[k] = function(){ if(!is2D()) return prev.apply(this, arguments); }; });
+
+/* ---- 移動: パーソナルのカードを持ち上げ、経路のマスを1つずつ進んで置く ---- */
+function cellBox(i){ const e = document.getElementById('floor-cell-' + i); if(!e) return null; const r = e.getBoundingClientRect(); return { x:r.left + r.width/2, y:r.top + r.height/2, w:r.width, h:r.height }; }
+function carry(card, cells, stepMs){
+  return trackAnimation(res => {
+    const boxes = cells.map(cellBox).filter(Boolean);
+    if(boxes.length < 2 || !card){ res(); return; }
+    const el = document.createElement('div'); el.className = 'b3-fly b3-carry';
+    const A = boxes[0];
+    el.appendChild(faceEl(card, true));
+    Object.assign(el.style, { left:(A.x - A.w/2) + 'px', top:(A.y - A.h/2) + 'px', width:A.w + 'px', height:A.h + 'px' });
+    flyLayer.appendChild(el);
+    const kf = [{ transform:'translate(0,0) scale(1)' }];
+    boxes.forEach((b, k) => { if(!k) return; const f = k/(boxes.length - 1); kf.push({ transform:`translate(${b.x - A.x}px, ${b.y - A.y - 10}px) scale(1.06)`, offset: Math.max(0.05, f - 0.5/(boxes.length - 1)) }, { transform:`translate(${b.x - A.x}px, ${b.y - A.y}px) scale(1.02)`, offset:f }); });
+    kf[kf.length - 1].transform = kf[kf.length - 1].transform.replace('scale(1.02)', 'scale(1)');
+    const an = el.animate(kf, { duration: stepMs*(boxes.length - 1), easing:'ease-in-out', fill:'forwards' });
+    let done = false; const fin = () => { if(done) return; done = true; res(); setTimeout(() => { try{ el.remove(); }catch(e){} }, 150); };
+    an.onfinish = fin; an.oncancel = fin; setTimeout(fin, stepMs*boxes.length + 600);
+  });
+}
+[['triggerMoveTravel', (o, d, p) => {
+  let path = typeof shortestFloorPath === 'function' ? shortestFloorPath(o, d, p) : [d];
+  if(!path.length && o === d){ const h = neighbors8(o).find(n => { const s = state.floor[n]; return s && (s.owner === null || s.owner === p); }); if(h !== undefined) path = [h, o]; }
+  return carry(state.players[p].personalCard, [o, ...path], 330);
+}], ['triggerDualRiftTeleport', (o, d, p) => carry(state.players[p].personalCard, [o, d], 600)], ['triggerTeleport', (o, d, p) => carry(state.players[p].personalCard, [o, d], 600)]].forEach(([k, fn]) => {
+  const prev = window[k]; if(typeof prev !== 'function') return;
+  window[k] = function(o, d, p){
+    if(!is2D()) return prev.apply(this, arguments);
+    if(typeof settings !== 'undefined' && settings.moveAnim === false) return Promise.resolve();
+    const hide = k !== 'triggerMoveTravel'; // ワープは元の位置を空けて見せる(移動は呼び出し側が隠す)
+    if(hide){ travelingOriginIndex = o; render(); }
+    return Promise.resolve(fn(o, d, p)).finally(() => { if(hide){ travelingOriginIndex = null; } });
+  };
+});
+
 const origRender = window.render;
 window.render = function(){
   const r = origRender.apply(this, arguments);
-  try{ dress(); drawTable(); }catch(e){ console.error('[Bind2D]', e); }
+  try{ dress(); drawTable(); physical(); }catch(e){ console.error('[Bind2D]', e); }
   return r;
 };
 
