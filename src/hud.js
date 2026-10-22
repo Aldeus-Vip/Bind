@@ -10,9 +10,6 @@
 'use strict';
 if(!window.B3 || !window.B3.K) return;
 const B = window.B3, K = B.K;
-const LS = 'bind3d-hud';
-const opt = (() => { try{ return Object.assign({ hidePanels:false }, JSON.parse(localStorage.getItem(LS) || '{}')); }catch(e){ return { hidePanels:false }; } })();
-const save = () => { try{ localStorage.setItem(LS, JSON.stringify(opt)); }catch(e){} };
 const MAXBAR = 10; // ゲージが満タンになる枚数
 // アイコン: 手札 = 扇に広げたカード / 捨て札 = 重なったカードと下向きの矢印
 const ICON_HAND = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
@@ -147,8 +144,8 @@ function frame(){
   const st = (typeof state !== 'undefined') ? state : null;
   const show = !!(st && st.players && !st.gameOver && st.phase !== 'setup-personal' && K.active());
   if(show !== visible){ visible = show; root.style.display = show ? '' : 'none'; }
-  // パネルを隠す設定: 山札をフィールドの上へ、フィールドを左いっぱいまで広げる(配置フェーズも同じ配置)
-  document.body.classList.toggle('b3-hide-panels', !!(st && !st.gameOver && K.active() && opt.hidePanels));
+  // 手札・捨て札のパネルは常に出さない(2026-10-22 で設定を廃止)。3D は山札をフィールドの上へ、フィールドを左いっぱいまで広げる
+  document.body.classList.toggle('b3-hide-panels', !!(st && !st.gameOver && K.active()));
   if(!show) return;
   ensureGhostBtn();
   if(ghostBtn) ghostBtn.classList.toggle('on', ghostNow(st));
@@ -201,22 +198,6 @@ B.gaugePx = (p, part) => {
 const origRender = window.render;
 window.render = function(){ const r = origRender.apply(this, arguments); huds.forEach(h => { h.popKey = null; }); return r; };
 
-/* ---- 設定 ---- */
-const origSettings = window.renderSettingsContent;
-if(typeof origSettings === 'function'){
-  window.renderSettingsContent = function(){
-    origSettings.apply(this, arguments);
-    const c = document.getElementById('settings-content');
-    if(!c) return;
-    c.appendChild(el('h2', {}, '3D表示'));
-    const cb = el('input', { type:'checkbox' });
-    cb.checked = opt.hidePanels;
-    cb.addEventListener('change', () => { opt.hidePanels = cb.checked; save(); });
-    c.appendChild(el('label', { class:'settings-row' }, cb, el('div', {},
-      el('div', { class:'settings-label' }, '手札・捨て札パネルを隠す'),
-      el('div', { class:'settings-desc' }, '画面横のプレイヤーごとの手札・捨て札の表示を隠し、パーソナル頭上のゲージだけで確認します(ゲージにカーソルを乗せると中身を表示。効果の対象選択も頭上で行えます)。'))));
-  };
-}
 /* ---- カーソルを当てたときの先読み ----
    手札のカード: 数字効果の説明と、その効果で選べるもの(マス = 効果の選択と同じ金の光、手札・捨て札 = ゲージが光る)
    パーソナル(盤面の駒): 何回でも動けるとしたときの移動範囲。奇数回と偶数回で届くマスが違えば分けて表示し、
@@ -362,5 +343,5 @@ document.addEventListener('contextmenu', e => {
 const origRender2 = window.render;
 window.render = function(){ const r = origRender2.apply(this, arguments); clearPreview(); return r; };
 
-B.hud = { opt, huds, effectTargets, rangeOf };
+B.hud = { huds, effectTargets, rangeOf };
 })();

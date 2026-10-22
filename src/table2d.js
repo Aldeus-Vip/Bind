@@ -174,10 +174,144 @@ function lightning2D(cellIndex, fromSky){
   window[name] = function(cellIndex){ return is2D() ? lightning2D(cellIndex, sky) : prev.apply(this, arguments); };
 });
 
+/* =====================================================================
+   卓の山と扇(2D): 山札・捨て札の山(枚数で厚くなる)と、相手の手札の扇
+   - 盤面の左に、真ん中 = 山札、上 = 相手の捨て札、下 = 自分の捨て札。右に枚数
+   - 捨て札の一番上は最後に捨てたカードの表。マウスを重ねると中身を全部見られる(捨て札を選ぶ効果もここで選ぶ)
+   - 相手の手札は、自分の手札の反対(上)に、逆向きの扇で裏向きに広げる。根本に枚数
+   ===================================================================== */
+const tbl = document.createElement('div'); tbl.id = 'b3-tbl';
+document.body.appendChild(tbl);
+const bottomP = () => { const u = window.B3UI; const me = u && u.myIndex ? u.myIndex() : null; if(me != null) return me; return (typeof selectedHandTab !== 'undefined' && selectedHandTab != null) ? selectedHandTab : 0; };
+const inGame = () => is2D() && typeof state !== 'undefined' && state && state.players && !state.gameOver && document.getElementById('floor-grid-el');
+let pinned = null; // マウスを重ねて開いている捨て札(プレイヤー番号)
+const thick = n => Math.round(Math.min(n, 54)*0.8); // 枚数 → 厚さ(px)
+
+function pileEl(kind, p){
+  const d = document.createElement('div'); d.className = 'b3-pile b3-pile-' + kind; d.dataset.kind = kind; if(p != null) d.dataset.p = p;
+  const list = kind === 'deck' ? state.deck : state.players[p].discard;
+  const n = list.length, t = thick(n);
+  d.style.setProperty('--t', t + 'px');
+  const stack = document.createElement('div'); stack.className = 'b3-pile-stack'; if(n > 1) d.appendChild(stack);
+  let top;
+  if(!n){ top = document.createElement('div'); top.className = 'b3-pile-empty'; }
+  else if(kind === 'deck') top = cardBackDiv('b3-pile-top');
+  else top = cardStatic(list[n - 1], 'b3-pile-top');
+  top.classList.add('b3-pile-top'); d.appendChild(top);
+  const cnt = document.createElement('div'); cnt.className = 'b3-pile-count'; cnt.textContent = n;
+  const lab = document.createElement('div'); lab.className = 'b3-pile-label';
+  lab.textContent = kind === 'deck' ? '山札' : (p === bottomP() ? 'あなたの捨て札' : (state.players[p].name || '相手') + 'の捨て札');
+  d.appendChild(cnt); d.appendChild(lab);
+  if(kind === 'discard'){
+    const dt = typeof discardTaskFor === 'function' ? discardTaskFor(p) : null;
+    if(dt) d.classList.add('picking');
+    d.addEventListener('mouseenter', () => { pinned = p; drawPop(); });
+    d.addEventListener('mouseleave', e => { if(!(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.b3-pile-pop'))){ pinned = null; drawPop(); } });
+    d.addEventListener('click', () => { pinned = p; drawPop(); });
+  }
+  return d;
+}
+// 捨て札の中身: 山の右に広げて見せる。捨て札を選ぶ効果の最中は、ここでクリックして選ぶ
+function drawPop(){
+  tbl.querySelectorAll('.b3-pile-pop').forEach(e => e.remove());
+  if(!inGame()) return;
+  let p = pinned;
+  const forced = state.players.findIndex((pl, i) => typeof discardTaskFor === 'function' && discardTaskFor(i) && state.players[i].discard.length);
+  if(p == null && forced >= 0) p = forced;
+  if(p == null) return;
+  const pl = state.players[p], pile = tbl.querySelector(`.b3-pile-discard[data-p="${p}"]`);
+  if(!pl || !pile || !pl.discard.length) return;
+  const dt = typeof discardTaskFor === 'function' ? discardTaskFor(p) : null;
+  const pop = document.createElement('div'); pop.className = 'b3-pile-pop' + (dt ? ' picking' : '');
+  const h = document.createElement('div'); h.className = 'b3-pop-title'; h.textContent = `${p === bottomP() ? 'あなた' : pl.name}の捨て札 ${pl.discard.length}枚` + (dt ? '(選んでください)' : ''); pop.appendChild(h);
+  const row = document.createElement('div'); row.className = 'b3-pop-row';
+  pl.discard.forEach((c, idx) => {
+    let e;
+    if(!dt) e = cardStatic(c, 'b3-pop-card');
+    else if(dt.kind === 'discard-multi'){
+      if(!dt.selected) dt.selected = [];
+      e = cardButton(c, () => { const k = dt.selected.indexOf(c); if(k >= 0) dt.selected.splice(k, 1); else dt.selected.push(c); render(); }, 'b3-pop-card reachable' + (dt.selected.includes(c) ? ' selected' : ''));
+    } else e = cardButton(c, () => resolveTask(idx), 'b3-pop-card reachable');
+    row.appendChild(e);
+  });
+  pop.appendChild(row);
+  pop.addEventListener('mouseleave', () => { pinned = null; drawPop(); });
+  tbl.appendChild(pop);
+  const r = pile.getBoundingClientRect();
+  pop.style.left = (r.right + 46) + 'px';
+  pop.style.top = Math.max(8, Math.min(innerHeight - pop.offsetHeight - 8, r.top + r.height/2 - pop.offsetHeight/2)) + 'px';
+}
+// 相手の手札: 逆向きの扇(裏向き)。手札を選ぶ効果(5・10・JOKER・Q)の最中は、ここで選ぶ
+function fanEl(p){
+  const pl = state.players[p], n = pl.hand.length;
+  const f = document.createElement('div'); f.className = 'b3-ofan'; f.dataset.p = p;
+  const ht = typeof handSlotTaskFor === 'function' ? handSlotTaskFor(p) : null;
+  const at = typeof handAreaTaskFor === 'function' ? handAreaTaskFor(p) : null;
+  if(ht || at) f.classList.add('picking');
+  const spread = Math.min(40, 6*Math.max(1, n - 1)); // 扇の開き(度)
+  pl.hand.forEach((c, idx) => {
+    const k = n > 1 ? idx/(n - 1) - 0.5 : 0;
+    const w = document.createElement('div'); w.className = 'b3-ofan-card'; w.id = `b3-ohand-${p}-${idx}`;
+    w.style.setProperty('--a', (-k*spread) + 'deg'); // 根本(上)を中心に回す
+    if(typeof isHandSlotHidden === 'function' && isHandSlotHidden(p, idx)) w.style.visibility = 'hidden';
+    w.appendChild(cardBackDiv('mini-back'));
+    if(ht && ht.filter(idx)){ w.classList.add('reachable'); w.addEventListener('click', e => { e.stopPropagation(); resolveTask(idx); }); }
+    f.appendChild(w);
+  });
+  const cnt = document.createElement('div'); cnt.className = 'b3-ofan-count'; cnt.textContent = `${pl.name || '相手'}の手札 ${n}枚`;
+  f.appendChild(cnt);
+  if(at) f.addEventListener('click', () => resolveTask(p));
+  return f;
+}
+function drawTable(){
+  tbl.innerHTML = '';
+  document.body.classList.toggle('b3-2d', !!inGame());
+  if(!inGame()) return;
+  const me = bottomP(), opp = 1 - me;
+  const t = state.task;
+  // 手札を選ぶ効果が自分(下)の手札を対象にしているとき(1台で2人)は、上の扇をそのプレイヤーにする
+  const fanP = t && (t.kind === 'hand-slot' || t.kind === 'hand-area') && (t.kind === 'hand-slot' ? t.playerIndex === me : t.filter(me) && !t.filter(opp)) ? me : opp;
+  const col = document.createElement('div'); col.className = 'b3-piles';
+  col.appendChild(pileEl('discard', opp)); col.appendChild(pileEl('deck')); col.appendChild(pileEl('discard', me));
+  tbl.appendChild(col);
+  tbl.appendChild(fanEl(fanP));
+  placeTable();
+  drawPop();
+}
+// 盤面の位置に合わせて置く(描き直し・画面の大きさの変化・盤面の位置の変化に追従)
+function placeTable(){
+  const grid = document.getElementById('floor-grid-el'); if(!grid || !inGame()) return;
+  const g = grid.getBoundingClientRect(), cell = grid.querySelector('.floor-cell');
+  const cw = cell ? cell.getBoundingClientRect().width : 90;
+  tbl.style.setProperty('--cw', Math.round(cw*0.82) + 'px');
+  const col = tbl.querySelector('.b3-piles'), fan = tbl.querySelector('.b3-ofan');
+  if(col){ col.style.left = Math.max(6, g.left - col.offsetWidth - 70) + 'px'; col.style.top = Math.max(60, g.top + g.height/2 - col.offsetHeight/2) + 'px'; }
+  if(fan){
+    // 扇の根本は盤面の上の中央よりさらに上。カードの下端が盤面の少し上に来る
+    const fw = Math.round(cw*0.62), fh = Math.round(fw*1.4), R = 260;
+    fan.style.setProperty('--fw', fw + 'px'); fan.style.setProperty('--fh', fh + 'px'); fan.style.setProperty('--R', R + 'px');
+    fan.style.left = (g.left + g.width/2) + 'px'; fan.style.top = (g.top - 8 - fh/2 - R) + 'px';
+  }
+}
+let lastG = '';
+(function follow(){
+  requestAnimationFrame(follow);
+  const grid = inGame() && document.getElementById('floor-grid-el'); if(!grid) return;
+  const r = grid.getBoundingClientRect(), k = `${r.left|0},${r.top|0},${r.width|0},${r.height|0}`;
+  if(k !== lastG){ lastG = k; placeTable(); }
+})();
+// 演出(table2d の「実物のカードの動き」)から使う位置
+const T2 = window.B3.table2d = {
+  deck: () => tbl.querySelector('.b3-pile-deck .b3-pile-top'),
+  discard: p => tbl.querySelector(`.b3-pile-discard[data-p="${p}"] .b3-pile-top`),
+  oppHand: (p, idx) => document.getElementById(`b3-ohand-${p}-${idx}`) || tbl.querySelector('.b3-ofan'),
+  bottomP, drawTable,
+};
+
 const origRender = window.render;
 window.render = function(){
   const r = origRender.apply(this, arguments);
-  try{ dress(); }catch(e){ console.error('[Bind2D]', e); }
+  try{ dress(); drawTable(); }catch(e){ console.error('[Bind2D]', e); }
   return r;
 };
 

@@ -3677,7 +3677,8 @@ function panelPx(p, part){
   // 頭上ゲージ(hud.js)が出ているときは、手札・捨て札の演出はパーソナルの頭上へ向かう
   if(window.B3 && window.B3.gaugePx){ const g = window.B3.gaugePx(p, part); if(g) return g; }
   const panel = (typeof getPlayerPanelEl==='function') ? getPlayerPanelEl(p) : null;
-  if(!panel) return { x: innerWidth*0.15, y: innerHeight*0.3 };
+  // パネルは出さないので(頭上のプレートも隠しているとき)、そのプレイヤーのパーソナルへ向かう
+  if(!panel || !panel.offsetWidth){ const c = casterPx(p); if(c) return c; return { x: innerWidth*0.15, y: innerHeight*0.3 }; }
   const sub = part==='discard' ? panel.querySelector('.discard-row') : panel.querySelector('.hand-mini-row');
   return rectCenter(sub || panel);
 }
