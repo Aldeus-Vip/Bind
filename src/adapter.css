@@ -384,3 +384,11 @@ body.b3-2d.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 380px)
 /* 2D: 実物のカードの動き(table2d.js の fly) */
 .b3-fly{ position: absolute; pointer-events: none; z-index: 30; filter: drop-shadow(0 10px 14px rgba(0,0,0,.7)); }
 .b3-fly > .b3-fly-face{ position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; border-radius: 7px; transition: none !important; }
+/* Q(手札欄を選ぶ): 自分の手札も選べる(2D) */
+.b3-fan.b3-pick-hand .b3-tray{ cursor: pointer; }
+.b3-fan.b3-pick-hand .hand-row > .card{ box-shadow: 0 0 0 2px rgba(255,214,130,.8), 0 0 14px rgba(255,214,130,.55) !important; }
+.b3-myhand-pick{ position: absolute; left: 50%; bottom: 196px; transform: translateX(-50%); z-index: 3; cursor: pointer;
+  padding: 6px 16px; border-radius: 16px; font: 700 13px 'Shippori Mincho', serif; color: #fff0c0; background: rgba(40,30,18,.92);
+  border: 1px solid #f0cf7a; box-shadow: 0 0 14px rgba(255,214,130,.5); animation: b3-breathe 1.6s ease-in-out infinite; }
+.b3-myhand-pick:hover{ background: rgba(70,52,26,.95); }
+.b3-ofan.picking{ cursor: pointer; }

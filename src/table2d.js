@@ -279,6 +279,16 @@ function drawTable(){
   col.appendChild(pileEl('discard', opp)); col.appendChild(pileEl('deck')); col.appendChild(pileEl('discard', me));
   tbl.appendChild(col);
   tbl.appendChild(fanEl(fanP));
+  // Q: 手札欄そのものを選ぶ。自分の手札(下の扇)も選べる。手札が0枚でも押せるよう札も出す
+  const atMe = typeof handAreaTaskFor === 'function' ? handAreaTaskFor(me) : null;
+  if(atMe){
+    const fan = document.querySelector('.b3-fan');
+    if(fan){ fan.classList.add('b3-pick-hand'); const tray = fan.querySelector('.b3-tray'); if(tray) tray.addEventListener('click', e => { e.stopPropagation(); resolveTask(me); }, { capture:true }); }
+    const pill = document.createElement('button'); pill.type = 'button'; pill.className = 'b3-myhand-pick';
+    pill.textContent = `あなたの手札(${state.players[me].hand.length}枚)を選ぶ`;
+    pill.addEventListener('click', () => resolveTask(me));
+    tbl.appendChild(pill);
+  }
   placeTable();
   drawPop();
 }

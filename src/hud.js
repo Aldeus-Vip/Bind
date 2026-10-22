@@ -168,7 +168,7 @@ function frame(){
     const at = typeof handAreaTaskFor === 'function' && handAreaTaskFor(h.p);
     h.rows.hand.classList.toggle('target', !!(ht || at));
     h.rows.discard.classList.toggle('target', !!dt);
-    h.box.classList.toggle('picking', !!(dt || ht));
+    h.box.classList.toggle('picking', !!(dt || ht || at)); // Q(手札欄を選ぶ)もプレートを出す
     // 先読み(手札にカーソル): この効果で選ぶ手札・捨て札
     h.rows.hand.classList.toggle('pv', pvGauges.has(h.p + ':hand'));
     h.rows.discard.classList.toggle('pv', pvGauges.has(h.p + ':discard'));
