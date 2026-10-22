@@ -24,12 +24,14 @@ function token(kind, src, title){
   return d;
 }
 
+const wasBound = new Set(), nowBound = new Set(); // 横向きに倒す動きは、新しくバインドされたときだけ
 function dress(){
   const grid = document.getElementById('floor-grid-el');
   if(!grid) return;
   grid.classList.toggle('b3-table', is2D());
   if(!is2D()) return;
   if(TEX.ground) grid.style.setProperty('--b3-mat', `url("${TEX.ground}")`);
+  nowBound.clear();
   grid.querySelectorAll(':scope > .floor-cell').forEach(cell => {
     // パーソナル: プレイヤーの色を枠に使う(元は背景をその色で塗っていた)
     const pc = cell.querySelector('.card.personal');
@@ -40,7 +42,13 @@ function dress(){
     // バインド中: 元の雷の枠の絵を外し、カードの縁を電気が走り続ける表現にする(しびれて動けない)
     const bound = pc && cell.querySelector('.bind-frame-new, .bind-bolt');
     cell.querySelectorAll('.bind-frame-new, .bind-bolt').forEach(e => e.remove());
-    if(bound && !cell.querySelector('.b3-bind2d')){ cell.classList.add('b3-bound'); cell.appendChild(bindMark()); }
+    if(bound && !cell.querySelector('.b3-bind2d')){
+      cell.classList.add('b3-bound'); cell.appendChild(bindMark());
+      // 実物のトランプでは、バインドはパーソナルを横向きに倒して表す。倒れた瞬間だけ回る動きを見せる
+      const owner = state.floor[+cell.id.slice(11)] && state.floor[+cell.id.slice(11)].owner;
+      if(owner != null && !wasBound.has(owner)) cell.classList.add('b3-bind-new');
+      if(owner != null) nowBound.add(owner);
+    }
     // 雷撃フロア: 裏向きのカードはそのままに、⚡のトークンを置く
     if(cell.classList.contains('debuff-floor') && !cell.querySelector('.b3-token-bolt')){
       const back = cell.querySelector('.card-back');
@@ -159,7 +167,11 @@ function lightning2D(cellIndex, fromSky){
 });
 
 const origRender = window.render;
-window.render = function(){ const r = origRender.apply(this, arguments); try{ dress(); }catch(e){ console.error('[Bind2D]', e); } return r; };
+window.render = function(){
+  const r = origRender.apply(this, arguments);
+  try{ dress(); wasBound.clear(); nowBound.forEach(p => wasBound.add(p)); }catch(e){ console.error('[Bind2D]', e); }
+  return r;
+};
 
 /* ---- 表向きのフロアに止まった: カードの生物に飲み込まれる(2D) ----
    1) フロアのカードが目覚めて光り、絵の生物が大きくせり上がる
