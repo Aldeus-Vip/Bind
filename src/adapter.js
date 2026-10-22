@@ -549,6 +549,20 @@ function applySideTex(){
   [[rockMat, 0xb0a898], [slabSide, 0xd8d0c0], [mossMat, 0xa8a090]].forEach(([m, c]) => { m.map = tex; m.color.setHex(c); m.needsUpdate = true; });
 }
 if(IM.ground){ if(ready(IM.ground)) applySideTex(); else IM.ground.addEventListener('load', applySideTex); }
+// 空きマスを選ぶとき(4 の効果など)の枠: タイルが無いので、タイルの高さに光る四角を出す
+const slotTex = (() => {
+  const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  g.shadowColor = 'rgba(255,215,130,1)'; g.shadowBlur = 10; g.strokeStyle = 'rgba(255,225,150,1)'; g.lineWidth = 6;
+  g.strokeRect(14, 14, S - 28, S - 28);
+  g.shadowBlur = 0; g.lineWidth = 2; g.strokeStyle = 'rgba(255,240,200,.9)';
+  [[14,14,1,1],[S-14,14,-1,1],[14,S-14,1,-1],[S-14,S-14,-1,-1]].forEach(([x,y,dx,dy]) => { g.beginPath(); g.moveTo(x + dx*26, y); g.lineTo(x, y); g.lineTo(x, y + dy*26); g.stroke(); });
+  return new THREE.CanvasTexture(cv);
+})();
+const slotFillTex = (() => {
+  const S = 64, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  const gr = g.createRadialGradient(S/2, S/2, 4, S/2, S/2, S*0.7); gr.addColorStop(0, 'rgba(255,220,140,.55)'); gr.addColorStop(1, 'rgba(255,200,110,.08)');
+  g.fillStyle = gr; g.fillRect(8, 8, S - 16, S - 16); return new THREE.CanvasTexture(cv);
+})();
 for(let i=0;i<NCELLS;i++){
   const h = tileH(i);
   const g = new THREE.Group(); g.position.set(tileX(i), 0, tileZ(i));
@@ -571,7 +585,12 @@ for(let i=0;i<NCELLS;i++){
   const wind = new THREE.Mesh(new THREE.PlaneGeometry(1.15,1.15), new THREE.MeshBasicMaterial({ map:windTex, transparent:true, depthWrite:false, opacity:0.85 }));
   wind.rotation.x = -Math.PI/2; wind.position.set(tileX(i), TOP_Y + h + 0.06, tileZ(i)); wind.visible = false;
   scene.add(wind);
-  tiles.push({ i, g, lift, top, topMat, inlay, inlayMat, glow, glowMat, wind,
+  const slot = new THREE.Group(); slot.position.set(tileX(i), TOP_Y + 0.02, tileZ(i)); slot.visible = false;
+  const slotMat = new THREE.MeshBasicMaterial({ map:slotTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0 });
+  const slotFillMat = new THREE.MeshBasicMaterial({ map:slotFillTex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0 });
+  [[slotMat, 1.12, 0.002], [slotFillMat, 1.0, 0]].forEach(([m, sz, y]) => { const pl = new THREE.Mesh(new THREE.PlaneGeometry(sz, sz), m); pl.rotation.x = -Math.PI/2; pl.position.y = y; pl.renderOrder = 3; slot.add(pl); });
+  scene.add(slot);
+  tiles.push({ i, g, lift, top, topMat, inlay, inlayMat, glow, glowMat, wind, slot, slotMat, slotFillMat,
     shown:true, destroyed:false, key:null, ov:null, theme:null, flash:0, anim:false, dim:0, hover:0 });
 }
 
@@ -1932,7 +1951,7 @@ function computePolys(){
 }
 function layout(force){
   const grid = document.getElementById('floor-grid-el');
-  if(!grid) return;
+  if(!grid || !enabled) return; // 2D 表示では何もしない(以前は全画面などで大きさが変わると、2D のマスを 3D の位置へ動かしていた)
   const w = grid.clientWidth, h = grid.clientHeight;
   if(!w || !h) return;
   if(force || w!==lastW || h!==lastH){
@@ -2132,6 +2151,13 @@ function sync(dt){
       else go = 0.6 + Math.sin(t*3)*0.2;
     }
     const hov = (hoverIdx===i && cl && cl.contains('clickable')) ? 1 : 0;
+    // 空きマスが選べるとき: 光る枠(ホバーで明るく、中もうっすら光る)
+    const slotPick = !T.shown && !exists && cl && (cl.contains('clickable') || cl.contains('reachable') || cl.contains('selected'));
+    const slotO = slotPick ? (hov ? 1 : 0.45 + Math.sin(t*4)*0.2) : 0;
+    T.slotMat.opacity += (slotO - T.slotMat.opacity)*0.25;
+    T.slotFillMat.opacity += ((slotPick && hov ? 0.9 : slotPick ? 0.15 : 0) - T.slotFillMat.opacity)*0.25;
+    T.slot.visible = T.slotMat.opacity > 0.01;
+    if(T.slot.visible) T.slot.scale.setScalar(1 + (hov ? 0.03*Math.sin(t*6) : 0));
     if(hov && gc===null){ gc = 0xffd27a; }
     if(hov) go = 1;
     if(gc!==null) T.glowMat.color.setHex(gc);
@@ -3497,7 +3523,7 @@ function decorateCard(elx, card){
   if(typeof orig !== 'function') return;
   window[n] = function(card){
     const elx = orig.apply(this, arguments);
-    try{ if(enabled) decorateCard(elx, card); }catch(e){ console.error('[Bind3D]', e); }
+    try{ decorateCard(elx, card); }catch(e){ console.error('[Bind3D]', e); } // 2D 表示でも同じカードのデザイン
     return elx;
   };
 });

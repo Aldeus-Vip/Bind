@@ -53,8 +53,9 @@ let placeN = 0;
 (function loop(){ requestAnimationFrame(loop); if(++placeN % 4) return; placeDeck(); })();
 
 /* ---- 手札・捨て札のプレート(頭上のゲージ)の表示 / 非表示 ---- */
-let plates = true;
-try{ plates = localStorage.getItem('bind3d.plates') !== '0'; }catch(e){}
+let plates = false;
+// 既定は非表示(ボタンで出したときだけ表示。選んだ状態は保存)
+try{ plates = localStorage.getItem('bind3d.plates') === '1'; }catch(e){}
 const applyPlates = () => {
   document.body.classList.toggle('b3-no-plates', !plates);
   document.querySelectorAll('[data-b3plates]').forEach(b => { b.textContent = plates ? '▣ プレート' : '▢ プレート'; b.title = plates ? '手札・捨て札のプレートを隠す' : '手札・捨て札のプレートを出す'; b.classList.toggle('off', !plates); });

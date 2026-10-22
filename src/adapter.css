@@ -240,3 +240,62 @@
   .b3-beast:hover{ transform: translateY(-4px) scale(1.05); filter:none; box-shadow: 0 0 0 1px var(--b3-gold-hi), 0 0 18px var(--b3-glow), 0 6px 14px rgba(0,0,0,.6); }
   .b3-beast span{ position:absolute; left:0; right:0; bottom:0; padding:10px 2px 3px; font-size:10px; font-family:var(--b3-mincho); color:var(--b3-ivory);
     background: linear-gradient(transparent, rgba(0,0,0,.85)); text-align:center; letter-spacing:.04em; }
+
+/* ===== 2D 表示(卓): 実際のトランプを卓に並べた姿(src/table2d.js) ===== */
+/* 卓: マグマではなく、暗い石の敷物に金の縁。マスはカードを置く場所 */
+.floor-grid.b3-table{
+  background: radial-gradient(ellipse at 50% 40%, rgba(40,32,26,.25), rgba(8,6,5,.85) 80%), var(--b3-mat, none) center / cover, #16110e !important;
+  border: 1px solid rgba(212,171,82,.5) !important; border-radius: 14px !important;
+  box-shadow: inset 0 0 0 4px rgba(10,8,6,.7), inset 0 0 0 5px rgba(212,171,82,.25), inset 0 0 60px rgba(0,0,0,.8), 0 10px 30px rgba(0,0,0,.6) !important;
+  gap: 10px !important; padding: 16px !important;
+}
+.floor-grid.b3-table > .floor-cell{ border-radius: 8px; }
+.floor-grid.b3-table > .floor-cell.empty{ border: 1px dashed rgba(212,171,82,.22); background: rgba(0,0,0,.25); }
+.floor-grid.b3-table .empty-mark{ display: none; }
+/* 選べるマス(空きマスも): マウスを重ねると金の枠と光 */
+.floor-grid.b3-table > .floor-cell.clickable{ transition: transform .12s ease, box-shadow .12s ease; }
+.floor-grid.b3-table > .floor-cell.clickable:hover{ outline: 2px solid #f0cf7a !important; outline-offset: 2px; box-shadow: 0 0 16px rgba(255,210,120,.55); transform: translateY(-2px); }
+.floor-grid.b3-table > .floor-cell.empty.clickable{ border: 2px dashed rgba(255,214,130,.6); background: rgba(255,200,110,.06); }
+.floor-grid.b3-table > .floor-cell.empty.clickable:hover{ border-style: solid; background: rgba(255,210,120,.18); }
+/* カードの裏: 少しだけ厚みと影 */
+.floor-grid.b3-table .card-back{ border-radius: 7px; box-shadow: 0 3px 8px rgba(0,0,0,.6), inset 0 0 0 1px rgba(212,171,82,.35); }
+/* 表向きのフロア: カードの表(3D と同じデザイン)。止まると負けなので赤くふち取って脈打つ */
+.floor-grid.b3-table .card.faceup-trap.b3card{
+  background-image: none !important; animation: b3TrapPulse 2.2s ease-in-out infinite !important;
+  box-shadow: 0 0 0 2px rgba(255,90,60,.85), 0 0 14px rgba(255,70,40,.55), 0 3px 8px rgba(0,0,0,.6) !important;
+}
+@keyframes b3TrapPulse{ 0%,100%{ filter: brightness(1); } 50%{ filter: brightness(1.18) drop-shadow(0 0 6px rgba(255,80,50,.6)); } }
+/* パーソナル: プレイヤーの色の枠で光るカード(少し浮かせて「駒」らしく) */
+.floor-grid.b3-table .card.personal.b3card{
+  box-shadow: 0 0 0 3px var(--pc, #d4ab52), 0 0 16px var(--pc, #d4ab52), 0 8px 14px rgba(0,0,0,.7) !important;
+  transform: translateY(-3px);
+}
+.floor-grid.b3-table > .floor-cell[style*="box-shadow"]{ box-shadow: none !important; }
+.floor-grid.b3-table .owner-tag{ z-index: 6; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+/* トークン(3D では盤面の変化で表すもの): カードの上に置く丸い駒 */
+.floor-grid.b3-table .b3-token, .floor-grid.b3-table .buff-sun-overlay{
+  position: absolute; right: 6%; bottom: 5%; width: 40%; aspect-ratio: 1; height: auto; z-index: 5; border-radius: 50%;
+  box-sizing: border-box; padding: 6%; object-fit: contain; pointer-events: none;
+  background: radial-gradient(circle at 35% 30%, #4a3f36, #15100c 70%);
+  border: 2px solid #c9a24b; box-shadow: 0 3px 6px rgba(0,0,0,.7), inset 0 0 6px rgba(0,0,0,.8);
+}
+.floor-grid.b3-table .b3-token img{ width: 100%; height: 100%; object-fit: contain; display: block; }
+.floor-grid.b3-table .b3-token-bolt{ border-color: #9b7dff; box-shadow: 0 0 10px rgba(140,110,255,.7), 0 3px 6px rgba(0,0,0,.7); }
+.floor-grid.b3-table .b3-token-bolt img{ filter: drop-shadow(0 0 3px #b9a2ff); animation: b3BoltBlink 2.4s steps(1) infinite; }
+@keyframes b3BoltBlink{ 0%,100%{ opacity: 1; } 92%{ opacity: .45; } 95%{ opacity: 1; } }
+.floor-grid.b3-table .buff-sun-overlay{ border-color: #ffd36a; box-shadow: 0 0 12px rgba(255,200,90,.75), 0 3px 6px rgba(0,0,0,.7); animation: none; transform: none; opacity: 1; inset: auto; right: 6%; bottom: 5%; }
+
+/* 2D の盤面の大きさ: 画面の高さに合わせる(全画面でも小さくならない) */
+body.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 290px) * 0.9)) !important; width: 100%; margin: 4px auto 0 !important; }
+
+/* 2D: 表向きのフロアに止まった — カードの生物に飲み込まれる(table2d.js) */
+.b3-defeat2d{ position: fixed; inset: 0; z-index: 9500; pointer-events: none; }
+.b3-defeat2d .b3-d2-veil{ position: absolute; inset: 0; background: radial-gradient(circle, rgba(0,0,0,.25), rgba(0,0,0,.8)); opacity: 0; }
+.b3-defeat2d .b3-d2-spirit{
+  position: absolute; background-repeat: no-repeat; background-position: center 66%, center, center, center;
+  background-size: 84% auto, 100% 100%, cover, 100% 100%; border-radius: 50%; opacity: 0;
+  -webkit-mask-image: radial-gradient(circle, #000 35%, transparent 70%); mask-image: radial-gradient(circle, #000 35%, transparent 70%);
+  filter: drop-shadow(0 0 30px var(--glow)) saturate(1.3);
+}
+.b3-defeat2d .b3-d2-me{ box-shadow: 0 0 0 3px var(--pc), 0 0 16px var(--pc) !important; }
+.b3-defeat2d .b3-d2-mote{ position: absolute; width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: var(--glow); box-shadow: 0 0 10px var(--glow); opacity: 0; }

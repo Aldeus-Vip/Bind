@@ -52,7 +52,7 @@ function engineJs(){
   return 'window.BindEngineFactory = ' + factorySource(engineSource(s)) + ';';
 }
 const css = read('src/adapter.css') + '\n' + read('src/hud.css') + '\n' + read('src/online.css') + '\n' + read('src/ui.css');
-const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js'), engineJs(), read('src/cpu_ai.js'), read('src/cpu.js'), read('src/device.js')];
+const js = [read('src/adapter.js'), read('src/models.js'), read('src/idle.js'), read('src/hud.js'), read('src/camera.js'), read('src/fx3d.js'), read('src/spectators.js'), read('src/audio.js'), read('src/online.js'), read('src/texts.js'), read('src/ui.js'), engineJs(), read('src/cpu_ai.js'), read('src/cpu.js'), read('src/device.js'), read('src/table2d.js')];
 if(debug) js.push(read('src/debug.js'));
 
 // ページの名前・検索結果の説明・SNS に貼ったときの見た目(OGP)
