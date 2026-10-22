@@ -398,6 +398,11 @@ body.b3-2d.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 380px)
 .b3-swap-inner{ position: absolute; inset: 0; transform-style: preserve-3d; }
 .b3-swap .b3-swap-front, .b3-swap .b3-swap-back{ position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .b3-swap .b3-swap-back{ transform: rotateY(180deg); }
+/* 2D: 連鎖効果(2/9/10/J)の発動中表示 */
+.b3-active{ position: absolute; z-index: 5; pointer-events: none; filter: drop-shadow(0 0 8px var(--c, #ffd36b)) drop-shadow(0 0 18px var(--c, #ffd36b)); animation: b3ActivePulse 1.4s ease-in-out infinite; }
+.b3-active > .b3-fly-face{ position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; margin: 0 !important; border-radius: 7px; transition: none !important; }
+.b3-active-tag{ position: absolute; left: 50%; top: -24px; transform: translateX(-50%); padding: 2px 10px; border-radius: 999px; background: linear-gradient(#ffe39a, #d9a640); color: #3a2400; font: 700 12px/1.5 sans-serif; letter-spacing: .1em; white-space: nowrap; box-shadow: 0 0 10px rgba(255,210,110,.8); }
+@keyframes b3ActivePulse{ 0%,100%{ filter: drop-shadow(0 0 6px var(--c, #ffd36b)) drop-shadow(0 0 14px var(--c, #ffd36b)); } 50%{ filter: drop-shadow(0 0 12px var(--c, #ffd36b)) drop-shadow(0 0 28px var(--c, #ffd36b)); } }
 
 /* 2D: 効果ごとの簡単な演出 */
 .b3-fx{ position: absolute; pointer-events: none; transform: translate(-50%,-50%); }

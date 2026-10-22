@@ -429,8 +429,8 @@ function physical(){
   now.forEach((z, id) => {
     const o = prevSnap.get(id); // 連鎖の間どこにも無かったカード(4・10・J・2)は、最後に見た居場所から
     if(!o){ return; }
-    if(skipMove.has(id)){ skipMove.delete(id); return; }
     if(o.key === z.key && o.up === z.up) return;
+    if(skipMove.has(id)){ skipMove.delete(id); return; } // 専用の動きで見せたカード(居場所が実際に変わったときに使う)
     if(o.key.startsWith('hand') && z.key === o.key) return; // 同じ手札の中で並びが変わっただけ
     fly(id, o, z, n++*110);
   });
@@ -481,7 +481,39 @@ const fx = {
   glow(b, col){ if(!b) return; const e = fxEl('b3-fx-glow', b); Object.assign(e.style, { width:b.w + 'px', height:b.h + 'px' }); e.style.setProperty('--c', col);
     e.animate([{ opacity:0 }, { opacity:1, offset:0.3 }, { opacity:0 }], { duration:800, fill:'both' }); kill(e, 900); },
 };
+/* ---- 連鎖する効果(2・9・10・J)の「発動中」: 効果を出しているカードを、その場所で光らせ続ける(連鎖が終わるまで) ---- */
+const actives = new Map(); // 名前 → 要素
+function activeCard(name, card, box, rot){
+  dropActive(name);
+  if(!card || !box) return null;
+  const el = document.createElement('div'); el.className = 'b3-active';
+  const w = rot ? box.h : box.w, h = rot ? box.w : box.h; // 横向きの山の上では縦のカードを置く
+  Object.assign(el.style, { left:(box.x - Math.min(w, h*5/7)/2) + 'px', top:(box.y - Math.max(h, w*7/5)/2) + 'px', width:Math.min(w, h*5/7) + 'px', height:Math.max(h, w*7/5) + 'px' });
+  const th = (window.B3 && B3.K && B3.K.themeOf) ? B3.K.themeOf(card) : null;
+  el.style.setProperty('--c', th ? th.glow : '#f0d690');
+  el.appendChild(faceEl(card, true));
+  const tag = document.createElement('div'); tag.className = 'b3-active-tag'; tag.textContent = '発動中'; el.appendChild(tag);
+  flyLayer.appendChild(el);
+  el.animate([{ transform:'translateY(10px) scale(.85)', opacity:0 }, { transform:'translateY(-6px) scale(1.04)', opacity:1 }], { duration:380, easing:'ease-out', fill:'both' });
+  actives.set(name, el);
+  return el;
+}
+function dropActive(name){ const e = actives.get(name); if(e){ actives.delete(name); e.animate([{ opacity:1 }, { opacity:0, transform:'scale(.9)' }], { duration:250, fill:'both' }); setTimeout(() => { try{ e.remove(); }catch(_){ } }, 260); } }
+// 手で運ぶ(居場所の記録とは別に、決まった位置から位置へ)
+function carryCard(card, A, B, upA, upB){
+  if(!card || !A || !B) return Promise.resolve();
+  return fly(card.id + ':carry', { rect:A, up:upA, zone:'x' }, { rect:B, up:upB, zone:'x', card, key:'none' }, 0) || Promise.resolve();
+}
+const lastRect = card => { const z = card && prevSnap && prevSnap.get(card.id); return z ? z.rect : null; };
+const handDrop = p => { // 手札の扇の右どなり(フロアと同じ大きさ)
+  const c = at.cell(0) || { w:80, h:112 }, n = state.players[p].hand.length;
+  const b = (n ? at.slot(p, n - 1) : null) || at.hand(p); if(!b) return null;
+  return { x:b.x + b.w/2 + c.w*0.85, y:b.y + (p === bottomP() ? -c.h*0.3 : c.h*0.3), w:c.w, h:c.h };
+};
+const cardBox = b => b ? { x:b.x, y:b.y, w:b.w, h:b.h } : null;
+
 // 元の演出の名前 → 2D の簡単な演出(戻り値は待つ時間 ms。省略時 700)
+const nineCard = [null, null];
 const FX = {
   triggerMagmaRiseAndCrack: i => { fx.ring(at.cell(i), C2.H); fx.burst(at.cell(i), C2.H); },            // ♥: 裏 → 表
   triggerSpadeSlashHand: (p, idx) => { fx.slash(at.slot(p, idx), C2.S); },                              // ♠: 手札を斬る
@@ -495,8 +527,10 @@ const FX = {
   triggerExtraTurnWhiteout: () => { fx.flash(C2.sun); return 900; },                                    // A: 追加ターン
   triggerVortexDrawCardAppear: () => { fx.swirl(at.deck(), C2.water); return 420; },                    // 3: 1枚引く
   triggerVortexHide: i => { fx.swirl(at.cell(i), C2.water); },                                          // 3: 表 → 裏
-  triggerSummon2RiseAndReveal: i => { fx.ring(at.cell(i), C2.violet, true); fx.pillar(at.cell(i), C2.violet); }, // 2: 召喚
-  triggerSummon2Return: i => { fx.ring(at.cell(i), C2.violet); return 500; },
+  // 2: めくったカードが表のまま、そのマスの上で発動中(連鎖が終わるとそのマスに表で戻る)
+  triggerSummon2RiseAndReveal: i => { const slot = state.floor[i]; fx.ring(at.cell(i), C2.violet, true); fx.pillar(at.cell(i), C2.violet);
+    if(slot && slot.card){ activeCard('2:' + i, slot.card, at.cell(i)); skipMove.add(slot.card.id); } return 900; },
+  triggerSummon2Return: i => { dropActive('2:' + i); fx.ring(at.cell(i), C2.violet); return 500; },
   triggerDiscardFlipRise: p => { fx.pillar(at.disc(p), C2.violet); },                                   // 4: 捨て札から
   triggerFloorSpawn: i => { fx.ring(at.cell(i), C2.violet); },                                          // 4: 空きマスへ置く
   triggerLightningFloorTransform: i => { fx.ring(at.cell(i), '#9b7dff'); fx.burst(at.cell(i), '#ffe27a', 8); }, // 4: 雷撃フロア
@@ -507,12 +541,22 @@ const FX = {
   triggerTornadoSettleInPlace: i => { fx.ring(at.cell(i), C2.wind); return 400; },
   triggerWindCellLanding: i => { fx.ring(at.cell(i), C2.wind); return 300; },
   triggerWindCellDissipate: i => { fx.ring(at.cell(i), C2.wind); return 300; },
-  triggerDiscardPillarRise: p => { fx.pillar(at.disc(p), C2.sun); },                                    // 9: 捨て札 → 山札の上
-  triggerDiscardPillarReturn: () => 200,
+  // 9: 捨て札の上で発動中 → 連鎖が終わったら山札の上へ(データは先に山札へ移るので、記録では動かさず手で運ぶ)
+  triggerDiscardPillarRise: (p, idx, before) => { const card = (before || state.players[p].discard)[idx]; fx.pillar(at.disc(p), C2.sun);
+    if(card){ skipMove.add(card.id); activeCard('9:' + p, card, at.disc(p), true); nineCard[p] = card; } return 900; },
+  triggerDiscardPillarReturn: p => { const card = nineCard[p]; nineCard[p] = null; dropActive('9:' + p);
+    if(card && state.deck.includes(card)){ carryCard(card, at.disc(p), Object.assign({}, at.deck(), { rot:90, w:at.deck() ? at.deck().h : 60, h:at.deck() ? at.deck().w : 84 }), true, false); return 900; } return 300; },
   triggerRedPurpleHandRise: (p, idx) => { fx.ring(at.slot(p, idx), C2.blood); fx.glow(at.slot(p, idx), C2.blood); }, // 10: 手札を捨てさせる
-  triggerRedPurpleDiscardArrival: () => 300, triggerRedPurpleDiscardReturn: () => 200,
+  // 10: 相手の手札のカードが自分の捨て札の上へ来て、そこで発動中(連鎖が終わると捨て札に収まる)
+  triggerRedPurpleDiscardArrival: (p, card) => { if(!card) return 300; skipMove.add(card.id);
+    const from = lastRect(card), to = at.disc(p);
+    carryCard(card, from, to && { x:to.x, y:to.y, w:to.h, h:to.w, rot:90 }, false, true).then(() => activeCard('10:' + p, card, at.disc(p), true)); return 1200; },
+  triggerRedPurpleDiscardReturn: p => { dropActive('10:' + p); return 300; },
   triggerBlackEvaporate: i => { fx.swirl(at.cell(i), C2.dark); fx.burst(at.cell(i), C2.dark, 12); },    // J: フロアを手札へ
-  triggerBlackMistHandAppear: p => { fx.swirl(at.hand(p), C2.dark); return 500; }, triggerBlackMistReturn: () => 200,
+  // J: フロアのカードが手札のそばへ来て、そこで発動中(連鎖が終わると手札に加わる)
+  triggerBlackMistHandAppear: (p, card) => { fx.swirl(at.hand(p), C2.dark); if(!card) return 500; skipMove.add(card.id);
+    const to = handDrop(p); carryCard(card, lastRect(card), to, true, true).then(() => activeCard('J:' + p, card, to)); return 1200; },
+  triggerBlackMistReturn: p => { dropActive('J:' + p); return 300; },
   triggerHandWipeNebula: p => { fx.swirl(at.hand(p), C2.blood); fx.flash('#3a0016'); },                 // Q: 手札を全部捨てさせる
   triggerDiscardAppearNebula: p => { fx.ring(at.disc(p), C2.blood); return 400; },
   triggerKCrackReveal: i => { fx.crack(at.cell(i), i); },                                               // K: 叩き割って表に
