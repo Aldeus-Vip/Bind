@@ -44,7 +44,7 @@ function dress(){
     // 雷撃フロア: 裏向きのカードはそのままに、⚡のトークンを置く
     if(cell.classList.contains('debuff-floor') && !cell.querySelector('.b3-token-bolt')){
       const back = cell.querySelector('.card-back');
-      if(back && typeof ASSETS !== 'undefined' && ASSETS.cardBack) back.style.backgroundImage = `url(${ASSETS.cardBack})`;
+      if(back) back.style.backgroundImage = `url(${B.K.cardBackURL ? B.K.cardBackURL() : ASSETS.cardBack})`;
       cell.appendChild(token('bolt', TEX.lightning_bolt || (typeof ASSETS !== 'undefined' && ASSETS.lightning), '雷撃フロア(止まるとバインド)'));
     }
   });

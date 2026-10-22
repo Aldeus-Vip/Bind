@@ -221,7 +221,7 @@
   .hand-mini-row.hand-area-active{ box-shadow: 0 0 0 1px var(--b3-gold-hi), 0 0 16px var(--b3-glow) !important; background: rgba(212,171,82,.08) !important; }
   .card.b3card{ box-shadow: 0 3px 8px rgba(0,0,0,.6), 0 0 7px color-mix(in srgb, var(--b3s) 35%, transparent) !important; }
   .hand-row .card.b3card:not(.static):hover{ transform: translateY(-4px); box-shadow: 0 0 0 1px var(--b3s), 0 0 16px var(--b3s), 0 6px 12px rgba(0,0,0,.6) !important; }
-  .card-back.b3back{ box-shadow: 0 0 0 1px rgba(212,171,82,.45), 0 3px 8px rgba(0,0,0,.5) !important; border-radius:5px; }
+  .card-back.b3back{ background-size: 100% 100% !important; background-color: #1c1718; border: none !important; box-shadow: 0 3px 8px rgba(0,0,0,.5) !important; border-radius:6px; } /* 絵に金の縁が入っているので、引き伸ばして縁まで見せる */
 
   @media (prefers-reduced-motion: reduce){ .btn, .card{ transition:none !important; } }
   .start-screen::before{
@@ -258,7 +258,7 @@
 .floor-grid.b3-table > .floor-cell.empty.clickable{ border: 2px dashed rgba(255,214,130,.6); background: rgba(255,200,110,.06); }
 .floor-grid.b3-table > .floor-cell.empty.clickable:hover{ border-style: solid; background: rgba(255,210,120,.18); }
 /* カードの裏: 少しだけ厚みと影 */
-.floor-grid.b3-table .card-back{ border-radius: 7px; box-shadow: 0 3px 8px rgba(0,0,0,.6), inset 0 0 0 1px rgba(212,171,82,.35); }
+.floor-grid.b3-table .card-back{ border-radius: 7px; box-shadow: 0 3px 8px rgba(0,0,0,.6); }
 /* 表向きのフロア: カードの表(3D と同じデザイン)。止まると負けなので赤くふち取って脈打つ */
 .floor-grid.b3-table .card.faceup-trap.b3card{
   background-image: none !important; animation: b3TrapPulse 2.2s ease-in-out infinite !important;

@@ -3527,9 +3527,16 @@ function decorateCard(elx, card){
     return elx;
   };
 });
-// 裏面: 盤面の「封印された大地」と同じ絵柄
+// カードの裏: assets/textures/card_back.png(鍵穴の紋章)。小さく出すカードは card_back_s.png(線がつぶれにくい)
+const BACK_TEX = window.BIND_TEX || {};
+if(BACK_TEX.card_back) A.cardBack = BACK_TEX.card_back; // 元のコード(2D の演出など)が使う裏面も同じ絵に
+function cardBackURL(small){
+  if(BACK_TEX.card_back) return (small && BACK_TEX.card_back_s) || BACK_TEX.card_back;
+  return sealURL();
+}
+// 封印の紋章(盤面の「封印された大地」と同じ絵柄)。スタート画面の背景の紋章に使う
 let backURL = null;
-function cardBackURL(){
+function sealURL(){
   if(backURL) return backURL;
   const c = document.createElement('canvas'); c.width = TS; c.height = TS;
   drawBack(c.getContext('2d'), false);
@@ -3541,9 +3548,9 @@ if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => { bac
 [IM.ground, IM.seal].forEach(im => { if(im) im.addEventListener('load', () => { backURL = null; }); });
 if(typeof window.cardBackDiv === 'function'){
   const origBack = window.cardBackDiv;
-  window.cardBackDiv = function(){
+  window.cardBackDiv = function(extraClass){
     const d = origBack.apply(this, arguments);
-    try{ if(enabled){ d.style.backgroundImage = `url(${cardBackURL()})`; d.classList.add('b3back'); } }catch(e){}
+    try{ d.style.backgroundImage = `url(${cardBackURL(/mini/.test(extraClass || ''))})`; d.classList.add('b3back'); }catch(e){} // 2D でも同じ裏面
     return d;
   };
 }
@@ -3583,7 +3590,7 @@ function refreshBeast(key){
 function decorateStart(){
   const ss = document.querySelector('.start-screen');
   if(!ss || ss.querySelector('.b3-bestiary') || typeof CONCEPT_ART==='undefined') return;
-  try{ document.documentElement.style.setProperty('--b3-seal', `url(${cardBackURL()})`); }catch(e){}
+  try{ document.documentElement.style.setProperty('--b3-seal', `url(${sealURL()})`); }catch(e){}
   const wrap = document.createElement('div'); wrap.className = 'b3-bestiary';
   const t = document.createElement('div'); t.className = 'b3-bestiary-title'; t.textContent = '大地に封じられし者たち'; wrap.appendChild(t);
   BESTIARY.forEach(([k, name]) => { const d = document.createElement('div'); d.className = 'b3-beast'; d.dataset.beast = k; d.style.backgroundImage = beastArt(k); const sp = document.createElement('span'); sp.textContent = name; d.appendChild(sp); wrap.appendChild(d); });
