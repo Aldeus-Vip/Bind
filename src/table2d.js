@@ -37,6 +37,10 @@ function dress(){
       const col = pc.style.backgroundColor;
       if(col){ pc.style.setProperty('--pc', col); pc.style.backgroundColor = ''; }
     }
+    // バインド中: 元の雷の枠の絵を外し、カードの縁を電気が走り続ける表現にする(しびれて動けない)
+    const bound = pc && cell.querySelector('.bind-frame-new, .bind-bolt');
+    cell.querySelectorAll('.bind-frame-new, .bind-bolt').forEach(e => e.remove());
+    if(bound && !cell.querySelector('.b3-bind2d')){ cell.classList.add('b3-bound'); cell.appendChild(bindMark()); }
     // 雷撃フロア: 裏向きのカードはそのままに、⚡のトークンを置く
     if(cell.classList.contains('debuff-floor') && !cell.querySelector('.b3-token-bolt')){
       const back = cell.querySelector('.card-back');
@@ -45,6 +49,115 @@ function dress(){
     }
   });
 }
+/* ---- 稲妻の線(折れ線)。from → to を細かく折り、ときどき枝を出す ---- */
+function boltPath(x0, y0, x1, y1, jag, segs){
+  const pts = [[x0, y0]], dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1, nx = -dy/len, ny = dx/len;
+  for(let i = 1; i < segs; i++){ const f = i/segs, o = (Math.random() - 0.5)*2*jag*Math.sin(Math.PI*f); pts.push([x0 + dx*f + nx*o, y0 + dy*f + ny*o]); }
+  pts.push([x1, y1]);
+  return pts;
+}
+const toD = pts => 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L');
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs){ const e = document.createElementNS(SVGNS, tag); for(const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+
+/* ---- バインド中の印: カードの縁を走る電気(数本の折れ線が入れ替わりに明滅)+ ⚡ のトークン ---- */
+function bindMark(){
+  const wrap = document.createElement('div'); wrap.className = 'b3-bind2d';
+  const svg = svgEl('svg', { viewBox:'0 0 100 140', preserveAspectRatio:'none', class:'b3-bind-arcs' });
+  // 縁に沿った4辺の上を、短い稲妻が3本ずつ走る(それぞれ遅れて明滅)
+  const edges = [[4,4,96,4],[96,4,96,136],[96,136,4,136],[4,136,4,4]];
+  let n = 0;
+  edges.forEach(([a,b,c,d]) => { for(let k = 0; k < 2; k++){
+    const f0 = Math.random()*0.5, f1 = f0 + 0.3 + Math.random()*0.2;
+    const pts = boltPath(a + (c - a)*f0, b + (d - b)*f0, a + (c - a)*f1, b + (d - b)*f1, 6, 7);
+    const g = svgEl('g', { class:'b3-arc', style:`animation-delay:${(n++*0.23 + Math.random()*0.3).toFixed(2)}s` });
+    g.appendChild(svgEl('path', { d:toD(pts), class:'b3-arc-glow' })); g.appendChild(svgEl('path', { d:toD(pts), class:'b3-arc-core' }));
+    svg.appendChild(g);
+  } });
+  wrap.appendChild(svg);
+  // トークンは稲妻のマーク(描いた形)
+  const tk = token('bind', null, 'バインド中(次のムーブができない)');
+  tk.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14 2 L5 13.5 H11 L9.5 22 L19 9.5 H13 Z" fill="#ffd84a" stroke="#fff6c8" stroke-width="1" stroke-linejoin="round"/></svg>';
+  wrap.appendChild(tk);
+  return wrap;
+}
+
+/* ---- 雷の演出(2D): 8 の効果の落雷 / 雷撃フロアに止まったときの電撃 ----
+   どちらも最後はカードが痺れて、バインド中の印(bindMark)へつながる */
+function lightning2D(cellIndex, fromSky){
+  return trackAnimation(resolve => {
+    let done = false; const layer = document.createElement('div'); layer.className = 'b3-zap2d';
+    const fin = () => { if(done) return; done = true; try{ layer.remove(); }catch(e){} if(cell) cell.classList.remove('b3-shock'); resolve(); };
+    const cell = document.getElementById('floor-cell-' + cellIndex);
+    try{
+      if(typeof settings !== 'undefined' && settings.effectAnim === false){ fin(); return; }
+      if(!cell){ fin(); return; }
+      const r = cell.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2;
+      const W = innerWidth, H = innerHeight;
+      document.body.appendChild(layer);
+      const svg = svgEl('svg', { viewBox:`0 0 ${W} ${H}`, width:W, height:H, class:'b3-zap-svg' });
+      layer.appendChild(svg);
+      const A = (el, kf, o) => el.animate(kf, Object.assign({ fill:'forwards' }, o));
+      const addBolt = (pts, delay, width, dur) => {
+        const g = svgEl('g', {}); const d = toD(pts);
+        g.appendChild(svgEl('path', { d, class:'b3-bolt-glow', 'stroke-width':width*3.2 }));
+        g.appendChild(svgEl('path', { d, class:'b3-bolt-core', 'stroke-width':width }));
+        svg.appendChild(g);
+        // 一瞬で走り、2〜3回明滅して消える
+        A(g, [{ opacity:0 }, { opacity:1, offset:0.05 }, { opacity:0.25, offset:0.25 }, { opacity:1, offset:0.35 }, { opacity:0.3, offset:0.55 }, { opacity:0.9, offset:0.65 }, { opacity:0 }], { duration:dur, delay, easing:'linear' });
+      };
+      let hitAt;
+      if(fromSky){
+        // 落雷: 画面の上から、枝分かれしながらカードへ
+        const x0 = cx + (Math.random() - 0.5)*r.width*3, main = boltPath(x0, -20, cx, cy, Math.max(30, r.width*0.5), 22);
+        addBolt(main, 0, 4, 700);
+        for(let k = 0; k < 4; k++){
+          const i = 3 + Math.floor(Math.random()*(main.length - 8)), p = main[i];
+          const ex = p[0] + (Math.random() - 0.5)*r.width*2.2, ey = p[1] + 40 + Math.random()*r.height;
+          addBolt(boltPath(p[0], p[1], ex, ey, 16, 8), 30, 1.6, 520);
+        }
+        const flash = document.createElement('div'); flash.className = 'b3-zap-flash'; layer.appendChild(flash);
+        A(flash, [{ opacity:0 }, { opacity:0.75, offset:0.08 }, { opacity:0.15, offset:0.3 }, { opacity:0.45, offset:0.4 }, { opacity:0 }], { duration:600 });
+        hitAt = 60;
+      } else {
+        // 雷撃フロア: カードの足元から短い稲妻が何本も跳ね上がる
+        for(let k = 0; k < 7; k++){
+          const x = r.left + r.width*(0.1 + 0.8*Math.random()), y = r.bottom - 4;
+          addBolt(boltPath(x, y, x + (Math.random() - 0.5)*r.width*0.8, r.top + r.height*(0.05 + Math.random()*0.5), 12, 9), k*70, 1.8, 520);
+        }
+        hitAt = 120;
+      }
+      setTimeout(() => {
+        if(done) return;
+        // 着弾: 光の輪と火花、カードが震えて痺れる
+        const ring = document.createElement('div'); ring.className = 'b3-zap-ring';
+        Object.assign(ring.style, { left:cx + 'px', top:cy + 'px', width:r.width*1.6 + 'px', height:r.width*1.6 + 'px' });
+        layer.appendChild(ring);
+        A(ring, [{ transform:'translate(-50%,-50%) scale(.2)', opacity:1 }, { transform:'translate(-50%,-50%) scale(1.5)', opacity:0 }], { duration:520, easing:'ease-out' });
+        for(let k = 0; k < 18; k++){
+          const sp = document.createElement('div'); sp.className = 'b3-zap-spark'; layer.appendChild(sp);
+          const a = Math.random()*Math.PI*2, d = r.width*(0.5 + Math.random()*0.9);
+          Object.assign(sp.style, { left:cx + 'px', top:cy + 'px', transform:`rotate(${a}rad)` });
+          A(sp, [{ transform:`translate(0,0) rotate(${a}rad) scaleX(1)`, opacity:1 }, { transform:`translate(${Math.cos(a)*d}px, ${Math.sin(a)*d}px) rotate(${a}rad) scaleX(.3)`, opacity:0 }],
+            { duration:380 + Math.random()*300, easing:'cubic-bezier(.2,.7,.3,1)' });
+        }
+        cell.classList.add('b3-shock');
+        // 痺れ: カードの上で小さな稲妻がしばらく弾け続ける
+        for(let k = 0; k < 10; k++){
+          const x = r.left + r.width*Math.random(), y = r.top + r.height*Math.random();
+          addBolt(boltPath(x, y, x + (Math.random() - 0.5)*r.width*0.6, y + (Math.random() - 0.5)*r.height*0.5, 7, 6), 120 + k*85, 1.3, 260);
+        }
+      }, hitAt);
+      setTimeout(fin, fromSky ? 1500 : 1350);
+    }catch(e){ console.error('[Bind2D] 演出エラー(ゲームは続行します)', e); fin(); }
+  });
+}
+[['triggerLightningBoltStrike', true], ['triggerLightningZap', false]].forEach(([name, sky]) => {
+  const prev = window[name];
+  if(typeof prev !== 'function') return;
+  window[name] = function(cellIndex){ return is2D() ? lightning2D(cellIndex, sky) : prev.apply(this, arguments); };
+});
+
 const origRender = window.render;
 window.render = function(){ const r = origRender.apply(this, arguments); try{ dress(); }catch(e){ console.error('[Bind2D]', e); } return r; };
 

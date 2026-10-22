@@ -299,3 +299,27 @@ body.b3-ui .floor-grid.b3-table{ max-width: min(100%, calc((100vh - 290px) * 0.9
 }
 .b3-defeat2d .b3-d2-me{ box-shadow: 0 0 0 3px var(--pc), 0 0 16px var(--pc) !important; }
 .b3-defeat2d .b3-d2-mote{ position: absolute; width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: var(--glow); box-shadow: 0 0 10px var(--glow); opacity: 0; }
+
+/* 2D: バインド中 — カードの縁を電気が走り続け、ときどきピクッと震える(table2d.js の bindMark) */
+.floor-grid.b3-table > .floor-cell.b3-bound .card.personal{ filter: saturate(.6) brightness(.85) contrast(1.05); animation: b3Twitch 2.6s steps(1) infinite; }
+@keyframes b3Twitch{ 0%,100%{ translate: 0 0; } 86%{ translate: 1.5px -1px; } 88%{ translate: -1.5px 1px; } 90%{ translate: 1px 0; } 92%{ translate: 0 0; } }
+.floor-grid.b3-table .b3-bind2d{ position: absolute; inset: -3px; z-index: 6; pointer-events: none; }
+.floor-grid.b3-table .b3-bind-arcs{ position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.b3-bind-arcs .b3-arc{ opacity: 0; animation: b3ArcFlick 1.6s linear infinite; }
+.b3-bind-arcs .b3-arc-glow{ fill: none; stroke: rgba(255,226,120,.55); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; filter: blur(1.5px); vector-effect: non-scaling-stroke; }
+.b3-bind-arcs .b3-arc-core{ fill: none; stroke: #fffbe6; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+@keyframes b3ArcFlick{ 0%{ opacity: 0; } 4%{ opacity: 1; } 9%{ opacity: .2; } 13%{ opacity: .95; } 22%{ opacity: 0; } 100%{ opacity: 0; } }
+.floor-grid.b3-table .b3-token-bind{ right: auto; bottom: auto; left: auto; top: -6%; right: -6%; width: 34%; border-color: #ffd75a; box-shadow: 0 0 12px rgba(255,220,90,.85), 0 3px 6px rgba(0,0,0,.7); }
+.floor-grid.b3-table .b3-token-bind svg{ width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 3px #ffe27a); }
+
+/* 2D: 雷の演出(8 の落雷・雷撃フロアの電撃) */
+.b3-zap2d{ position: fixed; inset: 0; z-index: 9500; pointer-events: none; }
+.b3-zap2d .b3-zap-svg{ position: absolute; inset: 0; overflow: visible; }
+.b3-zap2d .b3-bolt-glow{ fill: none; stroke: rgba(255,214,90,.55); stroke-linecap: round; stroke-linejoin: round; filter: blur(3px); }
+.b3-zap2d .b3-bolt-core{ fill: none; stroke: #fffdf0; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px #ffe680); }
+.b3-zap2d .b3-zap-flash{ position: absolute; inset: 0; background: radial-gradient(circle at 50% 40%, rgba(255,250,225,.9), rgba(255,240,190,.35) 60%, rgba(0,0,0,0)); opacity: 0; mix-blend-mode: screen; }
+.b3-zap2d .b3-zap-ring{ position: absolute; border-radius: 50%; border: 3px solid #fff3b0; box-shadow: 0 0 22px #ffe27a, inset 0 0 18px #ffe27a; }
+.b3-zap2d .b3-zap-spark{ position: absolute; width: 14px; height: 2px; margin: -1px 0 0 -7px; border-radius: 2px; background: #fffbe0; box-shadow: 0 0 8px #ffd24a; }
+.floor-grid.b3-table > .floor-cell.b3-shock{ animation: b3Shock .07s linear infinite; z-index: 4; }
+.floor-grid.b3-table > .floor-cell.b3-shock .card{ filter: brightness(1.6) saturate(.4) drop-shadow(0 0 10px #ffe27a) !important; }
+@keyframes b3Shock{ 0%{ translate: 2px -1px; } 25%{ translate: -2px 1px; } 50%{ translate: 1px 2px; } 75%{ translate: -1px -2px; } 100%{ translate: 0 0; } }
