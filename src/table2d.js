@@ -44,6 +44,12 @@ function dress(){
     cell.querySelectorAll('.bind-frame-new, .bind-bolt').forEach(e => e.remove());
     if(bound && !cell.querySelector('.b3-bind2d')){
       cell.classList.add('b3-bound'); cell.appendChild(bindMark());
+      // 横向きに倒すと、パーソナルの下のフロア(多くは裏向きのカード)が上下にのぞく
+      const under = state.floor[+cell.id.slice(11)];
+      if(under && under.card){
+        const u = under.faceUp ? cardStatic(under.card, 'b3-under') : cardBackDiv('b3-under');
+        u.classList.add('b3-under'); cell.insertBefore(u, cell.firstChild);
+      }
       // 実物のトランプでは、バインドはパーソナルを横向きに倒して表す。倒れた瞬間だけ回る動きを見せる
       const owner = state.floor[+cell.id.slice(11)] && state.floor[+cell.id.slice(11)].owner;
       if(owner != null && !wasBound.has(owner)) cell.classList.add('b3-bind-new');
