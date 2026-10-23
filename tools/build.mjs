@@ -65,10 +65,10 @@ s = s.replace('<title>Bind — プロトタイプ</title>', `<title>${esc(TITLE)
   (single ? '' : `<link rel="canonical" href="${SITE_URL}">\n`) +
   `<meta property="og:type" content="website">\n<meta property="og:site_name" content="Bind">\n` +
   `<meta property="og:title" content="${esc(TITLE)}">\n<meta property="og:description" content="${esc(DESC)}">\n` +
-  `<meta property="og:url" content="${SITE_URL}">\n<meta property="og:image" content="${SITE_URL}og-image.jpg">\n` +
+  `<meta property="og:url" content="${SITE_URL}">\n<meta property="og:image" content="${SITE_URL}og-image.jpg?v=2">\n` +
   `<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n<meta property="og:locale" content="ja_JP">\n` +
   `<meta name="twitter:card" content="summary_large_image">\n<meta name="twitter:title" content="${esc(TITLE)}">\n` +
-  `<meta name="twitter:description" content="${esc(DESC)}">\n<meta name="twitter:image" content="${SITE_URL}og-image.jpg">` +
+  `<meta name="twitter:description" content="${esc(DESC)}">\n<meta name="twitter:image" content="${SITE_URL}og-image.jpg?v=2">` +
   (debug ? '\n<meta name="robots" content="noindex">' : ''));
 s = s.replace('</head>',
   '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
