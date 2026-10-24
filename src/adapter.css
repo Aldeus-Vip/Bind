@@ -460,3 +460,9 @@ body.b3-phone .b3-ofan-count{ font-size: 10px; padding: 1px 8px; top: calc(var(-
 #b3-banner.compact .b3-banner-title{ font-size: 15px; }
 #b3-banner.compact .b3-banner-desc{ font-size: 10.5px; line-height: 1.4; }
 #b3-banner.compact.side{ flex-direction: row; align-items: center; }
+
+/* 2D: ウィンドマスのトークン(左下。雷撃・太陽は右下、バインドは右上)。空きマスでは真ん中に */
+.floor-grid.b3-table .b3-token-wind{ right: auto; left: 6%; border-color: #7fe6d6; box-shadow: 0 0 10px rgba(110,230,210,.6), 0 3px 6px rgba(0,0,0,.7); padding: 3%; }
+.floor-grid.b3-table .b3-token-wind img{ animation: b3WindSpin 6.6s linear var(--b3-t, 0s) infinite; } /* 描き直しても回転の続きから */
+.floor-grid.b3-table .b3-token-wind.alone{ left: 50%; top: 50%; bottom: auto; width: 54%; transform: translate(-50%, -50%); }
+@keyframes b3WindSpin{ to{ transform: rotate(-360deg); } }

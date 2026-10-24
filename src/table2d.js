@@ -36,6 +36,27 @@ function dress(){
   // 脈打ち・震えなどの繰り返しの動きは、描き直しても時間の続きから(最初からやり直してちらつかない)
   grid.style.setProperty('--b3-t', -(performance.now() % 26400) + 'ms');
   grid.querySelectorAll(':scope > .floor-cell').forEach(cell => {
+    const idx = +cell.id.slice(11), slot = state.floor[idx];
+    // ウィンドマス: 渦の絵を重ねず、ほかのマスと同じく丸いトークンを置く。
+    // 上にパーソナルがいるとき、元は「浮いているパーソナル」を重ねて描く(バインドの印も出さない)ので、
+    // ふつうのマスと同じ形(パーソナル1枚+名札)に直してから、下のバインドの処理に回す
+    if(state.windCells && state.windCells.has(idx)){
+      cell.querySelectorAll('.wind-cell-overlay').forEach(e => e.remove());
+      const stack = cell.querySelector(':scope > .wind-cell-stack'), wp = stack && stack.querySelector('.card.personal');
+      if(wp){
+        wp.classList.remove('wind-cell-floating'); stack.replaceWith(wp);
+        if(slot && slot.owner != null && !cell.querySelector('.owner-tag')){
+          const tag = document.createElement('div'); tag.className = 'owner-tag';
+          tag.style.background = typeof PLAYER_COLORS !== 'undefined' ? PLAYER_COLORS[slot.owner] : '';
+          tag.textContent = state.players[slot.owner].name.replace('プレイヤー', 'P'); cell.appendChild(tag);
+        }
+      }
+      if(!cell.querySelector('.b3-token-wind')){
+        const t = token('wind', TEX.wind_ring || (typeof ASSETS !== 'undefined' && ASSETS.windRing7), 'ウィンドマス(中身に関わらず移動・着地できる。チェンジは起きない)');
+        if(!cell.querySelector('.card')) t.classList.add('alone'); // 空きマスでは真ん中に
+        cell.appendChild(t);
+      }
+    }
     // パーソナル: プレイヤーの色を枠に使う(元は背景をその色で塗っていた)
     const pc = cell.querySelector('.card.personal');
     if(pc){
@@ -43,18 +64,18 @@ function dress(){
       if(col){ pc.style.setProperty('--pc', col); pc.style.backgroundColor = ''; }
     }
     // バインド中: 元の雷の枠の絵を外し、カードの縁を電気が走り続ける表現にする(しびれて動けない)
-    const bound = pc && cell.querySelector('.bind-frame-new, .bind-bolt');
+    const bound = pc && (cell.querySelector('.bind-frame-new, .bind-bolt') || (slot && slot.owner != null && state.players[slot.owner].bound)); // ウィンドマスの上では元は印を出さないので状態で見る
     cell.querySelectorAll('.bind-frame-new, .bind-bolt').forEach(e => e.remove());
     if(bound && !cell.querySelector('.b3-bind2d')){
       cell.classList.add('b3-bound'); cell.appendChild(bindMark());
       // 横向きに倒すと、パーソナルの下のフロア(多くは裏向きのカード)が上下にのぞく
-      const under = state.floor[+cell.id.slice(11)];
+      const under = slot;
       if(under && under.card){
         const u = under.faceUp ? cardStatic(under.card, 'b3-under') : cardBackDiv('b3-under');
         u.classList.add('b3-under'); cell.insertBefore(u, cell.firstChild);
       }
       // 実物のトランプでは、バインドはパーソナルを横向きに倒して表す。倒れた瞬間だけ回る動きを見せる
-      const owner = state.floor[+cell.id.slice(11)] && state.floor[+cell.id.slice(11)].owner;
+      const owner = slot && slot.owner;
       if(owner != null && performance.now() - tipAt[owner] < 500){ cell.classList.add('b3-bind-new'); cell.style.setProperty('--b3-tip', -(performance.now() - tipAt[owner]) + 'ms'); }
     }
     // 雷撃フロア: 裏向きのカードはそのままに、⚡のトークンを置く
