@@ -409,6 +409,9 @@ function makeAnswerer(W){
         const tp = S.players[t.playerIndex !== undefined ? t.playerIndex : o];
         const n = tp.hand.length;
         if(!n) return null;
+        // 「見ずに選ぶ」効果: 実物では相手が手札を持ち替えられるので、知っているカードの位置を狙うのはズル。
+        // つよい は完全にランダム。知っているカードを狙うのは、すべて見えている 最強AI だけ
+        if(!kn || !kn.oracle) return Math.floor(Math.random()*n);
         const knownIdx = [];
         tp.hand.forEach((c, k) => { if(kn && kn.knows(c)) knownIdx.push(k); });
         if(knownIdx.length){
