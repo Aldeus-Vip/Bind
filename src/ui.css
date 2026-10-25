@@ -268,3 +268,8 @@ body.b3-phone #b3-plates-btn::after{ content:"▣"; font-size:15px; }
 body.b3-phone #b3-plates-btn.off::after{ content:"▢"; }
 body.b3-phone #b3-menu-btn::after{ content:"☰"; font-size:16px; }
 body.b3-phone #b3-plates-btn::before, body.b3-phone #b3-menu-btn::before{ display:none !important; }
+/* 横向きのタブレット(device.js が b3-landscape を付ける大きさ)でも、ターンの流れはスマホと同じく今のフェーズだけを左上に小さく。
+   縦に長い欄のままだと、2D の盤面の左に置く山札・捨て札と重なる */
+body.b3-landscape.b3-ui .game-screen > .phase-sequence{ top: 10px; left: 8px; bottom: auto; transform: none; width: auto; padding: 4px; opacity: 1; }
+body.b3-landscape.b3-ui .game-screen > .phase-sequence .phase-step:not(.active), body.b3-landscape.b3-ui .game-screen > .phase-sequence .phase-arrow{ display: none; }
+body.b3-landscape.b3-ui .game-screen > .phase-sequence .phase-step.active{ padding: 4px 8px; font-size: 11px; }
