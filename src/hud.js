@@ -136,6 +136,9 @@ function ensureGhostBtn(){
   bar.insertBefore(ghostBtn, bar.firstChild);
 }
 
+// 演出からの指示(♠ など): プレートを出す・数字を先に動かす(実際のデータが変わる前に、演出の順で見せる)
+const fxs = [{}, {}];
+B.hudFx = (p, o) => { if(!fxs[p]) return; if(o === null) fxs[p] = {}; else Object.assign(fxs[p], o); };
 let visible = false;
 let frameN = 0;
 function frame(){
@@ -157,7 +160,9 @@ function frame(){
     h.box.style.display = '';
     const q = headPx(ch);
     h.box.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px) translate(-100%, -50%)`;
-    const nh = pl.hand.length, nd = pl.discard.length;
+    const fo = fxs[h.p];
+    const nh = Math.max(0, pl.hand.length + (fo.hand || 0)), nd = pl.discard.length + (fo.discard || 0);
+    h.box.classList.toggle('fxshow', !!fo.show);
     // 数が変わったときだけ書き換える(毎フレーム書くと、スマホでは画面の再計算が重い)
     if(h.nh !== nh){ h.nh = nh; h.rows.hand.querySelector('.g-num').textContent = nh; h.rows.hand.querySelector('i').style.width = Math.min(100, nh / MAXBAR * 100) + '%'; }
     if(h.nd !== nd){ h.nd = nd; h.rows.discard.querySelector('.g-num').textContent = nd; h.rows.discard.querySelector('i').style.width = Math.min(100, nd / MAXBAR * 100) + '%'; }
@@ -173,7 +178,7 @@ function frame(){
     h.rows.hand.classList.toggle('pv', pvGauges.has(h.p + ':hand'));
     h.rows.discard.classList.toggle('pv', pvGauges.has(h.p + ':discard'));
     // 半透明: マスを選ぶ間(自動)/ ボタン / Shift を押している間。選択中のゲージは除く
-    h.box.classList.toggle('ghost', ghostNow(st) && !(dt || ht || at));
+    h.box.classList.toggle('ghost', ghostNow(st) && !(dt || ht || at || fo.show));
     // 選択欄・中身
     const pc = popContent(h);
     if(!pc){ if(h.popKey){ h.pop.innerHTML = ''; h.popKey = null; } }

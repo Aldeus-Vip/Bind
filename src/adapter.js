@@ -137,6 +137,25 @@ function canvasTex(w, h, draw){
   texReg.push(redraw);
   return t;
 }
+// ♠ の素材(assets/textures/spade_emblem.png = 炎の縁の紋章 / spade_slash.png = 三日月の斬撃)。加算合成で黒は消える
+const spadeTex = (() => {
+  const T = window.BIND_TEX || {}, L = u => u ? new THREE.TextureLoader().load(u) : null;
+  return { emblem: L(T.spade_emblem), slash: L(T.spade_slash) };
+})();
+// ♠ の生物を囲む斬撃(素材が無いときは元の黒曜石の刃)
+function spadeBlade(size, mat){
+  if(spadeTex.slash){
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:spadeTex.slash, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.85 }));
+    s.scale.setScalar(size); return s;
+  }
+  const m = withOutline(new THREE.Mesh(new THREE.OctahedronGeometry(size*0.24), mat), 1.1); m.scale.set(0.35, 2.3, 0.35); return m;
+}
+// 回りながら周りを巡る(三日月が刃のように回転し、明滅する)
+function spinBlade(m, k, a, t, x, y, z){
+  m.position.set(x, y, z);
+  if(m.isSprite){ m.material.rotation = t*2.4 + k*1.7; m.material.opacity = 0.6 + 0.3*Math.sin(t*3 + k*2); }
+  else m.rotation.set(0, -a, Math.PI/2.4);
+}
 function loadImg(src){
   if(!src) return null;
   const im = new Image();
@@ -942,7 +961,7 @@ function buildBeastA(p){
   const fx = new THREE.Group(); root.add(fx);
   const blades = [], crystals = [], stars = [];
   const bladeM = toon(0x1c1028, { emissive:0xa35cff, emissiveIntensity:0.45 });
-  for(let k=0;k<6;k++){ const m = withOutline(new THREE.Mesh(new THREE.OctahedronGeometry(0.07), bladeM), 1.1); m.scale.set(0.35, 2.3, 0.35); fx.add(m); blades.push(m); }
+  for(let k=0;k<5;k++){ const m = spadeBlade(0.3, bladeM); fx.add(m); blades.push(m); }
   const crysM = toon(0xffc94a, { emissive:0xffb02e, emissiveIntensity:0.7 });
   for(let k=0;k<8;k++){ const m = withOutline(new THREE.Mesh(new THREE.OctahedronGeometry(0.05), crysM), 1.12); m.scale.set(1, 1.7, 1); fx.add(m); crystals.push(m); }
   const starPts = [];
@@ -1007,7 +1026,7 @@ function buildBeastA(p){
         maneSpikes.forEach((m,k) => { m.scale.y = 1 + Math.sin(t*9 + k*1.7)*0.18; });
         if(Math.random() < dt*6) emitFrom(new THREE.Vector3((Math.random()-.5)*0.4, 0.85, 0.1), th.glow, 0.5);
       } else if(motif==='blades'){
-        blades.forEach((m,k) => { const a = k/6*Math.PI*2 + t*0.9; m.position.set(Math.cos(a)*0.5, 0.55 + Math.sin(t*2 + k)*0.06, Math.sin(a)*0.45); m.rotation.set(0, -a, Math.PI/2.4); });
+        blades.forEach((m,k) => { const a = k/blades.length*Math.PI*2 + t*0.9; spinBlade(m, k, a, t, Math.cos(a)*0.5, 0.55 + Math.sin(t*2 + k)*0.06, Math.sin(a)*0.45); });
         eyes.forEach(e => e.scale.x = 1.4 + Math.sin(t*5)*0.15);
       } else if(motif==='crystals'){
         crystals.forEach((m,k) => { const a = k/8*Math.PI*2 - t*0.6, r = 0.48 + Math.sin(t + k)*0.04; m.position.set(Math.cos(a)*r, 0.4 + Math.sin(t*1.5 + k*0.8)*0.18 + (k%2)*0.25, Math.sin(a)*r*0.9); m.rotation.y = t*2 + k; });
@@ -1065,7 +1084,7 @@ function makeSuitAura(parent, R, H){
   const linkM = toon(0x9a948a, { emissive:0x6a1010, emissiveIntensity:1 });
   const links = []; for(let k=0;k<12;k++){ const m = M(new THREE.TorusGeometry(0.035, 0.01, 5, 10), linkM); g.add(m); links.push(m); }
   const bladeM = toon(0x1c1028, { emissive:0xa35cff, emissiveIntensity:0.45 });
-  const blades = []; for(let k=0;k<5;k++){ const m = O(new THREE.OctahedronGeometry(0.06), bladeM, 1.1); m.scale.set(0.35, 2.3, 0.35); g.add(m); blades.push(m); }
+  const blades = []; for(let k=0;k<4;k++){ const m = spadeBlade(0.26, bladeM); g.add(m); blades.push(m); }
   const crysM = toon(0xffc94a, { emissive:0xffb02e, emissiveIntensity:0.7 });
   const crystals = []; for(let k=0;k<6;k++){ const m = O(new THREE.OctahedronGeometry(0.045), crysM, 1.12); m.scale.set(1, 1.7, 1); g.add(m); crystals.push(m); }
   const stars = []; for(let k=0;k<6;k++){ const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:starTex, color:k%3===0 ? 0xffd76a : 0xcfe6ff, transparent:true, depthWrite:false, blending:ADDB })); s.scale.setScalar(k%3===0 ? 0.18 : 0.12); g.add(s); stars.push(s); }
@@ -1083,7 +1102,7 @@ function makeSuitAura(parent, R, H){
     tick(t, dt, raise){
       const sp = 1 + raise*2.5;
       if(motif==='chains') links.forEach((m,k) => { const a = k/12*Math.PI*2 + t*0.5*sp; m.position.set(Math.cos(a)*R, H*0.35 + Math.sin(a*3+t)*0.03, Math.sin(a)*R*0.9); m.rotation.set(k%2 ? Math.PI/2 : 0, -a, 0); });
-      else if(motif==='blades') blades.forEach((m,k) => { const a = k/5*Math.PI*2 + t*0.9*sp; m.position.set(Math.cos(a)*R, H*0.5 + Math.sin(t*2+k)*0.05, Math.sin(a)*R*0.9); m.rotation.set(0, -a, Math.PI/2.4); });
+      else if(motif==='blades') blades.forEach((m,k) => { const a = k/blades.length*Math.PI*2 + t*0.9*sp; spinBlade(m, k, a, t*sp, Math.cos(a)*R, H*0.5 + Math.sin(t*2+k)*0.05, Math.sin(a)*R*0.9); });
       else if(motif==='crystals') crystals.forEach((m,k) => { const a = k/6*Math.PI*2 - t*0.6*sp; m.position.set(Math.cos(a)*R, H*0.35 + Math.sin(t*1.5 + k)*0.12 + (k%2)*0.2, Math.sin(a)*R*0.9); m.rotation.y = t*2 + k; });
       else if(motif==='stars'){
         const arr = lineGeo.attributes.position.array;
@@ -3908,7 +3927,7 @@ const K = { QUALITY, scene, camera, canvas, renderer, chars, tiles, tween, wait,
   circleTex, starTex, pillarTex, sunTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
   preview, cam, CAM0, setCam, viewInset, boardBox, fitExtra, focus, LITE, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
-  summonCircleFx, spadeFx, clubFx, bugMesh, purpleFlame, sideMat: rockMat, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
+  summonCircleFx, spadeFx, spadeTex, clubFx, bugMesh, purpleFlame, sideMat: rockMat, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   get timeScale(){ return timeScale; }, set timeScale(v){ timeScale = Math.max(0, +v || 0); }, now: () => simT,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
 window.B3 = { ui, chars, tiles, layout, sync, K, get enabled(){ return enabled; },

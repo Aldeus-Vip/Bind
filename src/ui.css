@@ -235,7 +235,7 @@ body.b3-phone .start-screen .note{ font-size:11px !important; margin:4px 0 !impo
 #b3-plates-btn{ display:none; }
 body.b3-ui #b3-plates-btn{ display:inline-block; }
 #b3-plates-btn.off{ opacity:.7; }
-body.b3-no-plates .b3-gauge:not(.picking){ display:none !important; } /* 手札・捨て札を選ぶ場面では出す */
+body.b3-no-plates .b3-gauge:not(.picking):not(.fxshow){ display:none !important; } /* 手札・捨て札を選ぶ場面では出す */
 /* 手札・捨て札のパネルは出さない(2D は卓の山札・捨て札・手札の扇、3D は頭上のプレートで見る) */
 body.b3-ui #app .left-column .players-panel{ display:none !important; }
 body.b3-phone.b3-ui #top-buttons-bar > #b3-plates-btn{ display:inline-block !important; }

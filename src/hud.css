@@ -123,3 +123,12 @@ body.b3-hide-panels #app .floor-grid.b3{ max-width:none; width:100%; aspect-rati
 .b3-gauge.ghost{ opacity:.28; pointer-events:none !important; transition:opacity .2s; }
 .b3-gauge.ghost .g-pop{ display:none !important; }
 #b3-cam button.on{ background:rgba(201,162,75,.55); color:#241a08; }
+/* ♠ の演出(fx3d.js): プレートが切られて揺れる / 手札の行が欠ける / 捨て札の行が +1 で光る */
+.b3-gauge.fxshow{ animation: gFxIn .25s ease-out; }
+@keyframes gFxIn{ from{ opacity:0; } to{ opacity:1; } }
+.b3-gauge.fx-shake > .g-row{ animation: gFxShake .45s ease-out; }
+@keyframes gFxShake{ 0%{ translate:0 0; } 15%{ translate:-6px 1px; } 30%{ translate:5px -1px; } 45%{ translate:-4px 1px; } 60%{ translate:3px 0; } 80%{ translate:-1px 0; } 100%{ translate:0 0; } }
+.b3-gauge .g-row.fx-cut{ animation: gFxCut .6s ease-out; }
+@keyframes gFxCut{ 0%{ background: rgba(190,120,255,.75); box-shadow: 0 0 14px #a35cff; } 100%{ background: transparent; box-shadow: none; } }
+.b3-gauge .g-row.fx-gain .g-num{ animation: gFxGain .9s ease-out; display:inline-block; }
+@keyframes gFxGain{ 0%{ transform: scale(1.9); color:#fff; text-shadow: 0 0 10px #d9a6ff, 0 0 18px #a35cff; } 100%{ transform: scale(1); } }

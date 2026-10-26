@@ -741,16 +741,89 @@ K.override('triggerClubDrawAppear', () => function(p){
     K.uiSpark(b.x, b.y, 0x4aa8ff, 12); K.uiDispose(c);
   })]);
 });
-// ♠: 黒曜石の刃と呪いの目(盤面)+ 相手のゲージから1枚が切り裂かれる
+/* ♠: スートの紋章と斬撃(assets/textures/spade_emblem.png / spade_slash.png)
+   ① 予兆: 術者の足元に、スペードの紋章が床に寝た向きで灯り、ゆっくり回る
+   ② 本体: 斬撃が術者から飛び、相手の頭上のプレートを横に切り裂く。プレートが揺れ、手札が 1 欠ける
+   ③ 余韻: 紋章が相手の頭上に刻印のように押される。紫の火の粉が下へ落ち、捨て札が +1 で光る
+   頭上のプレートを隠している設定でも、この間だけ相手のプレートを出す(数字の変化でカードの行き先を見せる) */
+const gaugeEl = p => document.querySelectorAll('#b3-hud .b3-gauge')[p] || null;
+function uiImage(tex, w, h){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map:tex, transparent:true, depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending, opacity:0 }));
+  m.scale.set(w, h || w, 1); K.ui.sc.add(m); return m;
+}
+// 火の粉: 下へ落ちる紫の粒
+function embers(x, y, n){
+  for(let k=0;k<n;k++){
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(2 + Math.random()*2.5), new THREE.MeshBasicMaterial({ color: Math.random() < 0.7 ? 0xa35cff : 0xefe0ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    m.position.copy(K.P(x + (Math.random() - .5)*90, y + (Math.random() - .5)*30, 55));
+    m.userData = { v:V((Math.random() - .5)*30, -10 - Math.random()*30, 0), life:0, max:0.8 + Math.random()*0.6, g:90, spin:4 };
+    K.ui.sc.add(m); K.ui.parts.push(m);
+  }
+}
 K.override('triggerSpadeSlashHand', () => function(p){
-  return Promise.all([K.spadeFx(p), K.uiFx(async () => {
-    await wait(1.0);
-    const b = K.panelPx(p, 'hand'), d = K.panelPx(p, 'discard');
-    const c = K.card3D(null, false, 0.9); c.position.copy(P(b.x, b.y, 70));
-    K.uiSpark(b.x, b.y, 0xa35cff, 16);
-    await K.flyCard(c, b, d, 0.4, 30, 1);
-    K.uiSpark(d.x, d.y, 0xa35cff, 10); K.uiDispose(c);
-  })]);
+  const caster = chars[1 - p], target = chars[p], ST = K.spadeTex || {};
+  const hud = window.B3 && window.B3.hudFx ? window.B3.hudFx : () => {};
+  // ① 予兆(盤面): 足元の紋章
+  const omen = trackAnimation(resolve => {
+    resolve = once(resolve);
+    if(!settings.effectAnim || !caster || !caster.shown || !ST.emblem){ resolve(); return; }
+    const base = caster.root.position.clone();
+    const mark = K.flatPlane(1.25, ST.emblem, 0xffffff, base.y + 0.03);
+    mark.position.x = base.x; mark.position.z = base.z; K.scene.add(mark);
+    if(target && target.shown) K.faceTo(1 - p, target.root.position, 3);
+    (async () => {
+      await tween(2.4, t => {
+        mark.rotation.z = t*1.6;
+        mark.material.opacity = t < 0.15 ? t/0.15 : t > 0.8 ? (1 - t)/0.2 : 0.9 + Math.sin(t*20)*0.1;
+        mark.scale.setScalar(0.85 + 0.15*ease.out(Math.min(1, t*4)));
+        if(t < 0.3 && Math.random() < 0.3) burst(base.clone().add(V((Math.random() - .5)*0.8, 0.05, (Math.random() - .5)*0.8)), 0xa35cff, 1, { up:1.2, speed:0.1, life:0.5, g:-0.3 });
+      });
+      K.disposeObj(mark); resolve();
+    })().catch(e => failSafe(e, null, resolve));
+  });
+  // ②③ 本体と余韻(画面): 斬撃 → プレート → 刻印 → 火の粉と捨て札 +1
+  const strike = K.uiFx(async () => {
+    hud(p, { show:true });
+    await wait(0.55);
+    const g = gaugeEl(p);
+    const a = K.casterPx(1 - p);
+    let b = K.panelPx(p, 'hand');
+    const box = g && g.getBoundingClientRect().width ? (r => ({ x:r.left + r.width/2, y:r.top + r.height/2, w:r.width, h:r.height }))(g.getBoundingClientRect()) : { x:b.x, y:b.y, w:90, h:40 };
+    // 斬撃が飛ぶ(回りながら)
+    if(ST.slash){
+      const sl = uiImage(ST.slash, 90);
+      await K.uiTween(0.38, t => { const q = K.bez(a, box, 60, ease.in(t)); sl.position.copy(K.P(q.x, q.y, 80)); sl.rotation.z = -t*9; sl.material.opacity = Math.min(1, t*4); sl.scale.setScalar(70 + 50*t); });
+      // プレートを横に切り裂く: 三日月を横に潰して横一文字にし、左から右へ走らせる
+      await K.uiTween(0.22, t => { sl.position.copy(K.P(box.x - box.w*0.6 + box.w*1.2*t, box.y, 85)); sl.rotation.z = -0.1; sl.scale.set(box.w*1.7, 46 - 26*t, 1); sl.material.opacity = 1 - t*0.6; });
+      K.uiDispose(sl);
+    }
+    const cut = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color:0xe9d4ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false }));
+    cut.position.copy(K.P(box.x, box.y, 86)); cut.scale.set(box.w*1.3, 4, 1); cut.rotation.z = 0.08; K.ui.sc.add(cut);
+    hud(p, { hand:-1 });
+    if(g){ g.classList.remove('fx-shake'); void g.offsetWidth; g.classList.add('fx-shake'); const hr = g.querySelector('.g-hand'); if(hr){ hr.classList.remove('fx-cut'); void hr.offsetWidth; hr.classList.add('fx-cut'); } }
+    K.uiSpark(box.x, box.y, 0xa35cff, 16, 140);
+    K.uiTween(0.35, t => { cut.material.opacity = 1 - t; cut.scale.y = 4 + t*6; }).then(() => K.uiDispose(cut));
+    await wait(0.3);
+    // 紋章が頭上に刻印のように押される
+    if(ST.emblem){
+      const st = uiImage(ST.emblem, 110), sy = box.y - box.h/2 - 46;
+      await K.uiTween(0.2, t => { st.position.copy(K.P(box.x, sy, 90)); st.scale.setScalar(200 - 110*ease.in(t)); st.material.opacity = t; });
+      K.uiSpark(box.x, sy + 20, 0xd9a6ff, 10, 90);
+      embers(box.x, sy + 30, 22);
+      await wait(0.25);
+      hud(p, { discard:1 });
+      const dr = g && g.querySelector('.g-disc'); if(dr){ dr.classList.remove('fx-gain'); void dr.offsetWidth; dr.classList.add('fx-gain'); }
+      await K.uiTween(0.5, t => { st.material.opacity = 1 - t; st.scale.setScalar(90 + 25*t); });
+      K.uiDispose(st);
+    } else {
+      hud(p, { discard:1 });
+      await wait(0.4);
+    }
+    await wait(0.25);
+    if(g) g.classList.remove('fx-shake');
+    hud(p, null); // この直後に元のゲームが手札 → 捨て札へ移して描き直す(数字はそのまま)
+  });
+  return Promise.all([omen, strike]).then(() => { hud(p, null); });
 });
 // JOKER(手札): 大鎌が相手のゲージを切り裂く
 uiFx('triggerScytheSlashHand', async (p) => {
