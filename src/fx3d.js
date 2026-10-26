@@ -1034,6 +1034,8 @@ window.resolveTask = function(payload){
   K.faceTo(p, target, 3); // #5 対象の方を向く
   const personal = st.phase === 'personal-effect';
   if(!personal || !settings.effectAnim || !chars[p] || !chars[p].shown) return origResolve.apply(this, arguments);
+  // ♠ は効果の中で斬撃が飛ぶので、ここでは飛ばさない(2回飛んで見えるため)
+  if(st.task.tag === 'spade-select') return origResolve.apply(this, arguments);
   // #6 パーソナルの効果: 飛翔エフェクトが届いてから効果を続ける
   shooting = true;
   const self = this, args = arguments, eff = st.activeEffect;
