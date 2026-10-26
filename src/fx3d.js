@@ -751,12 +751,32 @@ function uiImage(tex, w, h){
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map:tex, transparent:true, depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending, opacity:0 }));
   m.scale.set(w, h || w, 1); K.ui.sc.add(m); return m;
 }
-// 火の粉: 下へ落ちる紫の粒
+// 火の粉: 下へ落ちる紫の丸い粒(中心が明るく、ふちがぼやける)
+let emberTex = null;
+function emberTexture(){
+  if(emberTex) return emberTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.85)'); gr.addColorStop(0.6, 'rgba(255,255,255,0.25)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return (emberTex = new THREE.CanvasTexture(c));
+}
 function embers(x, y, n){
   for(let k=0;k<n;k++){
-    const m = new THREE.Mesh(new THREE.OctahedronGeometry(2 + Math.random()*2.5), new THREE.MeshBasicMaterial({ color: Math.random() < 0.7 ? 0xa35cff : 0xefe0ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
-    m.position.copy(K.P(x + (Math.random() - .5)*90, y + (Math.random() - .5)*30, 55));
-    m.userData = { v:V((Math.random() - .5)*30, -10 - Math.random()*30, 0), life:0, max:0.8 + Math.random()*0.6, g:90, spin:4 };
+    const r = 7 + Math.random()*9;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(r, r), new THREE.MeshBasicMaterial({ map:emberTexture(), color: Math.random() < 0.7 ? 0xb06cff : 0xf1e2ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false }));
+    m.position.copy(K.P(x + (Math.random() - .5)*120, y + (Math.random() - .5)*40, 55));
+    m.userData = { v:V((Math.random() - .5)*30, -10 - Math.random()*30, 0), life:0, max:0.9 + Math.random()*0.7, g:90, spin:0 };
+    K.ui.sc.add(m); K.ui.parts.push(m);
+  }
+}
+// 弾ける光の粒(丸)。K.uiSpark の丸い版
+function roundSpark(x, y, color, n, speed){
+  for(let k=0;k<n;k++){
+    const r = 6 + Math.random()*8;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(r, r), new THREE.MeshBasicMaterial({ map:emberTexture(), color, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false }));
+    m.position.copy(K.P(x, y, 50)); const a = Math.random()*Math.PI*2, sp = (speed || 120)*(0.4 + Math.random());
+    m.userData = { v:V(Math.cos(a)*sp, Math.sin(a)*sp + 40, 0), life:0, max:0.5 + Math.random()*0.4, g:120, spin:0 };
     K.ui.sc.add(m); K.ui.parts.push(m);
   }
 }
@@ -792,7 +812,12 @@ K.override('triggerSpadeSlashHand', () => function(p){
     // 斬撃が飛ぶ(回りながら)
     if(ST.slash){
       const sl = uiImage(ST.slash, 90);
-      await K.uiTween(0.38, t => { const q = K.bez(a, box, 60, ease.in(t)); sl.position.copy(K.P(q.x, q.y, 80)); sl.rotation.z = -t*9; sl.material.opacity = Math.min(1, t*4); sl.scale.setScalar(70 + 50*t); });
+      // 丸い(外側の)方を前にして飛ばす: 絵は左が丸い側なので、進む向きへ絵の左を向ける
+      await K.uiTween(0.38, t => {
+        const k = ease.in(t), q = K.bez(a, box, 60, k), q2 = K.bez(a, box, 60, Math.min(1, k + 0.02));
+        sl.position.copy(K.P(q.x, q.y, 80)); sl.rotation.z = Math.atan2(-(q2.y - q.y), q2.x - q.x) - Math.PI;
+        sl.material.opacity = Math.min(1, t*4); sl.scale.setScalar(70 + 50*t);
+      });
       // プレートを横に切り裂く: 三日月を横に潰して横一文字にし、左から右へ走らせる
       await K.uiTween(0.22, t => { sl.position.copy(K.P(box.x - box.w*0.6 + box.w*1.2*t, box.y, 85)); sl.rotation.z = -0.1; sl.scale.set(box.w*1.7, 46 - 26*t, 1); sl.material.opacity = 1 - t*0.6; });
       K.uiDispose(sl);
@@ -801,19 +826,20 @@ K.override('triggerSpadeSlashHand', () => function(p){
     cut.position.copy(K.P(box.x, box.y, 86)); cut.scale.set(box.w*1.3, 4, 1); cut.rotation.z = 0.08; K.ui.sc.add(cut);
     hud(p, { hand:-1 });
     if(g){ g.classList.remove('fx-shake'); void g.offsetWidth; g.classList.add('fx-shake'); const hr = g.querySelector('.g-hand'); if(hr){ hr.classList.remove('fx-cut'); void hr.offsetWidth; hr.classList.add('fx-cut'); } }
-    K.uiSpark(box.x, box.y, 0xa35cff, 16, 140);
+    roundSpark(box.x, box.y, 0xb06cff, 18, 140);
     K.uiTween(0.35, t => { cut.material.opacity = 1 - t; cut.scale.y = 4 + t*6; }).then(() => K.uiDispose(cut));
     await wait(0.3);
     // 紋章が頭上に刻印のように押される
     if(ST.emblem){
-      const st = uiImage(ST.emblem, 110), sy = box.y - box.h/2 - 46;
-      await K.uiTween(0.2, t => { st.position.copy(K.P(box.x, sy, 90)); st.scale.setScalar(200 - 110*ease.in(t)); st.material.opacity = t; });
-      K.uiSpark(box.x, sy + 20, 0xd9a6ff, 10, 90);
-      embers(box.x, sy + 30, 22);
+      // 少し透けた紋章にして、紫の火の粉と中央の唐草が目立つように(大きさは以前の 1.5 倍)
+      const st = uiImage(ST.emblem, 165), sy = box.y - box.h/2 - 72;
+      await K.uiTween(0.2, t => { st.position.copy(K.P(box.x, sy, 90)); st.scale.setScalar(300 - 165*ease.in(t)); st.material.opacity = 0.7*t; });
+      roundSpark(box.x, sy + 20, 0xd9a6ff, 12, 90);
+      embers(box.x, sy + 40, 28);
       await wait(0.25);
       hud(p, { discard:1 });
       const dr = g && g.querySelector('.g-disc'); if(dr){ dr.classList.remove('fx-gain'); void dr.offsetWidth; dr.classList.add('fx-gain'); }
-      await K.uiTween(0.5, t => { st.material.opacity = 1 - t; st.scale.setScalar(90 + 25*t); });
+      await K.uiTween(0.5, t => { st.material.opacity = 0.7*(1 - t); st.scale.setScalar(135 + 38*t); });
       K.uiDispose(st);
     } else {
       hud(p, { discard:1 });
