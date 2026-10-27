@@ -731,16 +731,6 @@ uiFx('triggerSunDrawCardAppear', async (p) => {
   K.uiSpark(b.x, b.y, 0xffe7a0, 12);
   K.uiDispose(c);
 });
-// ♣: 星の軌跡が降り、カードが届く
-K.override('triggerClubDrawAppear', () => function(p){
-  return Promise.all([K.clubFx(p), K.uiFx(async () => {
-    await wait(0.6);
-    const a = K.casterPx(p), b = K.panelPx(p, 'hand');
-    const c = K.card3D(null, false, 0.9);
-    await K.flyCard(c, a, b, 0.45, 60, 1);
-    K.uiSpark(b.x, b.y, 0x4aa8ff, 12); K.uiDispose(c);
-  })]);
-});
 /* ♠: スートの紋章と斬撃(assets/textures/spade_emblem.png / spade_slash.png)
    ① 予兆: 術者の足元に、スペードの紋章が床に寝た向きで灯り、ゆっくり回る
    ② 本体: 斬撃が術者から飛び、相手の頭上のプレートを横に切り裂く。プレートが揺れ、手札が 1 欠ける
@@ -851,6 +841,120 @@ K.override('triggerSpadeSlashHand', () => function(p){
   });
   return Promise.all([omen, strike]).then(() => { hud(p, null); });
 });
+/* ♣: クラブの3枚の葉で星座を組む(assets/textures/club_emblem.png。Riku さんの案)
+   ① 予兆: 頭上(プレートの上)に、クラブの形の星座が薄く浮かぶ(星はまだ暗い)
+   ② 本体: 捨て札から山札へカードが飛ぶたびに、通り道で星座の葉が 1 つ灯る。3 枚で 3 つの葉がそろうと、星座が完成して光る
+   ③ 余韻: 完成した星座が 1 枚のカードに変わり、プレートの手札へ降りる(手札 +1)
+   「3 枚ごとに 1 枚」がそのまま見た目になる。2 つ目以降の星座は速く灯す。端数(1〜2 枚)は灯りかけの葉がふっと消える */
+const clubTex = (window.BIND_TEX || {}).club_emblem ? new THREE.TextureLoader().load(window.BIND_TEX.club_emblem) : null;
+const CLUB_STARS = [[497, 199], [333, 474], [667, 474]].map(([x, y]) => [x/1024 - 0.5, 0.5 - y/1024]); // 上・左・右の星(絵の中心からの割合)
+const CLUB_SIZE = 135;
+const clubQ = []; // 完成して手札へ降りるのを待つ星座(クラブのドローが 1 つずつ使う)
+let clubHideT = 0;
+const hudOf = () => (window.B3 && window.B3.hudFx) ? window.B3.hudFx : () => {};
+function plateBox(p){
+  const g = gaugeEl(p), r = g && g.getBoundingClientRect();
+  if(r && r.width) return { x:r.left + r.width/2, y:r.top + r.height/2, w:r.width, h:r.height };
+  const c = K.casterPx(p); return { x:c.x, y:c.y - 60, w:90, h:40 };
+}
+function clubPlate(p, on){
+  clearTimeout(clubHideT);
+  if(on) hudOf()(p, { show:true });
+  else clubHideT = setTimeout(() => hudOf()(p, { show:false }), 900);
+}
+function makeConstellation(x, y){
+  const g = new THREE.Group(); g.position.copy(K.P(x, y, 70)); K.ui.sc.add(g);
+  // 後ろの生物と重なっても星座が読めるように、うっすら暗い円を敷く。線は加算にせず、そのまま重ねる(白く飛ばない)
+  const shade = new THREE.Mesh(new THREE.PlaneGeometry(CLUB_SIZE*1.15, CLUB_SIZE*1.15), new THREE.MeshBasicMaterial({ map:emberTexture(), color:0x000000, transparent:true, depthWrite:false, depthTest:false, opacity:0 }));
+  shade.position.z = -1; g.add(shade);
+  const img = new THREE.Mesh(new THREE.PlaneGeometry(CLUB_SIZE, CLUB_SIZE), new THREE.MeshBasicMaterial({ map:clubTex, transparent:true, depthWrite:false, depthTest:false, opacity:0 }));
+  img.onBeforeRender = () => { shade.material.opacity = img.material.opacity*0.75; };
+  g.add(img);
+  const stars = CLUB_STARS.map(([sx, sy]) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map:emberTexture(), color:0x9fe8ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, opacity:0 }));
+    m.position.set(sx*CLUB_SIZE, sy*CLUB_SIZE, 1); m.scale.setScalar(1); g.add(m); return m;
+  });
+  return { g, img, shade, stars, lit:0, x, y };
+}
+function disposeCon(c){ if(!c || c.gone) return; c.gone = true; clearTimeout(c.timer); K.uiDispose(c.g); }
+// 葉(星)を 1 つ灯す
+function lightLeaf(c, k, dur){
+  const s = c.stars[k], sx = c.x + CLUB_STARS[k][0]*CLUB_SIZE, sy = c.y - CLUB_STARS[k][1]*CLUB_SIZE;
+  roundSpark(sx, sy, 0x9fe8ff, 8, 70);
+  c.lit = k + 1;
+  return K.uiTween(dur, t => { s.material.opacity = Math.min(1, t*2); s.scale.setScalar(8 + 22*ease.back(t)); c.img.material.opacity = 0.3 + 0.12*(k + t); });
+}
+K.override('triggerClubGrowthVanish', () => function(p, selected){
+  return K.uiFx(async () => {
+    const n = (selected && selected.length) || 0;
+    if(!n || !clubTex) return;
+    clubQ.splice(0).forEach(c => { disposeCon(c); K.uiEnd(); }); // 前の効果の残り(山札が尽きて降りなかった星座)
+    clubPlate(p, true);
+    await wait(0.3);
+    const pb = plateBox(p), cx = pb.x, cy = pb.y - pb.h/2 - CLUB_SIZE/2 - 14;
+    const deck = deckPx();
+    let con = null, done = 0;
+    for(let i = 0; i < n; i++){
+      const leaf = i % 3, fast = i >= 3;
+      if(leaf === 0){
+        con = makeConstellation(cx + done*24, cy - done*10);
+        await K.uiTween(fast ? 0.15 : 0.35, t => { con.img.material.opacity = 0.3*t; });
+      }
+      // 捨て札から山札へ。途中で星座の葉が灯る
+      const a = K.panelPx(p, 'discard');
+      hudOf()(p, { discard: -(i + 1) });
+      const card = K.card3D(selected[i], true, 0.8); card.position.copy(K.P(a.x, a.y, 60));
+      const dur = fast ? 0.32 : 0.5;
+      let lit = false;
+      await K.uiTween(dur, t => {
+        const k = ease.inOut(t), q = K.bez(a, deck, 120, k);
+        card.position.copy(K.P(q.x, q.y, 60)); card.rotation.set(Math.sin(Math.PI*t)*0.5, Math.PI*2*k, 0);
+        if(!lit && t > 0.45){ lit = true; lightLeaf(con, leaf, fast ? 0.2 : 0.3); }
+      });
+      K.uiDispose(card);
+      roundSpark(deck.x, deck.y, 0x4aa8ff, 5, 70);
+      if(leaf === 2){
+        // 3 つの葉がそろった: 星座が完成して光る
+        roundSpark(con.x, con.y, 0xcff4ff, 18, 130);
+        await K.uiTween(fast ? 0.2 : 0.35, t => { con.img.material.opacity = 0.66 + 0.34*t; con.g.scale.setScalar(1 + 0.15*Math.sin(Math.PI*t)); });
+        con.timer = setTimeout(() => { const k = clubQ.indexOf(con); if(k >= 0){ clubQ.splice(k, 1); disposeCon(con); K.uiEnd(); } }, 8000);
+        clubQ.push(con); K.uiBegin(); // 手札へ降りるまで画面に残す
+        con = null; done++;
+      }
+    }
+    // 端数: 灯りかけの葉がふっと消える(足りなかった)
+    if(con){ const c = con; await K.uiTween(0.4, t => { c.img.material.opacity *= 0.9; c.stars.forEach(s => s.material.opacity *= 0.85); c.g.scale.setScalar(1 - 0.1*t); }); disposeCon(c); }
+    hudOf()(p, { discard:0 }); // この直後に元のゲームが捨て札を山札へ移す
+    if(!clubQ.length) clubPlate(p, false);
+  });
+});
+K.override('triggerClubDrawAppear', () => function(p){
+  return K.uiFx(async () => {
+    clubPlate(p, true);
+    const con = clubQ.shift();
+    const b = K.panelPx(p, 'hand');
+    const card = K.card3D(null, false, 0.9);
+    if(con){
+      clearTimeout(con.timer);
+      // 星座が 1 枚のカードに変わる
+      card.position.copy(K.P(con.x, con.y, 75)); card.scale.setScalar(0.01);
+      await K.uiTween(0.3, t => { con.img.material.opacity = 1 - t; con.stars.forEach(s => s.material.opacity = 1 - t); con.g.scale.setScalar(1 - 0.5*t); card.scale.setScalar(Math.max(0.01, ease.back(t))); });
+      roundSpark(con.x, con.y, 0x9fe8ff, 12, 100);
+      disposeCon(con); K.uiEnd();
+      await K.flyCard(card, { x:con.x, y:con.y }, b, 0.4, 20, 0);
+    } else {
+      const a = deckPx(); card.position.copy(K.P(a.x, a.y, 60));
+      await K.flyCard(card, a, b, 0.45, 60, 1);
+    }
+    roundSpark(b.x, b.y, 0x4aa8ff, 12, 110);
+    K.uiDispose(card);
+    hudOf()(p, { hand:1 });
+    const hr = gaugeEl(p) && gaugeEl(p).querySelector('.g-hand'); if(hr){ hr.classList.remove('fx-gain'); void hr.offsetWidth; hr.classList.add('fx-gain'); }
+    await wait(0.15);
+    hudOf()(p, { hand:0 }); // この直後に元のゲームが手札に加える
+    clubPlate(p, false);
+  });
+});
 // JOKER(手札): 大鎌が相手のゲージを切り裂く
 uiFx('triggerScytheSlashHand', async (p) => {
   const b = K.panelPx(p, 'hand'), white = jokerKind() === 'JW';
@@ -950,7 +1054,6 @@ function discardToDeck(color){
   };
 }
 uiFx('triggerDiscardSpinVanish', discardToDeck(0xffb030));
-uiFx('triggerClubGrowthVanish', discardToDeck(0x6ad06a));
 // 4: 捨て札が裏返って浮かび、新しいフロアへ
 uiFx('triggerDiscardFlipRise', async (p, cardIdx, before) => {
   const a = K.panelPx(p, 'discard'), b = K.casterPx(p);
