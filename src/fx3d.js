@@ -853,7 +853,7 @@ const texOf = k => (window.BIND_TEX || {})[k] ? new THREE.TextureLoader().load(w
 const pts = list => list.map(([x, y]) => [x/1024 - 0.5, 0.5 - y/1024]); // 絵(1024px)の中の位置 → 中心からの割合
 const SETS = {
   C: { tex:texOf('club_emblem'), stars:pts([[497, 199], [333, 474], [667, 474]]), size:135, glow:0x9fe8ff, star:22, deck:0x4aa8ff, q:[] },    // 上・左・右の星
-  D: { tex:texOf('diamond_emblem'), stars:pts([[512, 411], [476, 451], [549, 451]]), size:150, glow:0xfff1b8, star:12, deck:0xffc040, q:[] }, // 上・左・右の宝石
+  D: { tex:texOf('diamond_emblem'), stars:pts([[524, 418], [487, 459], [562, 459]]), size:150, glow:0xfff1b8, star:12, deck:0xffc040, q:[] }, // 上・左・右の宝石
 };
 let plateHideT = 0;
 const hudOf = () => (window.B3 && window.B3.hudFx) ? window.B3.hudFx : () => {};
