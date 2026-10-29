@@ -881,7 +881,14 @@ function makeConstellation(S, x, y){
   });
   return { S, g, img, shade, stars, lit:0, x, y };
 }
-function disposeCon(c){ if(!c || c.gone) return; c.gone = true; clearTimeout(c.timer); K.uiDispose(c.g); }
+function disposeCon(c){ if(!c || c.gone) return; c.gone = true; K.uiDispose(c.g); }
+// スート効果が終わったら、使われなかったもの(山札が尽きた・空きマスが無かった)を片付ける。
+// 時間で消すと、空きマスを選んでいる間に次の分まで消えてしまうので、効果の終わりで消す
+function clearSets(){ Object.values(SETS).forEach(S => S.q.splice(0).forEach(c => { disposeCon(c); K.uiEnd(); })); }
+{
+  const prev = window.triggerSuitEffect;
+  if(typeof prev === 'function') window.triggerSuitEffect = async function(){ try{ return await prev.apply(this, arguments); } finally{ clearSets(); } };
+}
 // 灯り(星 / 宝石)を 1 つ灯す
 function lightLeaf(c, k, dur){
   const S = c.S, s = c.stars[k], sx = c.x + S.stars[k][0]*S.size, sy = c.y - S.stars[k][1]*S.size;
@@ -894,7 +901,7 @@ function returnFx(S, p, selected){
   return K.uiFx(async () => {
     const n = (selected && selected.length) || 0;
     if(!n || !S.tex) return;
-    S.q.splice(0).forEach(c => { disposeCon(c); K.uiEnd(); }); // 前の効果の残り(使われなかったもの)
+    S.q.splice(0).forEach(c => { disposeCon(c); K.uiEnd(); }); // 念のため: 前の効果の残り
     suitPlate(p, true);
     await wait(0.3);
     const pb = plateBox(p), cx = pb.x, cy = pb.y - pb.h/2 - S.size/2 - 14;
@@ -923,7 +930,6 @@ function returnFx(S, p, selected){
         roundSpark(con.x, con.y, S.glow, 18, 130);
         await K.uiTween(fast ? 0.2 : 0.35, t => { con.img.material.opacity = 0.66 + 0.34*t; con.g.scale.setScalar(1 + 0.15*Math.sin(Math.PI*t)); });
         const c = con;
-        c.timer = setTimeout(() => { const k = S.q.indexOf(c); if(k >= 0){ S.q.splice(k, 1); disposeCon(c); K.uiEnd(); } }, 8000);
         S.q.push(c); K.uiBegin(); // 使われるまで画面に残す
         con = null; done++;
       }
@@ -944,7 +950,6 @@ K.override('triggerClubDrawAppear', () => function(p){
     const b = K.panelPx(p, 'hand');
     const card = K.card3D(null, false, 0.9);
     if(con){
-      clearTimeout(con.timer);
       card.position.copy(K.P(con.x, con.y, 75)); card.scale.setScalar(0.01);
       await K.uiTween(0.3, t => { con.img.material.opacity = 1 - t; con.stars.forEach(s => s.material.opacity = 1 - t); con.g.scale.setScalar(1 - 0.5*t); card.scale.setScalar(Math.max(0.01, ease.back(t))); });
       roundSpark(con.x, con.y, 0x9fe8ff, 12, 100);
@@ -972,8 +977,7 @@ K.override('triggerDiamondCircleSpawn', () => function(slot){
     if(!settings.effectAnim){ if(con){ disposeCon(con); K.uiEnd(); } resolve(); return; }
     (async () => {
       if(con){
-        clearTimeout(con.timer);
-        // 紋章が縮みながら光の結晶になって、マスの上へ降りる(画面の層)
+          // 紋章が縮みながら光の結晶になって、マスの上へ降りる(画面の層)
         const to = K.screenOf(slot, 0.15), from = { x:con.x, y:con.y };
         await K.uiTween(0.55, t => {
           const k = ease.inOut(t), q = K.bez(from, to, 40, k);
