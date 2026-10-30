@@ -1125,19 +1125,79 @@ function itemsOf(a){ return [...a.gold, ...a.white, ...a.feathers]; }
   requestAnimationFrame(aceTick);
   try{ aceStep(); }catch(e){ console.error('[Bind3D] A の演出', e); }
 })();
+// いま選んでいる組だけを主役にする: 主役の組は大きく脈打ち、紋章の後ろの光もその色に。まだの組は暗く小さく紋章の後ろへ
+const ACE_COL = { gold:0xffc24a, white:0xeef6ff, feather:0xfff1d0 };
+const ACE_TASK = { 'ace-add-slot':'gold', 'ace-hide-buff':'white' };
+function acePhase(a, ph){
+  if(!a || a.phase === ph) return;
+  const from = a.phase; a.phase = ph; a.turnT = 0;
+  // 次の段階へ: 前の組の残りは散る
+  if(ph === 'white' && from === 'gold') scatter(a.gold);
+  if(ph === 'feather'){ scatter(a.gold); scatter(a.white); }
+}
+// 主役の組の先頭の光から、選べるマスへ伸ばす光の糸と、マスの縁取り
+function clearThreads(a){ (a.threads || []).forEach(o => K.disposeObj(o)); a.threads = []; a.threadKey = null; }
+function buildThreads(a, cells, color){
+  clearThreads(a);
+  const half = K.STEP*0.44;
+  cells.forEach(i => {
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(0, 0, 0), V(0, 0, 0)]), new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.55, blending:K.ADD, depthWrite:false, depthTest:false }));
+    line.renderOrder = 20; line.userData.cell = i; K.scene.add(line); a.threads.push(line);
+    const y = K.topY(i) + 0.03, x = K.tileX(i), z = K.tileZ(i);
+    const box = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([V(x - half, y, z - half), V(x + half, y, z - half), V(x + half, y, z + half), V(x - half, y, z + half)]), new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.9, blending:K.ADD, depthWrite:false }));
+    box.renderOrder = 20; box.userData.box = true; K.scene.add(box); a.threads.push(box);
+  });
+}
 function aceStep(){
   const a = ace; if(!a) return;
   const t = K.now ? K.now() : performance.now()/1000;
+  const dt = 1/60;
   const c = aceCenter(a.p); if(c) a.c.copy(c);
   _r.setFromMatrixColumn(K.camera.matrixWorld, 0); _u.setFromMatrixColumn(K.camera.matrixWorld, 1);
   const base = a.c.clone().add(V(0, a.rise, 0));
-  if(a.emblem && !a.emblemFree){ a.emblem.position.copy(base); a.emblem.material.rotation = t*0.15; }
+  // いま選んでいるもの(元のゲームの選択)から段階を決める
+  const st = state, task = st && st.task;
+  const tph = task && ACE_TASK[task.tag];
+  if(tph) acePhase(a, tph);
+  a.turnT = Math.min(1, (a.turnT == null ? 1 : a.turnT) + dt*1.6);
+  // 段階が変わった瞬間、紋章が少し回る
+  const turn = Math.sin(Math.PI*a.turnT)*0.6;
+  if(a.emblem && !a.emblemFree){ a.emblem.position.copy(base); a.emblem.material.rotation = t*0.15 + turn; }
+  const col = ACE_COL[a.phase] || 0xffe7a0;
+  if(a.halo){ a.halo.position.copy(base); a.halo.material.color.lerp(new THREE.Color(col), 0.08); a.halo.material.opacity = (a.emblemFree ? 0 : 0.32 + Math.sin(t*2.4)*0.1)*Math.min(1, a.emblem ? a.emblem.material.opacity : 0); }
   itemsOf(a).forEach((it, n) => {
     if(!it.idle) return;
-    const bob = Math.sin(t*3 + n)*0.02;
-    it.s.position.copy(base).addScaledVector(_r, it.slot.ox).addScaledVector(_u, it.slot.oy + bob);
-    if(it.core){ it.core.position.copy(it.s.position); it.core.material.rotation = t*1.5 + n; it.core.scale.setScalar(0.12 + Math.sin(t*5 + n)*0.03); }
+    const on = it.kind === a.phase;
+    it.emph = (it.emph == null ? 0 : it.emph) + ((on ? 1 : 0) - (it.emph || 0))*0.1;
+    const e = it.emph, pulse = on ? Math.sin(t*2.6)*0.5 + 0.5 : 0;
+    const bob = Math.sin(t*3 + n)*0.02, pull = 0.72 + 0.28*e; // まだの組は紋章に寄せる(後ろに下がる)
+    it.s.position.copy(base).addScaledVector(_r, it.slot.ox*pull).addScaledVector(_u, it.slot.oy*pull + bob);
+    it.s.renderOrder = e > 0.5 ? 24 : 21; // 主役は紋章の手前、まだの組は紋章の後ろ
+    const dim = 0.3 + 0.7*e;
+    if(it.kind === 'feather'){
+      it.s.scale.set(0.12*(0.7 + 0.45*e + 0.06*pulse), 0.26*(0.7 + 0.45*e + 0.06*pulse), 1);
+      it.s.material.color.setScalar(dim);
+    } else {
+      it.s.scale.setScalar(0.2*(0.6 + 0.6*e + 0.25*pulse));
+      it.s.material.color.set(ACE_COL[it.kind]).multiplyScalar(dim);
+    }
+    if(it.core){ it.core.position.copy(it.s.position); it.core.renderOrder = it.s.renderOrder + 1; it.core.material.rotation = t*1.5 + n; it.core.scale.setScalar((0.12 + Math.sin(t*5 + n)*0.03)*(0.5 + 0.7*e)); it.core.material.opacity = Math.min(it.s.material.opacity, 0.25 + 0.75*e); }
   });
+  // 光の糸: 主役の組の先頭の光 → 選べるマス(マスは珠の色で縁取り)
+  const lead = (a.phase === 'gold' ? a.gold : a.phase === 'white' ? a.white : [])[0];
+  const cells = [];
+  if(tph && lead && lead.idle && task.kind === 'floor' && typeof task.filter === 'function') for(let i = 0; i < 20; i++){ try{ if(task.filter(i)) cells.push(i); }catch(e){} }
+  const key = cells.length ? tph + ':' + cells.join(',') : null;
+  if(key !== a.threadKey){ if(key) buildThreads(a, cells, ACE_COL[tph]); else clearThreads(a); a.threadKey = key; }
+  if(a.threads && a.threads.length && lead){
+    const from = lead.s.position;
+    a.threads.forEach(o => {
+      if(o.userData.box){ o.material.opacity = 0.55 + 0.35*Math.sin(t*3); return; }
+      const i = o.userData.cell, to = V(K.tileX(i), K.topY(i) + 0.05, K.tileZ(i));
+      const arr = o.geometry.attributes.position.array; arr[0] = from.x; arr[1] = from.y; arr[2] = from.z; arr[3] = to.x; arr[4] = to.y; arr[5] = to.z;
+      o.geometry.attributes.position.needsUpdate = true; o.material.opacity = 0.35 + 0.2*Math.sin(t*4 + i);
+    });
+  }
 }
 function disposeItem(it){ it.idle = false; [it.s, it.core].forEach(o => { if(o) K.disposeObj(o); }); }
 // 残りの光が散って消える(足りなかった)
@@ -1172,6 +1232,8 @@ function aceBegin(p, df, dh){
   const a = ace = { p, c, rise:-0.5, gold:[], white:[], feathers:[], df, dh };
   a.emblem = aceSprite(ACE.emblem, 0xffffff, ACE_S, ACE_S, false);
   a.glow = aceSprite(K.softTex || K.starTex, 0xffe7a0, ACE_S*1.6, ACE_S*1.6, true);
+  a.halo = aceSprite(K.softTex || K.starTex, 0xffe7a0, ACE_S*1.9, ACE_S*1.9, true); a.halo.renderOrder = 20; // 紋章の後ろの光(主役の組の色に染まる)
+  a.phase = df ? 'gold' : dh ? 'feather' : null; a.threads = [];
   hudOf()(p, { show:true });
   return trackAnimation(res => {
     res = once(res);
@@ -1207,6 +1269,7 @@ function aceFinish(){
       }
       if(a.emblem) K.disposeObj(a.emblem);
       if(a.glow) K.disposeObj(a.glow);
+      if(a.halo) K.disposeObj(a.halo); clearThreads(a);
       if(ace === a) ace = null;
       setTimeout(() => hudOf()(a.p, { show:false }), 600);
       res();
@@ -1251,7 +1314,7 @@ K.override('triggerCardFlip', orig => function(i, revealing){
   return trackAnimation(res => {
     res = once(res);
     (async () => {
-      scatter(ace.gold); // フロア追加はここまで(残りの金の珠は散る)
+      acePhase(ace, 'white'); // フロア追加はここまで(残りの金の珠は散る)
       const c = ctrOf(i, 0.3);
       const it = ace.white.shift();
       if(it){ await flyItem(it, c, 0.45); disposeItem(it); }
@@ -1267,7 +1330,7 @@ K.override('triggerCardFlip', orig => function(i, revealing){
 // ④ ドロー: 羽根が 1 枚ずつ頭上のプレートへ飛び、手札 +1
 K.override('triggerSunDrawCardAppear', orig => function(p){
   if(!ace || !ACE.feather) return orig.apply(this, arguments);
-  scatter(ace.gold); scatter(ace.white); // 盤面の分はここまで
+  acePhase(ace, 'feather'); // 盤面の分はここまで
   const it = ace.feathers.shift();
   return K.uiFx(async () => {
     hudOf()(p, { show:true });
@@ -1297,6 +1360,7 @@ K.override('triggerExtraTurnWhiteout', orig => function(){
     res = once(res);
     (async () => {
       await Promise.all([scatter(a.gold), scatter(a.white), scatter(a.feathers)]);
+      clearThreads(a); if(a.halo){ K.disposeObj(a.halo); a.halo = null; }
       if(ch) ch.sunHold = true;
       a.emblemFree = true; a.shrunk = true;
       const p0 = a.emblem.position.clone();
