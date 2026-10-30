@@ -1137,15 +1137,25 @@ function acePhase(a, ph){
 }
 // 主役の組の先頭の光から、選べるマスへ伸ばす光の糸と、マスの縁取り
 function clearThreads(a){ (a.threads || []).forEach(o => K.disposeObj(o)); a.threads = []; a.threadKey = null; }
+// マスの縁取り(光る四角い枠)
+let frameTex = null;
+function cellFrameTex(){
+  if(frameTex) return frameTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.strokeStyle = '#fff'; g.shadowColor = '#fff'; g.shadowBlur = 10; g.lineWidth = 6; g.strokeRect(10, 10, 108, 108);
+  g.shadowBlur = 0; g.lineWidth = 3; g.strokeRect(10, 10, 108, 108);
+  return (frameTex = new THREE.CanvasTexture(c));
+}
+const BEADS = 12; // 光の糸 = 小さな光の粒の列(線より見やすい)
 function buildThreads(a, cells, color){
   clearThreads(a);
-  const half = K.STEP*0.44;
   cells.forEach(i => {
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(0, 0, 0), V(0, 0, 0)]), new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.55, blending:K.ADD, depthWrite:false, depthTest:false }));
-    line.renderOrder = 20; line.userData.cell = i; K.scene.add(line); a.threads.push(line);
-    const y = K.topY(i) + 0.03, x = K.tileX(i), z = K.tileZ(i);
-    const box = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([V(x - half, y, z - half), V(x + half, y, z - half), V(x + half, y, z + half), V(x - half, y, z + half)]), new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.9, blending:K.ADD, depthWrite:false }));
-    box.renderOrder = 20; box.userData.box = true; K.scene.add(box); a.threads.push(box);
+    const g = new THREE.Group(); g.userData.cell = i;
+    for(let k = 0; k < BEADS; k++){ const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:K.softTex || K.starTex, color, transparent:true, depthWrite:false, depthTest:false, blending:K.ADD, opacity:0.7 })); s.scale.setScalar(0.07); s.renderOrder = 23; g.add(s); }
+    K.scene.add(g); a.threads.push(g);
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(K.STEP*0.94, K.STEP*0.94), new THREE.MeshBasicMaterial({ map:cellFrameTex(), color, transparent:true, depthWrite:false, blending:K.ADD, opacity:0.9 }));
+    f.rotation.x = -Math.PI/2; f.position.set(K.tileX(i), (state.floor[i] ? K.topY(i) : K.TOP_Y - 0.25) + 0.03, K.tileZ(i)); f.renderOrder = 20; f.userData.box = true;
+    K.scene.add(f); a.threads.push(f);
   });
 }
 function aceStep(){
@@ -1178,7 +1188,7 @@ function aceStep(){
       it.s.scale.set(0.12*(0.7 + 0.45*e + 0.06*pulse), 0.26*(0.7 + 0.45*e + 0.06*pulse), 1);
       it.s.material.color.setScalar(dim);
     } else {
-      it.s.scale.setScalar(0.2*(0.6 + 0.6*e + 0.25*pulse));
+      it.s.scale.setScalar(0.2*(0.6 + 1.0*e + 0.3*pulse));
       it.s.material.color.set(ACE_COL[it.kind]).multiplyScalar(dim);
     }
     if(it.core){ it.core.position.copy(it.s.position); it.core.renderOrder = it.s.renderOrder + 1; it.core.material.rotation = t*1.5 + n; it.core.scale.setScalar((0.12 + Math.sin(t*5 + n)*0.03)*(0.5 + 0.7*e)); it.core.material.opacity = Math.min(it.s.material.opacity, 0.25 + 0.75*e); }
@@ -1193,9 +1203,12 @@ function aceStep(){
     const from = lead.s.position;
     a.threads.forEach(o => {
       if(o.userData.box){ o.material.opacity = 0.55 + 0.35*Math.sin(t*3); return; }
-      const i = o.userData.cell, to = V(K.tileX(i), K.topY(i) + 0.05, K.tileZ(i));
-      const arr = o.geometry.attributes.position.array; arr[0] = from.x; arr[1] = from.y; arr[2] = from.z; arr[3] = to.x; arr[4] = to.y; arr[5] = to.z;
-      o.geometry.attributes.position.needsUpdate = true; o.material.opacity = 0.35 + 0.2*Math.sin(t*4 + i);
+      const i = o.userData.cell, to = V(K.tileX(i), (state.floor[i] ? K.topY(i) : K.TOP_Y - 0.25) + 0.08, K.tileZ(i));
+      o.children.forEach((s, k) => {
+        const u = ((k + t*1.2) % BEADS)/BEADS; // 珠からマスへ流れる
+        s.position.copy(from).lerp(to, u); s.position.y += Math.sin(Math.PI*u)*0.35;
+        s.material.opacity = 0.75*Math.sin(Math.PI*u) + 0.15;
+      });
     });
   }
 }
