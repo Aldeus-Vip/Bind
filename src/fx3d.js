@@ -1151,7 +1151,7 @@ function buildThreads(a, cells, color){
   clearThreads(a);
   cells.forEach(i => {
     const g = new THREE.Group(); g.userData.cell = i;
-    for(let k = 0; k < BEADS; k++){ const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:K.softTex || K.starTex, color, transparent:true, depthWrite:false, depthTest:false, blending:K.ADD, opacity:0.7 })); s.scale.setScalar(0.07); s.renderOrder = 23; g.add(s); }
+    for(let k = 0; k < BEADS; k++){ const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:K.softTex || K.starTex, color, transparent:true, depthWrite:false, depthTest:false, blending:K.ADD, opacity:0.7 })); s.scale.setScalar(0.11); s.renderOrder = 23; g.add(s); }
     K.scene.add(g); a.threads.push(g);
     const f = new THREE.Mesh(new THREE.PlaneGeometry(K.STEP*0.94, K.STEP*0.94), new THREE.MeshBasicMaterial({ map:cellFrameTex(), color, transparent:true, depthWrite:false, blending:K.ADD, opacity:0.9 }));
     f.rotation.x = -Math.PI/2; f.position.set(K.tileX(i), (state.floor[i] ? K.topY(i) : K.TOP_Y - 0.25) + 0.03, K.tileZ(i)); f.renderOrder = 20; f.userData.box = true;
@@ -1207,7 +1207,7 @@ function aceStep(){
       o.children.forEach((s, k) => {
         const u = ((k + t*1.2) % BEADS)/BEADS; // 珠からマスへ流れる
         s.position.copy(from).lerp(to, u); s.position.y += Math.sin(Math.PI*u)*0.35;
-        s.material.opacity = 0.75*Math.sin(Math.PI*u) + 0.15;
+        s.material.opacity = 0.95*Math.sin(Math.PI*u) + 0.2;
       });
     });
   }
