@@ -1094,7 +1094,6 @@ K.override('triggerMagmaRiseAndCrack', () => function(cellIndex){
 const ACE = { emblem:texOf('sun_emblem'), beam:texOf('sun_beam'), feather:texOf('feather'), sparkle:texOf('particle_sparkle') };
 const ACE_S = 0.7; // 紋章の大きさ
 let ace = null;
-window.__b3ace = () => ace; // 確認用
 const _r = V(0, 0, 0), _u = V(0, 0, 0);
 function aceCenter(p){
   const ch = chars[p]; if(!ch || !ch.shown) return null;
@@ -1122,12 +1121,9 @@ function makeItem(kind, k){
 }
 const itemPos = it => it.s.position;
 function itemsOf(a){ return [...a.gold, ...a.white, ...a.feathers]; }
-let aceTicks = 0, aceErr = null;
-window.__b3aceDbg = () => ({ aceTicks, aceErr });
 (function aceTick(){
   requestAnimationFrame(aceTick);
-  aceTicks++;
-  try{ aceStep(); }catch(e){ aceErr = String(e && e.stack || e); }
+  try{ aceStep(); }catch(e){ console.error('[Bind3D] A の演出', e); }
 })();
 function aceStep(){
   const a = ace; if(!a) return;

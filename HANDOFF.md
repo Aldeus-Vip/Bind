@@ -563,3 +563,9 @@ Riku さんの手筋: 手札3枚のムーブで A 以外を捨てて2枚にし�
     宝石の位置は 1024px の絵で 上(524,418)・左(487,459)・右(562,459)。
   - ♥: 選ばれたフロアの上でハートの紋章が2回脈打つ → 3回目で床の4つの錠前がはじけ飛ぶ(錠前の絵は seal.png から切り出してスプライトに)
     → 封印の輪が赤く光り、カードが表向きになる。赤い火の粉が上へ昇る(`triggerMagmaRiseAndCrack`)。
+- A の 3D 演出を作り直し(2026-10-30、素材 `sun_emblem.png` / `sun_beam.png` / `feather.png` / `particle_soft.png` / `particle_sparkle.png`。Riku さんの案):
+  術者の頭上に太陽の紋章が昇り、満たした条件の分だけ光が並ぶ(金の珠×3=フロア追加 / 白の珠×3=封印 / 羽根×5=ドロー)。
+  1回使うごとにその光が飛んで効果になる(`fx3d.js` の `effectAce` の差し替え・`triggerSunFloorSpawn` / `triggerCardFlip` / `triggerSunDrawCardAppear`)。
+  途中で終わると残りの光が散る。不発は紋章にひびが入って崩れる。追加ターンは紋章が縮んで頭上の小さな太陽(adapter.js の `sunSp`)になり、追加ターンが終わるまで残る。
+  光の柱は筒をやめ、こちらを向く光の帯。追加ターンの白い光は控えめ。
+- 粒は全演出で丸い光の粒に(`burst` / `uiSpark` は `particle_soft.png` のスプライト。破片 shards も丸い粒)。
