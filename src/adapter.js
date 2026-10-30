@@ -1680,7 +1680,7 @@ function buildVessel(p){
   });
   bolts.visible = false;
   const sunSp = new THREE.Sprite(new THREE.SpriteMaterial({ map:sunTex, transparent:true, depthWrite:false, opacity:0.95 }));
-  sunSp.scale.set(0.75,0.75,1); sunSp.position.set(0,0.75,-0.3); sunSp.visible = false; root.add(sunSp);
+  sunSp.scale.set(0.38,0.38,1); sunSp.renderOrder = 14; sunSp.visible = false; root.add(sunSp);
   root.visible = false;
   scene.add(root);
   const ch = { p, root, ring, badge, badgeKey:null, bolts, boltLines, boltT:0, bindIcon, sparks, sunSp,
@@ -1726,11 +1726,18 @@ const parts = [];
 const partGeo = new THREE.OctahedronGeometry(0.05);
 const shardGeo = new THREE.BoxGeometry(0.16, 0.08, 0.12);
 const puffGeo = new THREE.SphereGeometry(0.06, 8, 6);
+// 光の粒の絵(assets/textures/particle_soft.png)。立方体・八面体の粒の代わりに、丸い光の粒を使う(全演出共通)
+const softTex = (() => { const u = (window.BIND_TEX || {}).particle_soft; return u ? new THREE.TextureLoader().load(u) : null; })();
+function softSprite(color, size, add){
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:softTex || starTex, color, transparent:true, depthWrite:false, blending: add === false ? THREE.NormalBlending : THREE.AdditiveBlending }));
+  s.scale.setScalar(size); s.userData.base = size; return s;
+}
 function burst(pos, color, n, opt){
   opt = opt || {};
   for(let k=0;k<n;k++){
-    const m = new THREE.Mesh(opt.shards ? shardGeo : (opt.puff ? puffGeo : partGeo),
-      opt.shards ? toon(color) : new THREE.MeshBasicMaterial({ color, transparent:true, depthWrite:false }));
+    // 破片(shards)は少し大きめで、加算にしない(石や土の粒に見える)。それ以外は光の粒
+    const m = opt.puff ? new THREE.Mesh(puffGeo, new THREE.MeshBasicMaterial({ color, transparent:true, depthWrite:false }))
+      : softSprite(color, opt.shards ? 0.2 + Math.random()*0.08 : 0.13 + Math.random()*0.07, !opt.shards);
     m.position.copy(pos);
     if(opt.spread) m.position.add(new THREE.Vector3((Math.random()-.5)*opt.spread, Math.random()*opt.spread*0.6, (Math.random()-.5)*opt.spread));
     const a = Math.random()*Math.PI*2, sp = (opt.speed||1)*(1.2 + Math.random()*2.2);
@@ -1738,7 +1745,6 @@ function burst(pos, color, n, opt){
     m.userData = { v:new THREE.Vector3(Math.cos(a)*sp*(opt.flat||1), up*(0.6+Math.random()*0.8), Math.sin(a)*sp*(opt.flat||1)),
       life:0, max:(opt.life||0.7)+Math.random()*0.5, spin:new THREE.Vector3(Math.random()*8, Math.random()*8, 0),
       g: opt.g!=null ? opt.g : (opt.shards ? 9 : 3), grow: opt.grow||0 };
-    if(opt.shards) m.castShadow = true;
     scene.add(m); parts.push(m);
   }
 }
@@ -2254,7 +2260,9 @@ function sync(dt){
     if(bk !== ch.badgeKey){ ch.badgeKey = bk; ch.badge.material.map = badgeTex(p, card, nm); ch.badge.material.needsUpdate = true; }
     ch.badge.visible = !!card;
     ch.bolts.visible = !!pl.bound && ch.shown;
-    ch.sunSp.visible = !!pl.extraTurn && ch.shown;
+    // 追加ターン: 得てから、その追加ターンが終わる(相手の番になる)まで、頭上に小さな太陽(A の演出の間は fx3d が出す: sunHold)
+    if(pl.extraTurn) ch.extraLive = true; else if(st.current !== p || st.gameOver) ch.extraLive = false;
+    ch.sunSp.visible = !!ch.extraLive && ch.shown && !ch.sunHold;
     const isTurn = st.current===p && st.phase!=='setup-personal';
     ch.ring.material.color.set(PCOL[p] || '#888'); // 対戦前に選んだ色 / CPU はグレー
     ch.ring.material.opacity = isTurn ? 0.6 + Math.sin(t*4)*0.3 : 0.25;
@@ -2349,7 +2357,7 @@ function loop(){
     const m = parts[k], u = m.userData; u.life += dt;
     u.v.y -= u.g*dt; m.position.addScaledVector(u.v, dt);
     if(u.damp) u.v.multiplyScalar(0.9);
-    if(u.grow) m.scale.setScalar(1 + u.life*u.grow);
+    if(u.grow) m.scale.setScalar((u.base || 1)*(1 + u.life*u.grow));
     m.rotation.x += u.spin.x*dt; m.rotation.y += u.spin.y*dt;
     if(m.material.transparent) m.material.opacity = Math.max(0, 1 - u.life/u.max);
     if(u.life > u.max){ scene.remove(m); if(m.material!==OUTLINE) m.material.dispose(); parts.splice(k,1); }
@@ -2377,7 +2385,7 @@ function loop(){
     ch.ring.rotation.z = t*1.2;
     ch.badge.position.y = (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + Math.sin(t*2 + ch.phase)*0.03;
     if(ch.bolts.visible) updateBolts(ch, t, dt);
-    if(ch.sunSp.visible) ch.sunSp.material.rotation = t*0.8;
+    if(ch.sunSp.visible){ ch.sunSp.material.rotation = t*0.5; ch.sunSp.position.set(0, (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + 0.42 + Math.sin(t*2)*0.03, 0); ch.sunSp.scale.setScalar(0.38 + Math.sin(t*3)*0.02); }
   });
   motes.rotation.y = t*0.02;
   if(!ctxLost) renderer.render(scene, camera);
@@ -3674,9 +3682,10 @@ function uiEnd(){ if(ui) ui.live = Math.max(0, ui.live-1); }
 const P = (x, y, z) => new THREE.Vector3(x, -y, z || 0);
 function uiSpark(x, y, color, n, speed){
   for(let k=0;k<n;k++){
-    const m = new THREE.Mesh(new THREE.OctahedronGeometry(3 + Math.random()*3), new THREE.MeshBasicMaterial({ color, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    const r = 10 + Math.random()*10; // 丸い光の粒
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(r, r), new THREE.MeshBasicMaterial({ map:softTex || starTex, color, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false }));
     m.position.copy(P(x, y, 50)); const a = Math.random()*Math.PI*2, s = (speed||120)*(0.4 + Math.random());
-    m.userData = { v:new THREE.Vector3(Math.cos(a)*s, Math.sin(a)*s + 40, 0), life:0, max:0.5 + Math.random()*0.4, g:120, spin:6 };
+    m.userData = { v:new THREE.Vector3(Math.cos(a)*s, Math.sin(a)*s + 40, 0), life:0, max:0.5 + Math.random()*0.4, g:120, spin:0 };
     ui.sc.add(m); ui.parts.push(m);
   }
 }
@@ -3927,7 +3936,7 @@ const K = { QUALITY, scene, camera, canvas, renderer, chars, tiles, tween, wait,
   circleTex, starTex, pillarTex, sunTex, ADD, flatPlane, disposeObj, castState, summons, setTop, flipTop, dropTile, riseTile,
   preview, cam, CAM0, setCam, viewInset, boardBox, fitExtra, focus, LITE, ui, uiFx, uiBegin, uiEnd, uiTween, P, uiSpark, card3D, flyCard, uiDispose, bez, casterPx, panelPx, rectCenter,
   conceptArtFor, cardArtFor, refreshPortraits, cardBackURL, toon, fxLayer, AVATARS, hopTo, frozen, strike, hammerFx, whirlFx, tornado, spinTornado,
-  summonCircleFx, spadeFx, spadeTex, clubFx, bugMesh, purpleFlame, sideMat: rockMat, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
+  summonCircleFx, spadeFx, spadeTex, softTex, softSprite, clubFx, bugMesh, purpleFlame, sideMat: rockMat, flipTopAnim: flipTop, OUTLINE, linkGeo, eyeTex: typeof eyeTex!=='undefined' ? eyeTex : null,
   get timeScale(){ return timeScale; }, set timeScale(v){ timeScale = Math.max(0, +v || 0); }, now: () => simT,
   faceTo(p, pos, sec){ const ch = chars[p]; if(!ch || !ch.shown) return; const d = pos.clone().sub(ch.root.position); if(d.lengthSq() < 1e-4) return; ch.faceYaw = Math.atan2(d.x, d.z); ch.faceUntil = performance.now() + (sec||2.5)*1000; } };
 window.B3 = { ui, chars, tiles, layout, sync, K, get enabled(){ return enabled; },
