@@ -573,16 +573,19 @@ fx('triggerWhirlpoolDrain', async (i) => {
   });
   // ④ しぶき: 沈みきった瞬間に水の冠(assets/textures/splash.png)。カメラを向く板を渦の中心に立て、下から縦に伸ばしてすぐ薄れる(0.4 秒)
   vanish(T);
-  const SPL = texOf('splash');
+  // 王冠を真上から見たように: 冠の絵を円錐(上ほど広い筒)に 3 回巻き、外へ広がりながら下から伸びて薄れる
+  const SPL = texOf('splash_ring');
   if(SPL){
-    const w = K.STEP*1.0, h = w*365/720;
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:SPL, transparent:true, depthWrite:false, opacity:1 }));
-    sp.center.set(0.5, 0.1); // 絵の水面(下から 1 割)をマスの中心に合わせる
-    sp.position.copy(c).add(V(0, 0.02, 0)); sp.renderOrder = 22; sp.scale.set(w, 0.001, 1); addMesh(sp);
+    SPL.wrapS = THREE.RepeatWrapping; SPL.repeat.set(3, 1);
+    const R = 0.5*K.STEP*0.9, H = 0.55;
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(R, R*0.45, H, 48, 1, true), new THREE.MeshBasicMaterial({ map:SPL, transparent:true, depthWrite:false, side:THREE.DoubleSide, opacity:1 }));
+    cone.renderOrder = 22; addMesh(cone);
     tween(0.4, t => {
-      sp.scale.set(w*(0.9 + 0.1*t), h*Math.max(0.001, ease.out(Math.min(1, t/0.45))), 1);
-      sp.material.opacity = t < 0.45 ? 1 : 1 - (t - 0.45)/0.55;
-    }).then(() => K.disposeObj(sp));
+      const k = ease.out(Math.min(1, t/0.5));
+      cone.scale.set(0.6 + 0.6*t, Math.max(0.001, k), 0.6 + 0.6*t); // 外へ広がりながら、下から縦に伸びる
+      cone.position.set(c.x, c.y + 0.02 + H*k/2, c.z);
+      cone.material.opacity = t < 0.5 ? 1 : 1 - (t - 0.5)/0.5;
+    }).then(() => K.disposeObj(cone));
   } else {
     for(let k = 0; k < 18; k++){
       const a = k/18*Math.PI*2, r = 0.32*W*K.STEP;
