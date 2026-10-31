@@ -1711,6 +1711,39 @@ uiFx('triggerRedPurpleDiscardArrival', async (p, card) => {
 uiFx('triggerRedPurpleDiscardReturn', async () => {});
 // 9: 捨て札が紫の炎とともに悪魔のもとへ / 終わると炎が消える(カードは山札の上にある)
 uiFx('triggerDiscardPillarReturn', async (p) => { const a = K.casterPx(p); K.uiSpark(a.x, a.y, 0xa35cff, 14); });
+/* 9: 捨て札を操る悪魔(Riku さんの案)
+   ① 選ぶ(今のまま) ② 光の柱の中でカードが表を見せる(今のまま)
+   ③ 山札へ: カードが山札のゲージの上側の端へ飛び、着地する(このあと山札 +1)
+   ④ 連鎖: 着地したカードから、台座の生き物(観客)へ光が走り、生き物が目覚めて効果が発動する */
+function purple(x, y){ roundSpark(x, y, Math.random() < 0.5 ? 0xa35cff : 0xff4ad0, 1, 50); }
+uiFx('triggerDiscardPillarRise', async (p, cardIdx, before) => {
+  const card = before && before[cardIdx];
+  const a = K.panelPx(p, 'discard');
+  const c = K.card3D(card, true, 1.1); c.position.copy(P(a.x, a.y, 60));
+  // ② 浮き上がって表を見せる
+  await K.uiTween(0.5, t => { c.position.copy(P(a.x, a.y - ease.out(t)*60, 60)); c.rotation.y = t*Math.PI*4; if(Math.random() < 0.7) purple(a.x + (Math.random() - .5)*40, a.y - t*60 + 30); });
+  await wait(0.2);
+  // ③ 山札のゲージの上側の端へ飛び、着地
+  // 山札の一番上 = ゲージの伸びている先(.deck-gauge-fill の右端)
+  const e = document.querySelector('.deck-gauge-fill') || document.querySelector('.deck-gauge-track'), r = e && e.getBoundingClientRect();
+  const to = r && r.height ? { x:r.right, y:r.top - 6 } : deckPx();
+  await K.flyCard(c, { x:a.x, y:a.y - 60 }, to, 0.6, 120, 0);
+  await K.uiTween(0.15, t => { c.scale.setScalar(1 - 0.5*t); });
+  roundSpark(to.x, to.y, 0xa35cff, 18, 120);
+  K.uiDispose(c);
+  // ④ 着地したカードから、台座の生き物へ光が走る(生き物が目覚めるのは観客の反応 spectators.js)
+  const sp = card && B.spectators && B.spectators.byKey(card.suit === 'JOKER' ? (String(card.id).endsWith('2') ? 'jw' : 'jb') : card.rank === 1 ? 'beast-A' : 'c' + card.rank);
+  if(sp){
+    const dst = K.boardPx(sp.root.position.clone().add(V(0, 0.4, 0)));
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(26, 26), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color:0xe2c8ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false }));
+    ui.sc.add(glow);
+    await K.uiTween(0.45, t => { const q = K.bez(to, dst, 60, ease.inOut(t)); glow.position.copy(P(q.x, q.y, 80)); if(Math.random() < 0.9) purple(q.x, q.y); });
+    roundSpark(dst.x, dst.y, 0xe2c8ff, 16, 110);
+    K.uiDispose(glow);
+    B.spectators.react(sp);
+  }
+});
+
 // J: 吸収したエネルギーがゲージへ / 終わったら何もしない
 uiFx('triggerBlackMistReturn', async () => {});
 
