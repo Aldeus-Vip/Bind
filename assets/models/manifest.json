@@ -171,5 +171,10 @@
     "file": "fx-whirl.glb",
     "fx": true,
     "_note": "6 の渦潮(エフェクト用)"
+  },
+  "fx-cloud": {
+    "file": "fx-cloud.glb",
+    "fx": true,
+    "_note": "8 の雷雲(エフェクト用)"
   }
 }

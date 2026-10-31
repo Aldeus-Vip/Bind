@@ -1436,6 +1436,140 @@ K.override('triggerExtraTurnWhiteout', orig => function(){
   });
 });
 
+/* =====================================================================
+   8: 雷雲・落雷・バインド(Riku さんの案。雷雲のモデル fx-cloud / 雷の絵 bolt8.jpg)
+   ① 予兆: ♦ などの光が対象へ飛ぶ(共通の演出)
+   ② 雷雲: 対象の真上(高さ 2.2)に雷雲が現れる(0.5 秒、少し行き過ぎて戻る)。ゆっくり回り、中の紫の光が不規則に明滅
+   ③ 落雷: 雷の絵(カメラを向く板、下端が足元)が 3 回落ちる。1 回目の着地で画面が一瞬白く
+   ④ 縛る: 雲が消え、足元の模様が広がり、雷の輪が巻きつく(下のバインドの見た目が出る)
+   ⑤ バインド中: 足元の模様(雷撃フロアの絵)と、腰の高さに上下 2 段の雷の輪が残り、明滅する
+   ⑥ 解除: 輪がはじけて散り、模様が外へ広がりながら消える(0.4 秒)
+   ===================================================================== */
+const BOLT8 = texOf('bolt8');
+const CLOUD_Y = 2.2;
+function cloudModel(){
+  const m = B.cloneModel && B.cloneModel('fx-cloud');
+  if(!m) return null;
+  const mats = [];
+  m.traverse(o => { if(o.isMesh){ o.material = o.material.clone(); o.material.transparent = true; o.material.depthWrite = false; mats.push(o.material); } });
+  const box = new THREE.Box3().setFromObject(m), sz = box.getSize(V(0, 0, 0)), ctr = box.getCenter(V(0, 0, 0));
+  const g = new THREE.Group(), inner = new THREE.Group(); g.add(inner); inner.add(m);
+  m.position.sub(ctr);
+  inner.scale.setScalar(K.STEP*0.9/Math.max(sz.x, sz.z, 1e-6)); // 0.9 マス分
+  g.userData.mats = mats; g.userData.inner = inner;
+  return g;
+}
+function screenFlash(op, sec){
+  const d = document.createElement('div');
+  Object.assign(d.style, { position:'fixed', inset:'0', background:'#fff', opacity:String(op), pointerEvents:'none', zIndex:'170', transition:`opacity ${sec}s linear` });
+  document.body.appendChild(d); requestAnimationFrame(() => { d.style.opacity = '0'; }); setTimeout(() => d.remove(), sec*1000 + 80);
+}
+fx('triggerLightningBoltStrike', async (i) => {
+  const base = ctrOf(i, 0), top = base.y + CLOUD_Y;
+  // ② 雷雲
+  const cloud = cloudModel();
+  const light = new THREE.PointLight(0xb070ff, 0, 3.5, 1.6); light.position.set(base.x, top - 0.05, base.z); K.scene.add(light);
+  let spin = 0, alive = true;
+  const flick = t => 0.6 + 0.4*Math.max(0, Math.sin(t*7.3)*Math.sin(t*2.9 + 1.3)); // 周期の違う 2 つの波で不規則に
+  if(cloud){ cloud.position.set(base.x, top, base.z); cloud.renderOrder = 18; K.scene.add(cloud); cloud.scale.setScalar(0.001); }
+  let lt = 0, boost = 0;
+  (function idle(){ if(!alive) return; requestAnimationFrame(idle); lt += 1/60; spin += Math.PI/12/60; if(cloud) cloud.rotation.y = spin; light.intensity = 1.6*flick(lt) + boost; boost *= 0.85; })();
+  await tween(0.5, t => { if(cloud) cloud.scale.setScalar(Math.max(0.001, ease.back(t))); });
+  // ③ 落雷: 1 回 0.08 秒で出て 0.15 秒で消える。少しずらして 3 回
+  // 板はカメラを向くので、見下ろしている分だけ縦が伸びて見える。カメラの上方向に映る長さ(足元 → 雲の底)に合わせる
+  const camUp = V(0, 0, 0).setFromMatrixColumn(K.camera.matrixWorld, 1);
+  const H = Math.max(0.6, (CLOUD_Y - 0.15)*Math.abs(camUp.y)), Wd = (CLOUD_Y - 0.15)*0.31;
+  const bolt = (dx, bright, flip) => {
+    if(!BOLT8) return Promise.resolve();
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:BOLT8, transparent:true, blending:K.ADD, depthWrite:false, depthTest:false, opacity:bright })); // 生物に隠れない
+    s.center.set(0.5, 0); s.position.set(base.x + dx, base.y, base.z); s.renderOrder = 25; s.scale.set(Wd*(flip ? -1 : 1), 0.001, 1); K.scene.add(s);
+    boost = 4;
+    return tween(0.23, t => {
+      const sec = t*0.23;
+      s.scale.y = Math.max(0.001, H*Math.min(1, sec/0.05)); // 0.05 秒で 0 → 1(下端基準: 雲から地面へ走る)
+      s.material.opacity = sec < 0.08 ? bright : bright*Math.max(0, 1 - (sec - 0.08)/0.15); // 0.08 秒出て、0.15 秒で消える
+    }).then(() => K.disposeObj(s));
+  };
+  const T = K.tiles[i];
+  const hits = [
+    bolt(0, 1.0, false).then(() => {}),
+    wait(0.12).then(() => bolt(0.08, 0.6, true)),
+    wait(0.20).then(() => bolt(-0.05, 1.0, false)),
+  ];
+  await wait(0.05);
+  screenFlash(0.25, 0.12);
+  spark(base.clone().add(V(0, 0.05, 0)), 0xd9b8ff, 18, { up:2.2, speed:0.7 });
+  if(T) T.flash = 1.2;
+  await Promise.all(hits);
+  if(T) T.flash = 0;
+  // ④ 雲が消える(バインドの見た目は、ゲームがバインドを付けた直後に下の仕組みが出す)
+  (async () => {
+    await tween(0.4, t => { if(cloud) cloud.userData.mats.forEach(m => m.opacity = 1 - t); light.intensity *= 0.9; });
+    alive = false; if(cloud) K.disposeObj(cloud); K.scene.remove(light);
+  })();
+});
+
+// バインド中の見た目: 足元の模様と雷の輪(どの理由でバインドされても同じ)
+const FLOOR_BOLT = texOf('lightning_bolt');
+let ringTex = null;
+function boltRingTex(){
+  if(ringTex) return ringTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const arc = (w, col, blur) => {
+    g.strokeStyle = col; g.lineWidth = w; g.shadowColor = '#b070ff'; g.shadowBlur = blur;
+    for(let s = 0; s < 3; s++){
+      g.beginPath();
+      const a0 = s*Math.PI*2/3 + 0.2, a1 = a0 + Math.PI*0.55;
+      for(let a = a0; a <= a1; a += 0.08){ const r = 100 + (Math.random() - .5)*14; const x = 128 + Math.cos(a)*r, y = 128 + Math.sin(a)*r; a === a0 ? g.moveTo(x, y) : g.lineTo(x, y); }
+      g.stroke();
+    }
+  };
+  arc(7, 'rgba(170,110,255,0.9)', 14); arc(2.5, '#ffffff', 6);
+  return (ringTex = new THREE.CanvasTexture(c));
+}
+const binds = [null, null];
+function makeBindFx(ch){
+  const g = new THREE.Group(); K.scene.add(g);
+  const foot = new THREE.Mesh(new THREE.PlaneGeometry(K.STEP*0.7, K.STEP*0.7), new THREE.MeshBasicMaterial({ map:FLOOR_BOLT || K.starTex, transparent:true, blending:K.ADD, depthWrite:false, opacity:0 }));
+  foot.rotation.x = -Math.PI/2; foot.renderOrder = 7; g.add(foot);
+  const rings = [0, 1].map(k => { const r = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map:boltRingTex(), transparent:true, blending:K.ADD, depthWrite:false, side:THREE.DoubleSide, opacity:0 })); r.rotation.x = -Math.PI/2; r.renderOrder = 19; g.add(r); return r; });
+  return { g, foot, rings, t:0, out:-1 };
+}
+(function bindLoop(){
+  requestAnimationFrame(bindLoop);
+  const st = typeof state !== 'undefined' ? state : null;
+  const dt = 1/60, t = K.now ? K.now() : performance.now()/1000;
+  [0, 1].forEach(p => {
+    const ch = chars[p], pl = st && st.players && st.players[p];
+    const on = !!(pl && pl.bound && !st.gameOver && ch && ch.shown && isOn());
+    let b = binds[p];
+    if(!on && b && b.out < 0){
+      if(!isOn() || !ch || !ch.shown){ K.disposeObj(b.g); binds[p] = null; if(ch) ch.ringBind = false; return; }
+      b.out = 0; // ⑥ 解除
+      b.rings.forEach(r => spark(r.getWorldPosition(V(0, 0, 0)), 0xd9b8ff, 10, { up:1.2, speed:0.8, life:0.5 }));
+    }
+    if(on && !b){ b = binds[p] = makeBindFx(ch); ch.ringBind = true; } // ④ 縛る
+    if(!b) return;
+    b.t += dt;
+    const base = ch.root.position, h = ch.av ? ch.av.badgeY : 1.1;
+    b.g.position.set(base.x, 0, base.z);
+    const fy = (ch.idx != null ? K.topY(ch.idx) : base.y) + 0.025;
+    b.foot.position.y = fy;
+    const flick = 0.75 + 0.25*Math.sin(t*6.1)*Math.sin(t*2.3 + 0.7); // 明るさ 0.5〜1.0
+    if(b.out < 0){
+      const k = ease.out(Math.min(1, b.t/0.45));
+      b.foot.scale.setScalar(0.2 + 0.8*k); b.foot.material.opacity = flick*Math.min(1, b.t/0.3);
+      b.rings.forEach((r, j) => { r.position.y = fy + h*(j ? 0.55 : 0.35); r.scale.setScalar(1.8 - 0.8*k); r.material.opacity = Math.min(1, b.t/0.3)*(0.75 + 0.25*Math.sin(t*9 + j*2)); r.rotation.z = (j ? -1 : 1)*t*1.2; });
+    } else {
+      b.out += dt; const k = Math.min(1, b.out/0.4);
+      b.foot.scale.setScalar(1 + 0.8*k); b.foot.material.opacity = flick*(1 - k);
+      b.rings.forEach((r, j) => { r.scale.setScalar(1 + 1.2*k); r.material.opacity = 1 - k; r.rotation.z += (j ? -1 : 1)*0.2; });
+      if(k >= 1){ K.disposeObj(b.g); binds[p] = null; ch.ringBind = false; }
+    }
+  });
+})();
+
 // JOKER(手札): 大鎌が相手のゲージを切り裂く
 uiFx('triggerScytheSlashHand', async (p) => {
   const b = K.panelPx(p, 'hand'), white = jokerKind() === 'JW';

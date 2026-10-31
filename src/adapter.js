@@ -2308,7 +2308,8 @@ function updateBolts(ch, t, dt){
     const k = Math.max(0, u.life/u.max);
     sp.material.opacity = k; sp.scale.setScalar(0.05 + 0.04*k);
   });
-  // 縁を走る小さな稲妻(ときどき)
+  // 縁を走る小さな稲妻(ときどき)。足元の模様と雷の輪(fx3d.js)が出ている間は出さない
+  if(ch.ringBind){ ch.boltLines.forEach(l => l.material.opacity = 0); return; }
   ch.boltT -= 1;
   if(ch.boltT > 0) return;
   ch.boltT = 3 + Math.floor(Math.random()*4);
