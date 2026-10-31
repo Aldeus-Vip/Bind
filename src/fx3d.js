@@ -1406,19 +1406,52 @@ uiFx('triggerScytheSlashHand', async (p) => {
 });
 
 // 5: 大蛇(5のモデル)が相手のゲージまで伸び、カードを咥えて持ち帰る
+/* 5: 術者の蛇(5のモデル)が相手のプレートまで伸び、カードを咥えて持ち帰る
+   ・蛇の縁に紫の光(術者のパーソナルの蛇と同じ紫) ・行きと帰りの道筋に紫の煙の軌跡を残す
+   ・咥えたカード(裏向き、×の錠前)は大きめで、かすかに光らせる
+   ♠(斬撃で切り落とし、相手の捨て札へ)と違い、「相手から自分へ戻ってくる線」が見えるようにする */
+const C5 = 0xa35cff;
+function smokeAt(x, y, n){
+  for(let k = 0; k < (n || 1); k++){
+    const r = 16 + Math.random()*14;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(r, r), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color: Math.random() < 0.75 ? C5 : 0xd9b8ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, opacity:0.7 }));
+    m.position.copy(P(x + (Math.random() - .5)*10, y + (Math.random() - .5)*10, 40));
+    m.userData = { v:V((Math.random() - .5)*8, 6 + Math.random()*8, 0), life:0, max:1.0 + Math.random()*0.5, g:0, spin:0 };
+    ui.sc.add(m); ui.parts.push(m);
+  }
+}
 uiFx('triggerGreenVortexSteal', async (targetIdx, handIdx, receiverIdx) => {
   const a = K.casterPx(receiverIdx), b = K.panelPx(targetIdx, 'hand'), home = K.panelPx(receiverIdx, 'hand');
   const snake = uiModel('c5', 170);
+  if(snake){
+    // 縁を紫に光らせる(夜空に溶けないように)
+    snake.traverse(o => { if(o.isMesh && o.material){ o.material.emissive = new THREE.Color(0x3a1466); o.material.color.multiplyScalar(1.15); } });
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(230, 150), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color:C5, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, opacity:0.45 }));
+    halo.position.z = -40; snake.add(halo); halo.scale.setScalar(1/snake.scale.x);
+  }
   const path = (t, f, to) => { const q = K.bez(f, to, 70, t); return { x: q.x, y: q.y + Math.sin(t*14)*8*(1 - t) }; };
+  let lastT = -1;
+  const trail = q => { smokeAt(q.x, q.y, 2); };
   if(snake){
     faceDir(snake, a, b, true);
-    await K.uiTween(0.55, t => { const q = path(ease.out(t), a, b); snake.position.copy(P(q.x, q.y, 50)); snake.rotation.z = Math.sin(t*16)*0.2; });
+    await K.uiTween(0.55, t => { const q = path(ease.out(t), a, b); snake.position.copy(P(q.x, q.y, 50)); snake.rotation.z = Math.sin(t*16)*0.2; if(t - lastT > 0.04){ lastT = t; trail(q); } });
   }
-  K.uiSpark(b.x, b.y, 0x8fffb0, 16);
-  const card = K.card3D(null, false, 0.9);
+  roundSpark(b.x, b.y, C5, 16, 120);
+  // 咥えたカード: 大きめ・裏向き(×の錠前が見える)・かすかに光る
+  const card = K.card3D(null, false, 1.35);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(130, 150), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color:0xd9b8ff, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, opacity:0.5 }));
+  ui.sc.add(glow);
   if(snake) faceDir(snake, b, home, true);
-  await K.uiTween(0.6, t => { const q = path(ease.inOut(t), b, home); if(snake){ snake.position.copy(P(q.x, q.y, 50)); snake.rotation.z = Math.sin(t*16)*0.2; } card.position.copy(P(q.x, q.y + 26, 70)); card.rotation.z = Math.sin(t*20)*0.15; });
-  K.uiSpark(home.x, home.y, 0x8fffb0, 14);
+  lastT = -1;
+  await K.uiTween(0.7, t => {
+    const q = path(ease.inOut(t), b, home);
+    if(snake){ snake.position.copy(P(q.x, q.y, 50)); snake.rotation.z = Math.sin(t*16)*0.2; }
+    card.position.copy(P(q.x, q.y + 30, 70)); card.rotation.set(0, 0, Math.sin(t*20)*0.12);
+    glow.position.copy(P(q.x, q.y + 30, 65)); glow.material.opacity = 0.35 + 0.2*Math.sin(t*18);
+    if(t - lastT > 0.04){ lastT = t; trail(q); }
+  });
+  roundSpark(home.x, home.y, C5, 14, 110);
+  K.uiDispose(glow);
   if(snake) await K.uiTween(0.25, t => snake.scale.multiplyScalar(0.9));
   if(snake) K.uiDispose(snake); K.uiDispose(card);
 });
@@ -1559,6 +1592,9 @@ function projectile(p, target, eff){
   let key = eff ? eff.key : 'H';
   if(key === 'JOKER') key = 'JOKER';
   const spec = Object.assign({}, PROJ[key] || PROJ[1]);
+  // 数字の効果は、その札(パーソナル)のスートの色に染める(5♠なら紫)。形は数字ごとのまま
+  const pc = state.players[p] && state.players[p].personalCard;
+  if(typeof key === 'number' && pc && pc.suit !== 'JOKER' && K.SUIT_THEME[pc.suit]) spec.c = new THREE.Color(K.SUIT_THEME[pc.suit].glow).getHex();
   if(key === 'JOKER' && jokerKind() === 'JW') spec.c = 0xeaffff;
   const g = projMesh(spec); K.scene.add(g); g.position.copy(from);
   if(window.BindAudio) BindAudio.play('shoot', key);
