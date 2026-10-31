@@ -1667,6 +1667,9 @@ function buildVessel(p){
   badge.scale.set(0.28, 0.39, 1); badge.position.y = 1.1; badge.renderOrder = 10; root.add(badge);
   // バインド中: 体の中央の雷の印 + 火花 + 縁を走る小さな稲妻(他の生物の演出と重ならないよう体の中だけ)
   const bolts = new THREE.Group(); root.add(bolts);
+  // 胸の雷の印の後ろに暗い円の座布団(生物の体と重なっても読める)
+  const bindBack = new THREE.Sprite(new THREE.SpriteMaterial({ map:canvasTex(64, 64, g => { const r = g.createRadialGradient(32,32,0,32,32,32); r.addColorStop(0,'rgba(8,6,18,0.9)'); r.addColorStop(0.7,'rgba(8,6,18,0.75)'); r.addColorStop(1,'rgba(8,6,18,0)'); g.fillStyle = r; g.fillRect(0,0,64,64); }), transparent:true, depthTest:false, depthWrite:false }));
+  bindBack.scale.set(0.44, 0.44, 1); bindBack.renderOrder = 10; bolts.add(bindBack);
   const bindIcon = new THREE.Sprite(new THREE.SpriteMaterial({ map:bindTex, transparent:true, depthTest:false, depthWrite:false }));
   bindIcon.scale.set(0.34, 0.34, 1); bindIcon.renderOrder = 11; bolts.add(bindIcon);
   const sparks = Array.from({ length:12 }, () => {
@@ -2386,6 +2389,7 @@ function loop(){
     ch.ring.rotation.z = t*1.2;
     ch.badge.position.y = (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + Math.sin(t*2 + ch.phase)*0.03;
     if(ch.bolts.visible) updateBolts(ch, t, dt);
+    if(ch.afterTick) ch.afterTick(t); // しびれの色など(fx3d.js)。生物の色を毎フレーム塗る処理のあとに
     if(ch.sunSp.visible){ ch.sunSp.material.rotation = t*0.5; ch.sunSp.position.set(0, (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + 0.42 + Math.sin(t*2)*0.03, 0); ch.sunSp.scale.setScalar(0.38 + Math.sin(t*3)*0.02); }
   });
   motes.rotation.y = t*0.02;

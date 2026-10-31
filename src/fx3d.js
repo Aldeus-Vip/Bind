@@ -1447,6 +1447,8 @@ K.override('triggerExtraTurnWhiteout', orig => function(){
    ===================================================================== */
 const BOLT8 = texOf('bolt8');
 const CLOUD_Y = 2.2;
+// 奥の列ほど雲を低く(画面の上端で切れないように): 一番奥 1.6 → 一番手前 2.2
+const cloudY = i => 1.6 + 0.2*Math.min(3, Math.floor(i/5));
 function cloudModel(){
   const m = B.cloneModel && B.cloneModel('fx-cloud');
   if(!m) return null;
@@ -1465,7 +1467,7 @@ function screenFlash(op, sec){
   document.body.appendChild(d); requestAnimationFrame(() => { d.style.opacity = '0'; }); setTimeout(() => d.remove(), sec*1000 + 80);
 }
 fx('triggerLightningBoltStrike', async (i) => {
-  const base = ctrOf(i, 0), top = base.y + CLOUD_Y;
+  const CY = cloudY(i), base = ctrOf(i, 0), top = base.y + CY;
   // ② 雷雲
   const cloud = cloudModel();
   const light = new THREE.PointLight(0xb070ff, 0, 3.5, 1.6); light.position.set(base.x, top - 0.05, base.z); K.scene.add(light);
@@ -1474,11 +1476,14 @@ fx('triggerLightningBoltStrike', async (i) => {
   if(cloud){ cloud.position.set(base.x, top, base.z); cloud.renderOrder = 18; K.scene.add(cloud); cloud.scale.setScalar(0.001); }
   let lt = 0, boost = 0;
   (function idle(){ if(!alive) return; requestAnimationFrame(idle); lt += 1/60; spin += Math.PI/12/60; if(cloud) cloud.rotation.y = spin; light.intensity = 1.6*flick(lt) + boost; boost *= 0.85; })();
-  await tween(0.5, t => { if(cloud) cloud.scale.setScalar(Math.max(0.001, ease.back(t))); });
+  // ② 雲が集まる: 0.7 秒かけて渦を巻きながら広がる
+  await tween(0.7, t => { if(cloud){ cloud.scale.setScalar(Math.max(0.001, ease.back(t))); cloud.userData.inner.rotation.y = (1 - t)*Math.PI*2; } });
+  // ②' ためる: 雲の中が 2〜3 回ちらつく(来るぞ、という間)
+  for(const d of [0.08, 0.12, 0.1]){ boost = 5; await wait(d); boost = 0; await wait(0.03); }
   // ③ 落雷: 1 回 0.08 秒で出て 0.15 秒で消える。少しずらして 3 回
   // 板はカメラを向くので、見下ろしている分だけ縦が伸びて見える。カメラの上方向に映る長さ(足元 → 雲の底)に合わせる
   const camUp = V(0, 0, 0).setFromMatrixColumn(K.camera.matrixWorld, 1);
-  const H = Math.max(0.6, (CLOUD_Y - 0.15)*Math.abs(camUp.y)), Wd = (CLOUD_Y - 0.15)*0.31;
+  const H = Math.max(0.6, (CY - 0.15)*Math.abs(camUp.y)), Wd = (CY - 0.15)*0.31;
   const bolt = (dx, bright, flip) => {
     if(!BOLT8) return Promise.resolve();
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:BOLT8, transparent:true, blending:K.ADD, depthWrite:false, depthTest:false, opacity:bright })); // 生物に隠れない
@@ -1491,13 +1496,14 @@ fx('triggerLightningBoltStrike', async (i) => {
     }).then(() => K.disposeObj(s));
   };
   const T = K.tiles[i];
+  // ③ 落雷: 3 回、0.18 秒ずつ空ける。1 回目の白い閃光は 0.2 秒残す
   const hits = [
     bolt(0, 1.0, false).then(() => {}),
-    wait(0.12).then(() => bolt(0.08, 0.6, true)),
-    wait(0.20).then(() => bolt(-0.05, 1.0, false)),
+    wait(0.18).then(() => bolt(0.08, 0.6, true)),
+    wait(0.36).then(() => bolt(-0.05, 1.0, false)),
   ];
   await wait(0.05);
-  screenFlash(0.25, 0.12);
+  screenFlash(0.25, 0.2);
   spark(base.clone().add(V(0, 0.05, 0)), 0xd9b8ff, 18, { up:2.2, speed:0.7 });
   if(T) T.flash = 1.2;
   await Promise.all(hits);
@@ -1525,31 +1531,71 @@ function boltRingTex(){
       g.stroke();
     }
   };
-  arc(7, 'rgba(170,110,255,0.9)', 14); arc(2.5, '#ffffff', 6);
+  arc(7, 'rgba(170,110,255,0.75)', 12); arc(3.5, '#ffffff', 8);
   return (ringTex = new THREE.CanvasTexture(c));
 }
 const binds = [null, null];
+// しびれ: バインド中は生物の色を灰色がかった暗い青に寄せ(彩度を下げる)、ときどき白く点滅させる(どの色の生物でも雷の輪が浮き出る)
+const NUMB = new THREE.Color(0x3a4660);
+function numb(ch, b, on, t){
+  // 生物の色を塗り直す処理(adapter.js の ch.av.tick)の直後に呼ぶ
+  const root = ch && ch.av && ch.av.root; if(!root) return;
+  const k = on ? Math.min(1, (b ? b.t : 0)/0.5) : 0;
+  if(!k){ if(ch.numbMats) unnumb(ch); return; }
+  const flash = (Math.sin(t*23) > 0.97 || Math.random() < 0.01) ? 1 : 0;
+  const seen = new Set();
+  root.traverse(o => {
+    if(!o.isMesh || !o.material) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+      if(seen.has(m)) return; seen.add(m);
+      if(m.blending === THREE.AdditiveBlending){ if(m.userData.numbOp == null) m.userData.numbOp = m.opacity; m.opacity = m.userData.numbOp*(1 - 0.75*k); return; } // 体の光(加算の殻)は弱める
+      // 毎フレーム塗り直される材質も、そうでない材質も同じに扱う: 前回自分が塗った色のままなら元の色から、塗り直されていれば今の色から寄せる
+      const u = m.userData.numb || (m.userData.numb = {});
+      ['color', 'emissive'].forEach(key => {
+        const c = m[key]; if(!c) return;
+        if(!u[key] || !u[key].last || !c.equals(u[key].last)) u[key] = { base:c.clone() };
+        c.copy(u[key].base);
+        if(key === 'color') c.lerp(NUMB, 0.6*k); else c.multiplyScalar(1 - 0.7*k).lerp(WHITE, flash*0.6*k);
+        u[key].last = c.clone();
+      });
+      ch.numbMats = ch.numbMats || new Set(); ch.numbMats.add(m);
+    });
+  });
+  ch.numbRoot = root;
+}
+const WHITE = new THREE.Color(0xffffff);
+function unnumb(ch){
+  // 色と、加算の殻の不透明度を元に戻す
+  const root = ch && ch.numbRoot; if(!root) return;
+  root.traverse(o => { if(o.isMesh && o.material){ (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if(m.userData.numbOp != null){ m.opacity = m.userData.numbOp; delete m.userData.numbOp; } }); } });
+  (ch.numbMats || []).forEach(m => { const u = m.userData.numb; if(u) ['color', 'emissive'].forEach(key => { if(u[key] && m[key] && u[key].last && m[key].equals(u[key].last)) m[key].copy(u[key].base); }); delete m.userData.numb; });
+  ch.numbMats = null; ch.numbRoot = null;
+}
 function makeBindFx(ch){
   const g = new THREE.Group(); K.scene.add(g);
   const foot = new THREE.Mesh(new THREE.PlaneGeometry(K.STEP*0.7, K.STEP*0.7), new THREE.MeshBasicMaterial({ map:FLOOR_BOLT || K.starTex, transparent:true, blending:K.ADD, depthWrite:false, opacity:0 }));
   foot.rotation.x = -Math.PI/2; foot.renderOrder = 7; g.add(foot);
-  const rings = [0, 1].map(k => { const r = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map:boltRingTex(), transparent:true, blending:K.ADD, depthWrite:false, side:THREE.DoubleSide, opacity:0 })); r.rotation.x = -Math.PI/2; r.renderOrder = 19; g.add(r); return r; });
+  // 雷の輪: 加算で明るさ 1.5 倍(紫より白い芯が目立つ)
+  const rings = [0, 1].map(k => { const r = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map:boltRingTex(), color:new THREE.Color(1.5, 1.5, 1.5), transparent:true, blending:K.ADD, depthWrite:false, side:THREE.DoubleSide, opacity:0 })); r.rotation.x = -Math.PI/2; r.renderOrder = 19; g.add(r); return r; });
   return { g, foot, rings, t:0, out:-1 };
 }
+let bindLast = performance.now();
 (function bindLoop(){
   requestAnimationFrame(bindLoop);
   const st = typeof state !== 'undefined' ? state : null;
-  const dt = 1/60, t = K.now ? K.now() : performance.now()/1000;
+  const nowMs = performance.now(), dt = Math.min(0.1, (nowMs - bindLast)/1000)*(K.timeScale == null ? 1 : K.timeScale); bindLast = nowMs; // 実際の経過時間(重い端末でも同じ速さ)
+  const t = K.now ? K.now() : performance.now()/1000;
   [0, 1].forEach(p => {
     const ch = chars[p], pl = st && st.players && st.players[p];
     const on = !!(pl && pl.bound && !st.gameOver && ch && ch.shown && isOn());
     let b = binds[p];
     if(!on && b && b.out < 0){
-      if(!isOn() || !ch || !ch.shown){ K.disposeObj(b.g); binds[p] = null; if(ch) ch.ringBind = false; return; }
+      if(!isOn() || !ch || !ch.shown){ K.disposeObj(b.g); binds[p] = null; if(ch){ ch.ringBind = false; unnumb(ch); } return; }
       b.out = 0; // ⑥ 解除
       b.rings.forEach(r => spark(r.getWorldPosition(V(0, 0, 0)), 0xd9b8ff, 10, { up:1.2, speed:0.8, life:0.5 }));
     }
     if(on && !b){ b = binds[p] = makeBindFx(ch); ch.ringBind = true; } // ④ 縛る
+    if(ch){ const bb = b, oo = on; ch.afterTick = tt => numb(ch, binds[p], !!(binds[p] && binds[p].out < 0 && state && state.players[p] && state.players[p].bound), tt); }
     if(!b) return;
     b.t += dt;
     const base = ch.root.position, h = ch.av ? ch.av.badgeY : 1.1;
@@ -1558,14 +1604,14 @@ function makeBindFx(ch){
     b.foot.position.y = fy;
     const flick = 0.75 + 0.25*Math.sin(t*6.1)*Math.sin(t*2.3 + 0.7); // 明るさ 0.5〜1.0
     if(b.out < 0){
-      const k = ease.out(Math.min(1, b.t/0.45));
+      const k = ease.out(Math.min(1, b.t/0.5)); // 輪が外から締まるように 0.5 秒で巻きつく
       b.foot.scale.setScalar(0.2 + 0.8*k); b.foot.material.opacity = flick*Math.min(1, b.t/0.3);
       b.rings.forEach((r, j) => { r.position.y = fy + h*(j ? 0.55 : 0.35); r.scale.setScalar(1.8 - 0.8*k); r.material.opacity = Math.min(1, b.t/0.3)*(0.75 + 0.25*Math.sin(t*9 + j*2)); r.rotation.z = (j ? -1 : 1)*t*1.2; });
     } else {
       b.out += dt; const k = Math.min(1, b.out/0.4);
       b.foot.scale.setScalar(1 + 0.8*k); b.foot.material.opacity = flick*(1 - k);
       b.rings.forEach((r, j) => { r.scale.setScalar(1 + 1.2*k); r.material.opacity = 1 - k; r.rotation.z += (j ? -1 : 1)*0.2; });
-      if(k >= 1){ K.disposeObj(b.g); binds[p] = null; ch.ringBind = false; }
+      if(k >= 1){ K.disposeObj(b.g); binds[p] = null; ch.ringBind = false; unnumb(ch); }
     }
   });
 })();
