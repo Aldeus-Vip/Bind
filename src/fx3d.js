@@ -577,9 +577,10 @@ fx('triggerWhirlpoolDrain', async (i) => {
   const SPL = texOf('splash_ring');
   if(SPL){
     SPL.wrapS = THREE.RepeatWrapping; SPL.repeat.set(3, 1);
-    const R = 0.5*K.STEP*0.9, H = 0.55;
-    const cone = new THREE.Mesh(new THREE.CylinderGeometry(R, R*0.45, H, 48, 1, true), new THREE.MeshBasicMaterial({ map:SPL, transparent:true, depthWrite:false, side:THREE.DoubleSide, opacity:1 }));
-    cone.renderOrder = 22; addMesh(cone);
+    const R = 0.5*K.STEP*0.9*1.2, H = 0.55*1.2; // 1.2 倍: 冠の先が渦の外へ少しはみ出す
+    // 加算合成で少し明るく(1.3 倍)、渦より手前に描く(根元が渦に隠れない)
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(R, R*0.45, H, 48, 1, true), new THREE.MeshBasicMaterial({ map:SPL, color:new THREE.Color(1.3, 1.3, 1.3), transparent:true, depthWrite:false, depthTest:false, blending:K.ADD, side:THREE.DoubleSide, opacity:1 }));
+    cone.renderOrder = 30; addMesh(cone);
     tween(0.4, t => {
       const k = ease.out(Math.min(1, t/0.5));
       cone.scale.set(0.6 + 0.6*t, Math.max(0.001, k), 0.6 + 0.6*t); // 外へ広がりながら、下から縦に伸びる
