@@ -1665,7 +1665,7 @@ function buildVessel(p){
   ring.rotation.x = -Math.PI/2; ring.position.y = 0.014; root.add(ring);
   const badge = new THREE.Sprite(new THREE.SpriteMaterial({ transparent:true, depthTest:false }));
   badge.scale.set(0.28, 0.39, 1); badge.position.y = 1.1; badge.renderOrder = 10; root.add(badge);
-  // バインド中: 体の中央の雷の印 + 火花 + 縁を走る小さな稲妻(他の生物の演出と重ならないよう体の中だけ)
+  // バインド中: 頭上の雷の印 + 火花(追加ターンの太陽と同じ高さ)
   const bolts = new THREE.Group(); root.add(bolts);
   // 胸の雷の印の後ろに暗い円の座布団(生物の体と重なっても読める)
   const bindBack = new THREE.Sprite(new THREE.SpriteMaterial({ map:canvasTex(64, 64, g => { const r = g.createRadialGradient(32,32,0,32,32,32); r.addColorStop(0,'rgba(8,6,18,0.9)'); r.addColorStop(0.7,'rgba(8,6,18,0.75)'); r.addColorStop(1,'rgba(8,6,18,0)'); g.fillStyle = r; g.fillRect(0,0,64,64); }), transparent:true, depthTest:false, depthWrite:false }));
@@ -2285,11 +2285,12 @@ scene.add(motes);
 const clock = new THREE.Clock();
 function updateBolts(ch, t, dt){
   dt = dt || 0.016;
-  // 体の中央に印を置き、カメラに向けて少し手前へ(体に埋もれない)
-  const y = (ch.av ? ch.av.badgeY : 1.1)*0.5;
-  const toCam = camera.position.clone().sub(ch.root.position).setY(0).normalize().multiplyScalar(0.22);
+  // 頭上(追加ターンの太陽と同じ高さ)に印を置く。太陽も出ているときは画面の左右に並べる
+  const y = (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + 0.42 + Math.sin(t*2 + 1)*0.03;
+  const side = ch.sunSp.visible ? 0.22 : 0;
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize().multiplyScalar(side);
   const ry = ch.root.rotation.y, c = Math.cos(-ry), s = Math.sin(-ry);
-  const lx = toCam.x*c + toCam.z*s, lz = -toCam.x*s + toCam.z*c; // ワールドの向き → 駒のローカル
+  const lx = right.x*c + right.z*s, lz = -right.x*s + right.z*c; // ワールドの向き → 駒のローカル
   ch.bolts.position.set(lx, y, lz);
   ch.bolts.quaternion.copy(ch.root.quaternion).invert().multiply(camera.quaternion); // 火花と稲妻は画面に向けた面で
   const pulse = 1 + Math.sin(t*9)*0.06 + (Math.random() < 0.05 ? 0.12 : 0);
@@ -2390,7 +2391,13 @@ function loop(){
     ch.badge.position.y = (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + Math.sin(t*2 + ch.phase)*0.03;
     if(ch.bolts.visible) updateBolts(ch, t, dt);
     if(ch.afterTick) ch.afterTick(t); // しびれの色など(fx3d.js)。生物の色を毎フレーム塗る処理のあとに
-    if(ch.sunSp.visible){ ch.sunSp.material.rotation = t*0.5; ch.sunSp.position.set(0, (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + 0.42 + Math.sin(t*2)*0.03, 0); ch.sunSp.scale.setScalar(0.38 + Math.sin(t*3)*0.02); }
+    if(ch.sunSp.visible){
+      ch.sunSp.material.rotation = t*0.5; ch.sunSp.scale.setScalar(0.38 + Math.sin(t*3)*0.02);
+      // バインドの雷の印も出ているときは、画面の左右に並べる(太陽が左)
+      const side = ch.bolts.visible ? -0.22 : 0, r = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize().multiplyScalar(side);
+      const ry = ch.root.rotation.y, c = Math.cos(-ry), s = Math.sin(-ry);
+      ch.sunSp.position.set(r.x*c + r.z*s, (ch.av ? ch.av.badgeY + (ch.av.lift || 0) : 1.1) + 0.42 + Math.sin(t*2)*0.03, -r.x*s + r.z*c);
+    }
   });
   motes.rotation.y = t*0.02;
   if(!ctxLost) renderer.render(scene, camera);
