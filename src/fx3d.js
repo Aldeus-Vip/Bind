@@ -537,37 +537,65 @@ async function kSurvive(i){
 fx('triggerKShatterSurvive', kSurvive);
 fx('triggerCrackShatter', kSurvive);
 
-// 6: 渦潮が生まれ、水しぶきとともにフロアを呑み込む
+/* 6: 渦潮がフロアを呑み込み、山札の下へ送る(Riku さんの案。渦のモデル fx-whirl は動かし方だけで「飲み込む渦」に)
+   ① 予兆: 青い光がマスへ飛ぶ(共通の演出) ② 開く: 平たい渦が現れ、回りながらマスの 85% まで広がる
+   ③ 飲み込む: 渦が深くなり(厚み 0.3 → 1.6 倍)、すき間越しにフロアが回りながら沈んで暗くなる
+   ④ しぶき: 沈みきった瞬間に水の冠が立ち上がる ⑤ 余韻: 渦が閉じ、裏向きのカードが中心から抜け出して山札のゲージの下側へ飛ぶ(山札 +1)
+   渦は不透明度 0.7 ほど+わずかに青く光らせ、外周に床の縁が残るようにする */
 fx('triggerWhirlpoolDrain', async (i) => {
   const T = K.tiles[i]; if(!T) return;
   hold(i); T.anim = true;
   const c = ctrOf(i, 0.02);
-  // 渦潮のモデル(fx-whirl)があれば、それを床の上で波打たせながら回す。無ければ水の輪
-  const disc = fxDisc('fx-whirl', { wave:0.045, waveK:26, swirl:0.5, spin:2.4, glow:0.35, glowColor:0x9fd8ff });
+  const W = 0.85; // マスの 85%
+  const disc = fxDisc('fx-whirl', { wave:0.04, waveK:26, swirl:0.6, spin:2.6, glow:0.35, glowColor:0x6fb8ff });
   let tt = 0;
-  if(disc){ disc.position.copy(c).add(V(0, 0.06, 0)); addMesh(disc); }
-  const rings = []; if(!disc) for(let k=0;k<7;k++){ const r = addMesh(ring(0.14 + k*0.08, 0.02, k%2 ? 0x8fd0ff : 0x4aa8ff, Math.PI*1.6)); r.position.copy(c).add(V(0, k*0.03, 0)); rings.push(r); }
-  await tween(0.5, t => {
-    tt = t*0.5;
-    if(disc){ disc.userData.tick(tt, 0.95*t); disc.scale.setScalar(0.3 + 0.75*ease.back(t)); }
+  if(disc){ disc.position.copy(c).add(V(0, 0.05, 0)); addMesh(disc); }
+  const rings = []; if(!disc) for(let k=0;k<7;k++){ const r = addMesh(ring(0.1 + k*0.055, 0.02, k%2 ? 0x8fd0ff : 0x4aa8ff, Math.PI*1.6)); r.position.copy(c).add(V(0, k*0.03, 0)); rings.push(r); }
+  // 水を通して暗く見せる影(フロアが沈むほど濃く)
+  const shade = addMesh(new THREE.Mesh(new THREE.CircleGeometry(0.5*W*K.STEP, 32), new THREE.MeshBasicMaterial({ color:0x020a14, transparent:true, opacity:0, depthWrite:false })));
+  shade.rotation.x = -Math.PI/2; shade.position.copy(c).add(V(0, 0.03, 0)); shade.renderOrder = 5;
+  const size = (s, d) => { if(disc) disc.scale.set(s, d, s); };
+  // ② 開く: 平たい渦が回りながら広がる
+  await tween(0.55, t => {
+    tt = t*0.55;
+    if(disc){ disc.userData.tick(tt, 0.55*Math.min(1, t*1.6)); size(0.25 + (W - 0.25)*ease.out(t), 0.3); }
     rings.forEach((r, j) => { r.material.opacity = 0.7*t; r.rotation.z = -t*10*(1 + j*0.2); });
   });
-  await tween(1.0, t => {
+  // ③ 飲み込む: 渦が深くなり、フロアが回りながら沈んで暗くなる
+  await tween(1.1, t => {
     const k = ease.inOut(t);
-    tt = 0.5 + t;
-    if(disc){ disc.userData.tick(tt, 0.95); disc.position.y = c.y + 0.06 - k*0.25; disc.scale.setScalar(1.05 - 0.15*k); }
-    rings.forEach((r, j) => { r.rotation.z -= 0.25*(1 + j*0.15); r.scale.setScalar(1 + 0.2*Math.sin(t*8 + j)); });
+    tt = 0.55 + t*1.3;
+    if(disc){ disc.userData.tick(tt, 0.55); size(W, 0.3 + 1.3*k); disc.position.y = c.y + 0.05 - 0.05*k; }
+    rings.forEach((r, j) => { r.rotation.z -= 0.25*(1 + j*0.15); r.position.y = c.y - j*0.04*k; });
+    shade.material.opacity = 0.55*k;
     T.g.position.y = -k*1.4; T.g.rotation.y = k*Math.PI*2.5; T.g.scale.setScalar(1 - 0.5*k);
-    if(Math.random() < 0.8) spark(c.clone().add(V((Math.random()-.5)*0.9, 0.05, (Math.random()-.5)*0.9)), Math.random()<0.6 ? 0x8fd0ff : 0xffffff, 2, { up:2.6, speed:0.5, life:0.6 });
+    if(Math.random() < 0.5) spark(c.clone().add(V((Math.random()-.5)*0.7, 0.05, (Math.random()-.5)*0.7)), Math.random()<0.6 ? 0x8fd0ff : 0xffffff, 1, { up:1.2, speed:0.3, life:0.5 });
   });
-  spark(c.clone().add(V(0, 0.1, 0)), 0xbfe8ff, 30, { up:3, speed:0.8 });
+  // ④ しぶき: 沈みきった瞬間に水の冠
   vanish(T);
-  await tween(0.4, t => {
-    if(disc){ disc.userData.tick(1.5 + t*0.4, 0.95*(1 - t)); disc.scale.setScalar(0.9*(1 - 0.7*t)); }
+  for(let k = 0; k < 18; k++){
+    const a = k/18*Math.PI*2, r = 0.32*W*K.STEP;
+    spark(c.clone().add(V(Math.cos(a)*r, 0.05, Math.sin(a)*r)), k%3 ? 0x8fd0ff : 0xffffff, 2, { up:3.2, speed:0.12, life:0.7, g:6 });
+  }
+  spark(c.clone().add(V(0, 0.1, 0)), 0xbfe8ff, 14, { up:2.2, speed:0.5 });
+  // ⑤ 余韻: 渦が閉じる
+  await tween(0.45, t => {
+    if(disc){ disc.userData.tick(1.85 + t*0.5, 0.55*(1 - t)); size(W*(1 - 0.7*t), 1.6*(1 - 0.8*t)); }
     rings.forEach(r => { r.material.opacity = 0.7*(1 - t); r.scale.setScalar(1 - 0.6*t); });
+    shade.material.opacity = 0.55*(1 - t);
   });
-  rings.forEach(K.disposeObj); disposeDisc(disc);
-  release(i);
+  rings.forEach(K.disposeObj); disposeDisc(disc); K.disposeObj(shade);
+  // 裏向きのカードが中心から抜け出し、山札のゲージの下側へ(このあと元のゲームが山札の下に入れる)
+  await K.uiFx(async () => {
+    const a = K.boardPx(c.clone().add(V(0, 0.1, 0))), d = deckPx(), e = document.querySelector('.deck-gauge-track');
+    const to = { x:d.x, y:d.y + (e ? e.getBoundingClientRect().height/2 + 14 : 14) };
+    const card = K.card3D(null, false, 0.9); card.position.copy(P(a.x, a.y, 60)); card.scale.setScalar(0.3);
+    await K.uiTween(0.2, t => card.scale.setScalar(0.3 + 0.7*ease.out(t)));
+    await K.flyCard(card, a, to, 0.55, 60, 1);
+    roundSpark(to.x, to.y, 0x8fd0ff, 10, 80);
+    K.uiDispose(card);
+  });
+  release(i); // カードが飛んでいる間にマスが戻らないよう、最後に盤面の追従を再開する
 });
 
 // 7: 竜巻が起こり(残り続ける)、フロアをあおりながら運ぶ / その場で消える
