@@ -571,13 +571,25 @@ fx('triggerWhirlpoolDrain', async (i) => {
     T.g.position.y = -k*1.4; T.g.rotation.y = k*Math.PI*2.5; T.g.scale.setScalar(1 - 0.5*k);
     if(Math.random() < 0.5) spark(c.clone().add(V((Math.random()-.5)*0.7, 0.05, (Math.random()-.5)*0.7)), Math.random()<0.6 ? 0x8fd0ff : 0xffffff, 1, { up:1.2, speed:0.3, life:0.5 });
   });
-  // ④ しぶき: 沈みきった瞬間に水の冠
+  // ④ しぶき: 沈みきった瞬間に水の冠(assets/textures/splash.png)。カメラを向く板を渦の中心に立て、下から縦に伸ばしてすぐ薄れる(0.4 秒)
   vanish(T);
-  for(let k = 0; k < 18; k++){
-    const a = k/18*Math.PI*2, r = 0.32*W*K.STEP;
-    spark(c.clone().add(V(Math.cos(a)*r, 0.05, Math.sin(a)*r)), k%3 ? 0x8fd0ff : 0xffffff, 2, { up:3.2, speed:0.12, life:0.7, g:6 });
+  const SPL = texOf('splash');
+  if(SPL){
+    const w = K.STEP*1.0, h = w*365/720;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:SPL, transparent:true, depthWrite:false, opacity:1 }));
+    sp.center.set(0.5, 0.1); // 絵の水面(下から 1 割)をマスの中心に合わせる
+    sp.position.copy(c).add(V(0, 0.02, 0)); sp.renderOrder = 22; sp.scale.set(w, 0.001, 1); addMesh(sp);
+    tween(0.4, t => {
+      sp.scale.set(w*(0.9 + 0.1*t), h*Math.max(0.001, ease.out(Math.min(1, t/0.45))), 1);
+      sp.material.opacity = t < 0.45 ? 1 : 1 - (t - 0.45)/0.55;
+    }).then(() => K.disposeObj(sp));
+  } else {
+    for(let k = 0; k < 18; k++){
+      const a = k/18*Math.PI*2, r = 0.32*W*K.STEP;
+      spark(c.clone().add(V(Math.cos(a)*r, 0.05, Math.sin(a)*r)), k%3 ? 0x8fd0ff : 0xffffff, 2, { up:3.2, speed:0.12, life:0.7, g:6 });
+    }
   }
-  spark(c.clone().add(V(0, 0.1, 0)), 0xbfe8ff, 14, { up:2.2, speed:0.5 });
+  spark(c.clone().add(V(0, 0.1, 0)), 0xbfe8ff, 8, { up:1.6, speed:0.4 });
   // ⑤ 余韻: 渦が閉じる
   await tween(0.45, t => {
     if(disc){ disc.userData.tick(1.85 + t*0.5, 0.55*(1 - t)); size(W*(1 - 0.7*t), 1.6*(1 - 0.8*t)); }
