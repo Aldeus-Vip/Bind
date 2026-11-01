@@ -132,3 +132,10 @@ body.b3-hide-panels #app .floor-grid.b3{ max-width:none; width:100%; aspect-rati
 @keyframes gFxCut{ 0%{ background: rgba(190,120,255,.75); box-shadow: 0 0 14px #a35cff; } 100%{ background: transparent; box-shadow: none; } }
 .b3-gauge .g-row.fx-gain .g-num{ animation: gFxGain .9s ease-out; display:inline-block; }
 @keyframes gFxGain{ 0%{ transform: scale(1.9); color:#fff; text-shadow: 0 0 10px #d9a6ff, 0 0 18px #a35cff; } 100%{ transform: scale(1); } }
+
+/* 数字が変わる瞬間(hud.js の bump): 増える = 跳ねて光る / 減る = 縮んで暗くなる */
+.b3-gauge .g-num{ display:inline-block; }
+.b3-gauge .g-num.g-up{ animation: gNumUp .2s ease-out; }
+.b3-gauge .g-num.g-down{ animation: gNumDown .2s ease-out; }
+@keyframes gNumUp{ 0%{ transform: scale(1.8); color:#fff; text-shadow: 0 0 8px var(--gc), 0 0 16px var(--gc); } 100%{ transform: scale(1); } }
+@keyframes gNumDown{ 0%{ transform: scale(.6); opacity:.35; } 100%{ transform: scale(1); opacity:1; } }

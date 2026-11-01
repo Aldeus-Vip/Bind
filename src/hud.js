@@ -136,6 +136,16 @@ function ensureGhostBtn(){
   bar.insertBefore(ghostBtn, bar.firstChild);
 }
 
+// 数字が変わる瞬間の共通の動き: 増える = 跳ねて明るく光る / 減る = 小さく縮んで一瞬暗くなる(0.2 秒)
+// 光の色は B.hudFx(p, { glow:'#色' }) で演出から渡せる(なければ金)
+function bump(row, from, to){
+  if(from == null || from === to) return;
+  const n = row.querySelector('.g-num'); if(!n) return;
+  const p = huds.findIndex(h => h.rows.hand === row || h.rows.discard === row);
+  const col = (p >= 0 && fxs[p].glow) || '#ffe7a0';
+  n.style.setProperty('--gc', col);
+  n.classList.remove('g-up', 'g-down'); void n.offsetWidth; n.classList.add(to > from ? 'g-up' : 'g-down');
+}
 // 演出からの指示(♠ など): プレートを出す・数字を先に動かす(実際のデータが変わる前に、演出の順で見せる)
 const fxs = [{}, {}];
 B.hudFx = (p, o) => { if(!fxs[p]) return; if(o === null) fxs[p] = {}; else Object.assign(fxs[p], o); };
@@ -164,8 +174,8 @@ function frame(){
     const nh = Math.max(0, pl.hand.length + (fo.hand || 0)), nd = pl.discard.length + (fo.discard || 0);
     h.box.classList.toggle('fxshow', !!fo.show);
     // 数が変わったときだけ書き換える(毎フレーム書くと、スマホでは画面の再計算が重い)
-    if(h.nh !== nh){ h.nh = nh; h.rows.hand.querySelector('.g-num').textContent = nh; h.rows.hand.querySelector('i').style.width = Math.min(100, nh / MAXBAR * 100) + '%'; }
-    if(h.nd !== nd){ h.nd = nd; h.rows.discard.querySelector('.g-num').textContent = nd; h.rows.discard.querySelector('i').style.width = Math.min(100, nd / MAXBAR * 100) + '%'; }
+    if(h.nh !== nh){ bump(h.rows.hand, h.nh, nh); h.nh = nh; h.rows.hand.querySelector('.g-num').textContent = nh; h.rows.hand.querySelector('i').style.width = Math.min(100, nh / MAXBAR * 100) + '%'; }
+    if(h.nd !== nd){ bump(h.rows.discard, h.nd, nd); h.nd = nd; h.rows.discard.querySelector('.g-num').textContent = nd; h.rows.discard.querySelector('i').style.width = Math.min(100, nd / MAXBAR * 100) + '%'; }
     h.rows.hand.classList.toggle('low', nh <= 1);
     // 効果の対象なら点滅
     const dt = typeof discardTaskFor === 'function' && discardTaskFor(h.p);

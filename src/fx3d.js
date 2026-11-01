@@ -1682,33 +1682,67 @@ uiFx('triggerGreenVortexSteal', async (targetIdx, handIdx, receiverIdx) => {
 K.override('triggerHandStealAnim', () => function(){ return Promise.resolve(); });
 
 // 10: 虫(10の軽量モデル)の群れが相手のゲージへ飛び、カードを運ぶ
+// 虫の群れ: 暗い赤紫の体に、羽の縁が赤く光る(♥ の赤)。1 匹ずつ赤い光の点を重ね、上へ弧を描いて飛ぶ(生き物の体に隠れない)
+function bugify(m){
+  m.traverse(o => { if(o.isMesh && o.material){ o.material.color = new THREE.Color(0x4a1428); o.material.emissive = new THREE.Color(0x6a0a1e); } });
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color:0xff3a4a, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, opacity:0.7 }));
+  g.scale.setScalar(2.2/m.scale.x*26); g.position.z = -5/m.scale.x; m.add(g);
+  return m;
+}
 async function swarm(a, b, n, carry){
   const bugs = [];
-  for(let k=0;k<n;k++){ const m = uiModel('c10', 26 + Math.random()*12, true); if(!m) break; faceDir(m, a, b); bugs.push({ m, d: Math.random()*0.25, ox:(Math.random()-.5)*70, oy:(Math.random()-.5)*50, ph: Math.random()*6 }); }
+  for(let k=0;k<n;k++){ const m = uiModel('c10', 26 + Math.random()*12, true); if(!m) break; bugify(m); faceDir(m, a, b); bugs.push({ m, d: Math.random()*0.25, ox:(Math.random()-.5)*70, oy:(Math.random()-.5)*50, ph: Math.random()*6 }); }
   if(!bugs.length){ for(let k=0;k<n;k++) bugs.push({ m: K.bugMesh(), d: Math.random()*0.25, ox:(Math.random()-.5)*70, oy:(Math.random()-.5)*50, ph: Math.random()*6 }); }
+  const LIFT = 140;
   await K.uiTween(0.85, t => bugs.forEach(o => {
-    const k = Math.max(0, Math.min(1, (t - o.d)/0.7)), q = K.bez(a, b, 40, ease.inOut(k));
+    const k = Math.max(0, Math.min(1, (t - o.d)/0.7)), q = K.bez(a, b, LIFT, ease.inOut(k));
     o.m.position.copy(P(q.x + o.ox*Math.sin(Math.PI*k) + Math.sin(t*30 + o.ph)*3, q.y + o.oy*Math.sin(Math.PI*k), 45));
     o.m.rotation.x = Math.sin(t*25 + o.ph)*0.3;
-    if(carry){ const c = K.bez(a, b, 40, ease.inOut(t)); carry.position.copy(P(c.x, c.y - 10, 70)); }
+    if(Math.random() < 0.15) roundSpark(o.m.position.x, -o.m.position.y, 0xff3a4a, 1, 10); // 赤い光の筋
+    if(carry){ const c = K.bez(a, b, LIFT, ease.inOut(t)); carry.position.copy(P(c.x, c.y - 10, 70)); }
   }));
   bugs.forEach(o => K.uiDispose(o.m));
 }
 uiFx('triggerRedPurpleHandRise', async (target, r, card) => {
   const a = K.casterPx(1 - target), b = K.panelPx(target, 'hand');
   await swarm(a, b, 18);
-  K.uiSpark(b.x, b.y, 0xc8ff3a, 16);
+  roundSpark(b.x, b.y, 0xff3a4a, 16, 120);
   const c = K.card3D(card, true, 1);
   await swarm(b, a, 14, c);
   K.uiDispose(c);
 });
+// 10: 奪ったカードは自分の捨て札の上で「発動中」に浮かび、連鎖が終わると捨て札の欄へ吸い込まれる
+const active10 = [null, null];
 uiFx('triggerRedPurpleDiscardArrival', async (p, card) => {
+  hudOf()(p, { show:true });
+  await wait(0.1);
   const a = K.casterPx(p), b = K.panelPx(p, 'discard');
-  const c = K.card3D(card, true, 1);
-  await swarm(a, b, 12, c);
-  K.uiSpark(b.x, b.y, 0xc8ff3a, 12); K.uiDispose(c);
+  const hover = { x:b.x, y:b.y - 70 };
+  const c = K.card3D(card, true, 1.2);
+  await swarm(a, hover, 12, c);
+  roundSpark(hover.x, hover.y, 0xff3a4a, 12, 90);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(110, 130), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color:0xff6a7a, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, opacity:0.5 }));
+  ui.sc.add(glow); glow.position.copy(P(hover.x, hover.y, 65)); c.position.copy(P(hover.x, hover.y, 70)); c.rotation.set(0, 0, 0);
+  K.uiBegin(); // 連鎖の間、画面に残す
+  const st = { c, glow, hover, p, t0: performance.now(), card };
+  active10[p] = st;
+  (function bob(){ if(active10[p] !== st) return; requestAnimationFrame(bob); const t = (performance.now() - st.t0)/1000; c.position.copy(P(hover.x, hover.y + Math.sin(t*2)*4, 70)); glow.material.opacity = 0.4 + 0.15*Math.sin(t*3); })();
 });
-uiFx('triggerRedPurpleDiscardReturn', async () => {});
+uiFx('triggerRedPurpleDiscardReturn', async (p) => {
+  const st = active10[p]; active10[p] = null;
+  if(!st) return;
+  const b = K.panelPx(p, 'discard'), th = st.card && K.themeOf ? K.themeOf(st.card) : null;
+  hudOf()(p, { show:true, glow: th ? th.glow : '#ff6a7a' }); // このあと捨て札の数字が跳ねて、カードの色で光る
+  // 捨て札の欄へ吸い込まれるように縮んで落ちる
+  await K.uiTween(0.35, t => {
+    const k = ease.in(t);
+    st.c.position.copy(P(st.hover.x + (b.x - st.hover.x)*k, st.hover.y + (b.y - st.hover.y)*k, 70)); st.c.scale.setScalar(1 - 0.85*k); st.c.rotation.z = k*0.6;
+    st.glow.position.copy(st.c.position); st.glow.material.opacity = 0.5*(1 - k); st.glow.scale.setScalar(1 - 0.7*k);
+  });
+  roundSpark(b.x, b.y, 0xff6a7a, 10, 80);
+  K.uiDispose(st.c); K.uiDispose(st.glow); K.uiEnd();
+  setTimeout(() => hudOf()(p, { show:false, glow:null }), 1200);
+});
 // 9: 捨て札が紫の炎とともに悪魔のもとへ / 終わると炎が消える(カードは山札の上にある)
 uiFx('triggerDiscardPillarReturn', async (p) => { const a = K.casterPx(p); K.uiSpark(a.x, a.y, 0xa35cff, 14); });
 /* 9: 捨て札を操る悪魔(Riku さんの案)
