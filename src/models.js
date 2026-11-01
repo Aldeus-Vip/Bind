@@ -72,6 +72,138 @@ function applyTint(root, suitKey, k){
   });
 }
 
+/* ---- Q(審判)の天秤(Riku さんの scales.js を取り込み) ----
+   manifest の "scales": { hand:'Bone_019', size, lift } で、その骨(手)の上に天秤を浮かべる。
+   腕の傾きを受けないよう、モデルの子にはせず holder(向きと大きさだけ)に置き、毎フレーム手の位置へ動かす。
+   演出(fx3d.js)は av.root の中から userData.judgeScales で探して、傾き・皿の光・皿の位置を使う。 */
+function createScales(opts = {}) {
+  const S = opts.size ?? 0.26;           // 全体の高さの目安(m)
+  const silver = new THREE.Color(opts.color ?? 0xd9dde6);
+  const glowCol = new THREE.Color(opts.glow ?? 0xb48cff);   // 審判の目の紫
+
+  const metal = new THREE.MeshStandardMaterial({
+    color: silver, metalness: 0.55, roughness: 0.32,
+    emissive: glowCol, emissiveIntensity: 0.08,
+  });
+  const chainMat = new THREE.LineBasicMaterial({ color: 0xc9ced8, transparent: true, opacity: 0.9 });
+
+  const root = new THREE.Group();
+  root.name = 'JudgeScales';
+
+  // ── 支柱(根元の飾り玉+柱+頂部の飾り)
+  const colH = S * 0.78;
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(S * 0.012, S * 0.018, colH, 10), metal);
+  column.position.y = colH / 2;
+  root.add(column);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(S * 0.035, 14, 10), metal);
+  root.add(knob);
+  const finial = new THREE.Mesh(new THREE.ConeGeometry(S * 0.025, S * 0.09, 10), metal);
+  finial.position.y = colH + S * 0.06;
+  root.add(finial);
+
+  // ── 竿(ここが傾く)
+  const pivot = new THREE.Group();
+  pivot.position.y = colH;
+  root.add(pivot);
+  const armLen = S * 0.46;
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(S * 0.01, S * 0.01, armLen * 2, 8), metal);
+  beam.rotation.z = Math.PI / 2;
+  pivot.add(beam);
+  // 竿の両端の巻き飾り
+  [-1, 1].forEach(s => {
+    const curl = new THREE.Mesh(new THREE.TorusGeometry(S * 0.025, S * 0.006, 6, 16, Math.PI * 1.4), metal);
+    curl.position.set(s * armLen, S * 0.02, 0);
+    curl.rotation.z = s > 0 ? 0 : Math.PI;
+    pivot.add(curl);
+  });
+
+  // ── 皿(竿の両端から吊るす。皿は常に真下を向く)
+  const chainLen = S * 0.42;
+  const panR = S * 0.17;
+  const pans = [-1, 1].map(s => {
+    const hanger = new THREE.Group();          // 竿の端に付く点
+    hanger.position.x = s * armLen;
+    pivot.add(hanger);
+    const hang = new THREE.Group();            // ここを逆回転させて垂直を保つ
+    hanger.add(hang);
+
+    // 3本の鎖
+    const pts = [];
+    for (let k = 0; k < 3; k++) {
+      const a = k / 3 * Math.PI * 2 + Math.PI / 6;
+      pts.push(new THREE.Vector3(0, 0, 0), new THREE.Vector3(Math.cos(a) * panR * 0.92, -chainLen, Math.sin(a) * panR * 0.92));
+    }
+    const chains = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), chainMat);
+    hang.add(chains);
+
+    // 浅い皿(回転体)
+    const prof = [
+      new THREE.Vector2(0.001, 0), new THREE.Vector2(panR * 0.55, S * 0.004),
+      new THREE.Vector2(panR * 0.92, S * 0.028), new THREE.Vector2(panR, S * 0.04),
+    ];
+    const pan = new THREE.Mesh(new THREE.LatheGeometry(prof, 24), metal);
+    pan.material.side = THREE.DoubleSide;
+    pan.position.y = -chainLen - S * 0.03;
+    hang.add(pan);
+
+    // 皿の上の光(吸い込んだ手札/与える2枚を表す)
+    const light = new THREE.Mesh(
+      new THREE.CircleGeometry(panR * 0.8, 20),
+      new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    light.rotation.x = -Math.PI / 2;
+    light.position.y = pan.position.y + S * 0.02;
+    hang.add(light);
+    return { hanger, hang, light };
+  });
+
+  // 支柱の中心で全体を回すため、根元を原点にしている(手のひらの上に浮かべる前提)
+
+  // ── 状態
+  const st = { tilt: 0, from: 0, to: 0, dur: 0, t: 0, glow: 0.08, time: 0 };
+  const MAX = 0.42;                            // 最大の傾き(rad)
+
+  function applyTilt(v) {
+    st.tilt = v;
+    pivot.rotation.z = -v * MAX;
+    pans.forEach(p => { p.hang.rotation.z = v * MAX; });  // 皿は常に垂直
+  }
+
+  root.userData.setTilt = v => { st.dur = 0; applyTilt(v); };
+  root.userData.tiltTo = (v, dur = 0.6) => { st.from = st.tilt; st.to = v; st.dur = dur; st.t = 0; };
+  root.userData.setGlow = v => { st.glow = v; };
+  root.userData.tiltNow = () => st.tilt;
+  // 皿の上の光(0〜1)。side: -1 左, +1 右
+  root.userData.setPanLight = (side, v) => { pans[side < 0 ? 0 : 1].light.material.opacity = v; };
+
+  root.userData.update = (dt = 1 / 60) => {
+    st.time += dt;
+    if (st.dur > 0) {
+      st.t = Math.min(1, st.t + dt / st.dur);
+      const e = 1 - Math.pow(1 - st.t, 3);
+      // 水平へ戻るときは少し揺れてから止まる
+      const wobble = st.to === 0 ? Math.sin(st.t * Math.PI * 3) * (1 - st.t) * 0.12 * Math.sign(st.from || 1) : 0;
+      applyTilt(st.from + (st.to - st.from) * e + wobble);
+      if (st.t >= 1) st.dur = 0;
+    }
+    // ごくわずかな揺れ(静止していても生きて見える)
+    pivot.rotation.z += Math.sin(st.time * 1.3) * 0.004;
+    metal.emissiveIntensity = st.glow * (0.85 + 0.15 * Math.sin(st.time * 2.1));
+  };
+
+  root.userData.dispose = () => {
+    root.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== metal && o.material !== chainMat) o.material.dispose(); });
+    metal.dispose(); chainMat.dispose();
+  };
+
+  // 皿の位置(ワールド座標)。演出からカードを皿に乗せるときに使う
+  const _w = new THREE.Vector3();
+  root.userData.panPos = side => pans[side < 0 ? 0 : 1].light.getWorldPosition(_w).clone();
+  applyTilt(0);
+  return root;
+}
+
+
 // gltf を、makeCreature が期待する見た目(av)に包む
 function makeGltfAvatar(key, spec, gltf){
   return () => B.makeCreature(key, {
@@ -100,6 +232,23 @@ function makeGltfAvatar(key, spec, gltf){
       // 名前に "glow" を含むメッシュはスートの色で光らせる
       if(/glow/i.test(o.name) && o.material && o.material.emissive){ o.material.userData.base = 0.6; ctx.glowMats.push(o.material); }
     });
+    // 天秤(Q 審判)
+    let scales = null, handBone = null;
+    if(spec.scales){
+      handBone = model.getObjectByName(spec.scales.hand);
+      if(handBone){
+        scales = createScales({ size: spec.scales.size || 0.26 });
+        scales.userData.isScales = true;
+        holder.add(scales); holder.userData.judgeScales = scales;
+      }
+    }
+    const hp = new THREE.Vector3();
+    const followScales = dt => {
+      if(!scales) return;
+      handBone.getWorldPosition(hp); holder.worldToLocal(hp);
+      scales.position.set(hp.x, hp.y + (spec.scales.lift || 0.05), hp.z + 0.03);
+      scales.userData.update(dt || 1/60);
+    };
     const head = model.getObjectByName(spec.head || 'Head') || model.getObjectByName('head');
     if(head) ctx.head = head;
 
@@ -148,7 +297,7 @@ function makeGltfAvatar(key, spec, gltf){
       idle(t, ph){ if(!mixer && !proc) holder.position.y = Math.sin(t*1.6 + ph)*0.02; },
       headYaw: spec.headYaw || 0, // 頭の向き(正面からの角度)。移動はこの向きで進む
       move(m){ mv = m; },
-      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(gait) gait.reset(); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(gait) gait.apply(mv, t); if(swarm) swarm.tick(t + (ph || 0), raiseK); if(idleFx) idleFx.tick(t + (ph || 0), dt, raiseK); },
+      tick(t, dt, ph){ if(mixer) mixer.update(dt); if(gait) gait.reset(); if(proc) proc(t + (ph || 0), dt, raiseK, jumpK); if(gait) gait.apply(mv, t); if(swarm) swarm.tick(t + (ph || 0), raiseK); if(idleFx) idleFx.tick(t + (ph || 0), dt, raiseK); followScales(dt); },
     };
   });
 }

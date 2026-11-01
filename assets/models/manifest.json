@@ -145,7 +145,13 @@
   "c12": {
     "file": "c12.glb",
     "toon": true,
-    "height": 1.0
+    "height": 1.3,
+    "scales": {
+      "hand": "Bone_019",
+      "size": 0.36,
+      "lift": 0.05
+    },
+    "_note": "Q 審判(左手 Bone_019 に天秤 scales)"
   },
   "c13": {
     "file": "c13.glb",

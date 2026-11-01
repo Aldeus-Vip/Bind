@@ -203,7 +203,7 @@ const MAP = {
   triggerClubDrawAppear: () => play('draw'),
   triggerGreenVortexSteal: () => play('hiss'),
   triggerRedPurpleHandRise: () => play('swarm'),
-  triggerHandWipeNebula: () => play('chomp'),
+  triggerHandWipeNebula: () => play('absorb'), // Q: 手札が天秤の皿へ吸い込まれる
   triggerSpadeSlashHand: () => setTimeout(() => play('slash'), 900),
   triggerScytheSlashHand: () => play('slash'),
   triggerDiscardPillarRise: () => play('flame'),

@@ -1173,7 +1173,7 @@ const AX_Y = new THREE.Vector3(0, 1, 0), mvQ = new THREE.Quaternion(), mvQ2 = ne
    walk4: 4足で歩く(A・Q) / walk2: 2足で歩く(2・3・J・K) / crawl: 多脚で這う(4) / serpent: 長い体でくねる(5・8)
    (hop2 / hop4: 跳ぶ。骨のない術者などの予備)
    swim: 浮いて尾びれで泳ぐ(6) / fly: 浮いて羽ばたく(7・9・10・白JOKER) / glide: 浮いたまま傾いて滑る(黒JOKER) */
-const MOVE_STYLE = { 'beast-A':'walk4', c12:'walk4', c2:'walk2', c3:'walk2', c11:'walk2', c13:'walk2', c4:'crawl', c5:'serpent', c8:'serpent',
+const MOVE_STYLE = { 'beast-A':'walk4', c2:'walk2', c3:'walk2', c11:'walk2', c13:'walk2', c4:'crawl', c5:'serpent', c8:'serpent',
   c6:'swim', c7:'fly', c9:'fly', c10:'fly', jw:'fly', jb:'glide' };
 const moveStyleOf = key => MOVE_STYLE[key] || 'walk2';
 // 移動中に体を前へ倒す量(7 は縦長の体を水平に倒して飛ぶ)

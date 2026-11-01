@@ -1781,25 +1781,87 @@ uiFx('triggerDiscardPillarRise', async (p, cardIdx, before) => {
 // J: 吸収したエネルギーがゲージへ / 終わったら何もしない
 uiFx('triggerBlackMistReturn', async () => {});
 
-// Q: 山羊(Qのモデル)が相手のゲージへ跳び、手札を食らい尽くす
+/* Q: 審判の天秤(Riku さんの案。審判モデルの左手に天秤 — models.js の scales)
+   ③ 吸収: 相手の手札が 1 枚ずつ天秤の左の皿へ吸い込まれる。そのたびに左の皿が光り、少しずつ左へ傾く
+   ④ 裁き: 左の皿の光が、対象の捨て札へ降り注ぐ(捨て札 +枚数)
+   ⑤ 授与: 山札からの 2 枚が右の皿に乗って光る
+   ⑥ 公平: 天秤が揺れながら水平に戻り、2 枚が皿から手札へ
+   「全部取り上げて、2 枚だけ与え直す」が、天秤が釣り合うことで伝わる */
+const QC = 0xb48cff;
+function findScales(root){ let f = null; if(root) root.traverse(o => { if(!f && o.userData.judgeScales) f = o.userData.judgeScales; }); return f; }
+let qTemp = null;
+function qScales(p){
+  // 術者が審判ならその天秤、でなければ台座の審判(観客)の天秤、それも無ければ術者の頭上に一時的に出す
+  const ch = chars[p];
+  let sc = ch && ch.shown && ch.av ? findScales(ch.av.root) : null;
+  if(!sc && B.spectators){ const s = B.spectators.byKey('c12'); if(s) sc = findScales(s.root); }
+  if(sc) return sc;
+  return null;
+}
+const panPx = (sc, side) => K.boardPx(sc.userData.panPos(side));
+const Q = { on:false, sc:null, target:null, given:[] };
 uiFx('triggerHandWipeNebula', async (target) => {
-  const caster = state.current, a = K.casterPx(caster), b = K.panelPx(target, 'hand');
-  const goat = uiModel('c12', 90);
-  if(goat){ faceDir(goat, a, b); await K.uiTween(0.5, t => { const q = K.bez(a, { x: b.x, y: b.y + 20 }, 80, ease.inOut(t)); goat.position.copy(P(q.x, q.y, 50)); }); }
-  const n = Math.max(1, Math.min(6, (state.players[target] && state.players[target].hand.length) || 3));
-  const cards = []; for(let k=0;k<n;k++){ const c = K.card3D(null, false, 0.75); c.position.copy(P(b.x + (k - (n-1)/2)*26, b.y - 20, 60)); cards.push(c); }
-  for(const c of cards){ // 1枚ずつ食べる
-    const s = c.position.clone(), g = goat ? goat.position.clone() : P(b.x, b.y, 50);
-    await K.uiTween(0.16, t => { c.position.lerpVectors(s, g, t); c.scale.setScalar(1 - t); });
-    K.uiSpark(b.x, b.y + 10, 0xffd76a, 6); K.uiDispose(c);
-    if(goat) goat.rotation.z = (Math.random() - .5)*0.2;
+  const caster = state.current, sc = qScales(caster);
+  const n = Math.max(1, Math.min(8, (state.players[target] && state.players[target].hand.length) || 3));
+  Object.assign(Q, { on:true, sc, target, given:[] });
+  hudOf()(target, { show:true, glow:'#b48cff' });
+  if(B.spectators){ const s = B.spectators.byKey('c12'); if(s) B.spectators.react(s); }
+  if(sc){ sc.userData.setGlow(0.6); sc.userData.tiltTo(0, 0.2); }
+  await wait(0.3);
+  // ③ 吸収
+  const b = K.panelPx(target, 'hand');
+  for(let k = 0; k < n; k++){
+    const to = sc ? panPx(sc, -1) : K.casterPx(caster);
+    const c = K.card3D(null, false, 0.75); c.position.copy(P(b.x, b.y, 60));
+    hudOf()(target, { hand: -(k + 1) });
+    await K.uiTween(0.32, t => { const q = K.bez(b, to, 60, ease.in(t)); c.position.copy(P(q.x, q.y, 60)); c.scale.setScalar(1 - 0.75*t); c.rotation.z = t*2; if(Math.random() < 0.5) roundSpark(q.x, q.y, QC, 1, 20); });
+    K.uiDispose(c);
+    roundSpark(to.x, to.y, QC, 6, 50);
+    if(sc){ sc.userData.setPanLight(-1, Math.min(1, 0.35 + 0.15*(k + 1))); sc.userData.tiltTo(-Math.min(1, (k + 1)/4), 0.3); }
   }
-  if(goat){ await K.uiTween(0.35, t => { const q = K.bez({ x: b.x, y: b.y + 20 }, a, 60, ease.inOut(t)); goat.position.copy(P(q.x, q.y, 50)); goat.scale.multiplyScalar(0.97); }); K.uiDispose(goat); }
+  hudOf()(target, { hand: 0 });
 });
-// Q: 捨てられたカードが捨て札ゲージに現れる
+// ④ 裁き: 左の皿の光が捨て札へ降り注ぐ
 uiFx('triggerDiscardAppearNebula', async (p, count) => {
-  const b = K.panelPx(p, 'discard');
-  K.uiSpark(b.x, b.y, 0xff9be0, 10 + Math.min(10, (count || 1)*3), 140);
+  const sc = Q.on ? Q.sc : null, d = K.panelPx(p, 'discard');
+  const from = sc ? panPx(sc, -1) : K.casterPx(state.current);
+  for(let k = 0; k < 14; k++){
+    wait(k*0.03).then(() => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color:QC, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false }));
+      ui.sc.add(m); const ox = (Math.random() - .5)*30;
+      K.uiTween(0.45, t => { const q = K.bez(from, { x:d.x + ox, y:d.y }, 30, ease.in(t)); m.position.copy(P(q.x, q.y, 70)); m.material.opacity = 1 - 0.5*t; }).then(() => K.uiDispose(m));
+    });
+  }
+  await wait(0.5);
+  roundSpark(d.x, d.y, QC, 12, 100);
+  if(sc) sc.userData.setPanLight(-1, 0);
+  if(state.deck.length === 0){ if(sc){ sc.userData.tiltTo(0, 0.9); sc.userData.setGlow(0.08); } Q.on = false; } // 山札が空: 授与なしで水平に戻る
+});
+// ⑤ 授与: Q の間の 2 枚は、山札 → 右の皿に乗って光る(手札へは ⑥ で)
+K.override('triggerDrawCardAppear', orig => function(p){
+  if(!Q.on || p !== Q.target) return orig.apply(this, arguments);
+  return K.uiFx(async () => {
+    const sc = Q.sc, a = deckPx(), b = K.panelPx(p, 'hand');
+    const pan = sc ? panPx(sc, 1) : { x:b.x, y:b.y - 80 };
+    const c = K.card3D(null, false, 0.8); c.position.copy(P(a.x, a.y, 60));
+    await K.flyCard(c, a, { x:pan.x, y:pan.y - 14 }, 0.5, 70, 1);
+    if(sc){ sc.userData.setPanLight(1, 0.8); sc.userData.tiltTo(Math.min(0, sc.userData.tiltNow ? sc.userData.tiltNow() + 0.5 : 0), 0.3); }
+    roundSpark(pan.x, pan.y, 0xfff1d0, 8, 60);
+    Q.given.push(c);
+    hudOf()(p, { hand: -1 }); // 皿の上にある間は、手札の数字を増やさない
+    await wait(0.15);
+    if(Q.given.length >= 2 || state.deck.length <= 1){
+      // ⑥ 公平: 天秤が揺れながら水平に戻り、皿の上のカードが手札へ
+      if(sc) sc.userData.tiltTo(0, 0.9);
+      await wait(0.7);
+      const cards = Q.given.splice(0);
+      await Promise.all(cards.map((cc, k) => wait(k*0.1).then(async () => { const s = { x:pan.x, y:pan.y - 14 }; await K.flyCard(cc, s, b, 0.45, 40, 0); roundSpark(b.x, b.y, 0xfff1d0, 8, 80); K.uiDispose(cc); })));
+      hudOf()(p, { hand: 0 });
+      if(sc){ sc.userData.setPanLight(1, 0); sc.userData.setGlow(0.08); }
+      Q.on = false;
+      setTimeout(() => hudOf()(p, { show:false, glow:null }), 1200);
+    }
+  });
 });
 // ♦/♣: 選んだ捨て札が山札へ戻っていく
 function discardToDeck(color){
