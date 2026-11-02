@@ -1799,6 +1799,30 @@ function qScales(p){
   return null;
 }
 const panPx = (sc, side) => K.boardPx(sc.userData.panPos(side));
+// 審判を大きく浮かせる / 元に戻す(術者のパーソナルが審判のときだけ)
+const JR = { ch:null };
+async function judgeRise(caster, target){
+  const ch = chars[caster]; if(!ch || !ch.shown || !ch.av || !findScales(ch.av.root)) return;
+  JR.ch = ch; const r = ch.av.root, s0 = r.scale.x, y0 = r.position.y;
+  JR.s0 = s0; JR.y0 = y0;
+  const tc = chars[target];
+  if(tc && tc.shown){
+    // 相手とカメラはたいてい反対側にあるので、二つの中間ではなく「カメラから見て真横(相手のいる側)」を少しカメラへ寄せた向きにする
+    const toOpp = tc.root.position.clone().sub(ch.root.position).setY(0).normalize();
+    const toCam = K.camera.position.clone().sub(ch.root.position).setY(0).normalize();
+    const side = V(-toCam.z, 0, toCam.x); if(side.dot(toOpp) < 0) side.negate();
+    if(Math.abs(side.dot(toOpp)) < 0.2) side.copy(V(toCam.z, 0, -toCam.x)); // 相手が真正面の奥: どちらでもよいので右向きに
+    const mid = side.multiplyScalar(0.8).add(toCam.multiplyScalar(0.6)).normalize();
+    K.faceTo(caster, ch.root.position.clone().add(mid), 600); // judgeFall で戻す
+  }
+  await tween(0.5, t => { const k = ease.out(t); r.scale.setScalar(s0*(1 + 0.8*k)); r.position.y = y0 + 0.25*k; });
+}
+async function judgeFall(){
+  const ch = JR.ch; if(!ch) return; JR.ch = null;
+  const r = ch.av.root, s1 = r.scale.x, y1 = r.position.y;
+  await tween(0.45, t => { const k = ease.inOut(t); r.scale.setScalar(s1 + (JR.s0 - s1)*k); r.position.y = y1 + (JR.y0 - y1)*k; });
+  ch.faceUntil = 0;
+}
 const Q = { on:false, sc:null, target:null, given:[] };
 uiFx('triggerHandWipeNebula', async (target) => {
   const caster = state.current, sc = qScales(caster);
@@ -1807,18 +1831,25 @@ uiFx('triggerHandWipeNebula', async (target) => {
   hudOf()(target, { show:true, glow:'#b48cff' });
   if(B.spectators){ const s = B.spectators.byKey('c12'); if(s) B.spectators.react(s); }
   if(sc){ sc.userData.setGlow(0.6); sc.userData.tiltTo(0, 0.2); }
-  await wait(0.3);
-  // ③ 吸収
+  // 審判(術者)が効果の間だけ大きくなって少し浮き、横向き(相手とカメラの間の角度)になる。顔・両手・天秤が見える
+  await judgeRise(caster, target);
+  // ③ 吸収: 紫の光の尾を引くカードが、少しずつ重なって流れるように皿へ吸い上げられる
   const b = K.panelPx(target, 'hand');
-  for(let k = 0; k < n; k++){
+  await Promise.all([...Array(n)].map((_, k) => wait(k*0.16).then(async () => {
     const to = sc ? panPx(sc, -1) : K.casterPx(caster);
     const c = K.card3D(null, false, 0.75); c.position.copy(P(b.x, b.y, 60));
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(70, 80), new THREE.MeshBasicMaterial({ map:K.softTex || K.starTex, color:QC, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, depthTest:false, opacity:0.75 }));
+    ui.sc.add(glow);
     hudOf()(target, { hand: -(k + 1) });
-    await K.uiTween(0.32, t => { const q = K.bez(b, to, 60, ease.in(t)); c.position.copy(P(q.x, q.y, 60)); c.scale.setScalar(1 - 0.75*t); c.rotation.z = t*2; if(Math.random() < 0.5) roundSpark(q.x, q.y, QC, 1, 20); });
-    K.uiDispose(c);
+    await K.uiTween(0.45, t => {
+      const q = K.bez(b, to, 60, ease.in(t)); c.position.copy(P(q.x, q.y, 60)); c.scale.setScalar(1 - 0.75*t); c.rotation.z = t*2;
+      glow.position.copy(P(q.x, q.y, 55)); glow.scale.setScalar(1 - 0.6*t);
+      roundSpark(q.x, q.y, QC, 1, 12); // 紫の光の尾
+    });
+    K.uiDispose(c); K.uiDispose(glow);
     roundSpark(to.x, to.y, QC, 6, 50);
     if(sc){ sc.userData.setPanLight(-1, Math.min(1, 0.35 + 0.15*(k + 1))); sc.userData.tiltTo(-Math.min(1, (k + 1)/4), 0.3); }
-  }
+  })));
   hudOf()(target, { hand: 0 });
 });
 // ④ 裁き: 左の皿の光が捨て札へ降り注ぐ
@@ -1835,7 +1866,7 @@ uiFx('triggerDiscardAppearNebula', async (p, count) => {
   await wait(0.5);
   roundSpark(d.x, d.y, QC, 12, 100);
   if(sc) sc.userData.setPanLight(-1, 0);
-  if(state.deck.length === 0){ if(sc){ sc.userData.tiltTo(0, 0.9); sc.userData.setGlow(0.08); } Q.on = false; } // 山札が空: 授与なしで水平に戻る
+  if(state.deck.length === 0){ if(sc){ sc.userData.tiltTo(0, 0.9); sc.userData.setGlow(0.08); } Q.on = false; await judgeFall(); } // 山札が空: 授与なしで水平に戻る
 });
 // ⑤ 授与: Q の間の 2 枚は、山札 → 右の皿に乗って光る(手札へは ⑥ で)
 K.override('triggerDrawCardAppear', orig => function(p){
@@ -1859,6 +1890,7 @@ K.override('triggerDrawCardAppear', orig => function(p){
       hudOf()(p, { hand: 0 });
       if(sc){ sc.userData.setPanLight(1, 0); sc.userData.setGlow(0.08); }
       Q.on = false;
+      await judgeFall();
       setTimeout(() => hudOf()(p, { show:false, glow:null }), 1200);
     }
   });
